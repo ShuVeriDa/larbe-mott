@@ -1,0 +1,276 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+//////////////////////////////////////////////////////
+// ENUMS
+//////////////////////////////////////////////////////
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum WordStatus {
+  NEW
+  LEARNING
+  KNOWN
+}
+
+enum TokenStatus {
+  ANALYZED
+  AMBIGUOUS
+  NOT_FOUND
+}
+
+//////////////////////////////////////////////////////
+// USERS
+//////////////////////////////////////////////////////
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  passwordHash  String
+  name          String
+  surname       String
+  role          UserRole @default(USER)
+  createdAt     DateTime @default(now())
+
+  wordProgress  UserWordProgress[]
+  textProgress  UserTextProgress[]
+}
+
+//////////////////////////////////////////////////////
+// DICTIONARY SOURCES
+//////////////////////////////////////////////////////
+
+model DictionarySource {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  title       String
+  description String?
+  createdAt   DateTime @default(now())
+
+  entries     DictionaryEntry[]
+}
+
+//////////////////////////////////////////////////////
+// DICTIONARY ENTRY (raw article)
+//////////////////////////////////////////////////////
+
+model DictionaryEntry {
+  id            String   @id @default(uuid())
+  externalId    String?
+  rawWord       String
+  rawWordAlt    String?
+  rawTranslate  String   // сохраняем HTML как есть
+  sourceId      String
+  createdAt     DateTime @default(now())
+
+  source        DictionarySource @relation(fields: [sourceId], references: [id])
+
+  headwords     Headword[]
+  senses        Sense[]
+  morphForms    MorphForm[]
+
+  @@index([rawWord])
+}
+
+//////////////////////////////////////////////////////
+// HEADWORDS (несколько в одной статье)
+//////////////////////////////////////////////////////
+
+model Headword {
+  id         String @id @default(uuid())
+  entryId    String
+  text       String
+  normalized String
+  order      Int    @default(0)
+
+  entry      DictionaryEntry @relation(fields: [entryId], references: [id])
+
+  lemmaId    String?
+  lemma      Lemma? @relation(fields: [lemmaId], references: [id])
+
+  @@index([normalized])
+}
+
+//////////////////////////////////////////////////////
+// LEMMA (базовая форма)
+//////////////////////////////////////////////////////
+
+model Lemma {
+  id            String @id @default(uuid())
+  baseForm      String
+  normalized    String
+  language      String
+  partOfSpeech  String?
+  frequency     Int?
+
+  headwords     Headword[]
+  morphForms    MorphForm[]
+  tokenAnalyses TokenAnalysis[]
+  wordProgress  UserWordProgress[]
+
+  @@unique([normalized, language])
+  @@index([normalized])
+}
+
+//////////////////////////////////////////////////////
+// MORPHOLOGICAL FORMS
+//////////////////////////////////////////////////////
+
+model MorphForm {
+  id          String @id @default(uuid())
+  form        String
+  normalized  String
+  grammarTag  String?
+  lemmaId     String
+  entryId     String?
+
+  lemma       Lemma @relation(fields: [lemmaId], references: [id])
+  entry       DictionaryEntry? @relation(fields: [entryId], references: [id])
+
+  @@index([normalized])
+}
+
+//////////////////////////////////////////////////////
+// SENSES (значения)
+//////////////////////////////////////////////////////
+
+model Sense {
+  id        String @id @default(uuid())
+  entryId   String
+  order     Int
+  definition String
+  notes      String?
+
+  entry     DictionaryEntry @relation(fields: [entryId], references: [id])
+  examples  Example[]
+}
+
+model Example {
+  id          String @id @default(uuid())
+  senseId     String
+  text        String
+  translation String?
+
+  sense       Sense @relation(fields: [senseId], references: [id])
+}
+
+//////////////////////////////////////////////////////
+// TEXTS
+//////////////////////////////////////////////////////
+
+model Text {
+  id          String   @id @default(uuid())
+  title       String
+  level       String?
+  language    String
+  contentRaw  String
+  createdAt   DateTime @default(now())
+
+  processingVersions TextProcessingVersion[]
+  progress           UserTextProgress[]
+}
+
+//////////////////////////////////////////////////////
+// TEXT PROCESSING VERSION
+//////////////////////////////////////////////////////
+
+model TextProcessingVersion {
+  id        String   @id @default(uuid())
+  textId    String
+  version   Int
+  createdAt DateTime @default(now())
+
+  text      Text @relation(fields: [textId], references: [id])
+  tokens    TextToken[]
+
+  @@unique([textId, version])
+}
+
+//////////////////////////////////////////////////////
+// TOKENS
+//////////////////////////////////////////////////////
+
+model TextToken {
+  id            String @id @default(uuid())
+  versionId     String
+  position      Int
+  original      String
+  normalized    String
+  status        TokenStatus @default(ANALYZED)
+
+  version       TextProcessingVersion @relation(fields: [versionId], references: [id])
+  analyses      TokenAnalysis[]
+
+  @@index([normalized])
+  @@index([versionId, position])
+}
+
+//////////////////////////////////////////////////////
+// TOKEN ANALYSIS (несколько лемм на токен)
+//////////////////////////////////////////////////////
+
+model TokenAnalysis {
+  id          String  @id @default(uuid())
+  tokenId     String
+  lemmaId     String
+  probability Float?
+  isPrimary   Boolean @default(false)
+
+  token       TextToken @relation(fields: [tokenId], references: [id])
+  lemma       Lemma     @relation(fields: [lemmaId], references: [id])
+
+  @@index([lemmaId])
+  @@index([tokenId])
+}
+
+//////////////////////////////////////////////////////
+// USER WORD PROGRESS (SRS-ready)
+//////////////////////////////////////////////////////
+
+model UserWordProgress {
+  id          String @id @default(uuid())
+  userId      String
+  lemmaId     String
+  status      WordStatus @default(NEW)
+  repetitions Int @default(0)
+  lastSeen    DateTime?
+  nextReview  DateTime?
+  easeFactor  Float?     // для SM2
+  interval    Int?
+
+  user        User  @relation(fields: [userId], references: [id])
+  lemma       Lemma @relation(fields: [lemmaId], references: [id])
+
+  @@unique([userId, lemmaId])
+}
+
+//////////////////////////////////////////////////////
+// USER TEXT PROGRESS
+//////////////////////////////////////////////////////
+
+model UserTextProgress {
+  id             String  @id @default(uuid())
+  userId         String
+  textId         String
+  progressPercent Float  @default(0)
+  lastOpened     DateTime?
+
+  user           User @relation(fields: [userId], references: [id])
+  text           Text @relation(fields: [textId], references: [id])
+
+  @@unique([userId, textId])
+}
