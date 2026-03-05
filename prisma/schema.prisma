@@ -40,14 +40,19 @@ enum TokenStatus {
 model User {
   id            String   @id @default(uuid())
   email         String   @unique
-  passwordHash  String
+  password      String
+  username String
   name          String
   surname       String
+  hashedRefreshToken String? @db.Text
   role          UserRole @default(USER)
-  createdAt     DateTime @default(now())
+  phone         String?
 
   wordProgress  UserWordProgress[]
   textProgress  UserTextProgress[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 //////////////////////////////////////////////////////
