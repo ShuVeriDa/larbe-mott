@@ -50,39 +50,91 @@ model User {
 
   wordProgress  UserWordProgress[]
   textProgress  UserTextProgress[]
+  adminDictionaryEntries AdminDictionaryEntry[] @relation("AdminDictionaryCreator")
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
 
 //////////////////////////////////////////////////////
-// DICTIONARY SOURCES
+// ADMIN DICTIONARY (дополнение к онлайн словарю)
 //////////////////////////////////////////////////////
 
-model DictionarySource {
-  id          String   @id @default(uuid())
-  code        String   @unique
-  title       String
-  description String?
-  createdAt   DateTime @default(now())
+model AdminDictionaryEntry {
+  id            String   @id @default(uuid())
 
-  entries     DictionaryEntry[]
+  word          String
+  normalized    String
+  translation   String
+  notes         String?
+
+  createdById   String
+  createdBy     User @relation("AdminDictionaryCreator", fields: [createdById], references: [id])
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  headwords     AdminHeadword[]
+  morphForms    AdminMorphForm[]
+
+  @@index([normalized])
 }
 
 //////////////////////////////////////////////////////
-// DICTIONARY ENTRY (raw article)
+// ADMIN HEADWORDS
+//////////////////////////////////////////////////////
+
+model AdminHeadword {
+  id         String @id @default(uuid())
+
+  entryId    String
+  text       String
+  normalized String
+  order      Int @default(0)
+
+  entry      AdminDictionaryEntry @relation(fields: [entryId], references: [id])
+
+  lemmaId    String?
+  lemma      Lemma? @relation("AdminHeadwordLemma", fields: [lemmaId], references: [id])
+
+  @@index([normalized])
+}
+
+//////////////////////////////////////////////////////
+// ADMIN MORPH FORMS
+//////////////////////////////////////////////////////
+
+model AdminMorphForm {
+  id          String @id @default(uuid())
+
+  form        String
+  normalized  String
+  grammarTag  String?
+
+  lemmaId     String
+  entryId     String
+
+  lemma       Lemma @relation("AdminMorphLemma", fields: [lemmaId], references: [id])
+  entry       AdminDictionaryEntry @relation(fields: [entryId], references: [id])
+
+  @@index([normalized])
+}
+
+//////////////////////////////////////////////////////
+// DICTIONARY CACHE (ONLINE)
 //////////////////////////////////////////////////////
 
 model DictionaryEntry {
   id            String   @id @default(uuid())
+
   externalId    String?
   rawWord       String
   rawWordAlt    String?
-  rawTranslate  String   // сохраняем HTML как есть
-  sourceId      String
-  createdAt     DateTime @default(now())
+  rawTranslate  String
 
-  source        DictionarySource @relation(fields: [sourceId], references: [id])
+  source        String?
+
+  cachedAt      DateTime @default(now())
 
   headwords     Headword[]
   senses        Sense[]
@@ -92,54 +144,62 @@ model DictionaryEntry {
 }
 
 //////////////////////////////////////////////////////
-// HEADWORDS (несколько в одной статье)
+// HEADWORDS
 //////////////////////////////////////////////////////
 
 model Headword {
   id         String @id @default(uuid())
+
   entryId    String
   text       String
   normalized String
-  order      Int    @default(0)
+  order      Int @default(0)
 
   entry      DictionaryEntry @relation(fields: [entryId], references: [id])
 
   lemmaId    String?
-  lemma      Lemma? @relation(fields: [lemmaId], references: [id])
+  lemma      Lemma? @relation("HeadwordLemma", fields: [lemmaId], references: [id])
 
   @@index([normalized])
 }
 
 //////////////////////////////////////////////////////
-// LEMMA (базовая форма)
+// LEMMA
 //////////////////////////////////////////////////////
 
 model Lemma {
   id            String @id @default(uuid())
+
   baseForm      String
   normalized    String
   language      String
   partOfSpeech  String?
   frequency     Int?
 
-  headwords     Headword[]
+  headwords     Headword[] @relation("HeadwordLemma")
+
   morphForms    MorphForm[]
-  tokenAnalyses TokenAnalysis[]
+  tokenAnalyses TokenAnalysis[] @relation("TokenLemma")
   wordProgress  UserWordProgress[]
+
+  adminHeadwords AdminHeadword[] @relation("AdminHeadwordLemma")
+  adminForms     AdminMorphForm[] @relation("AdminMorphLemma")
 
   @@unique([normalized, language])
   @@index([normalized])
 }
 
 //////////////////////////////////////////////////////
-// MORPHOLOGICAL FORMS
+// MORPH FORMS
 //////////////////////////////////////////////////////
 
 model MorphForm {
   id          String @id @default(uuid())
+
   form        String
   normalized  String
   grammarTag  String?
+
   lemmaId     String
   entryId     String?
 
@@ -150,22 +210,25 @@ model MorphForm {
 }
 
 //////////////////////////////////////////////////////
-// SENSES (значения)
+// SENSES
 //////////////////////////////////////////////////////
 
 model Sense {
-  id        String @id @default(uuid())
-  entryId   String
-  order     Int
+  id         String @id @default(uuid())
+
+  entryId    String
+  order      Int
   definition String
   notes      String?
 
-  entry     DictionaryEntry @relation(fields: [entryId], references: [id])
-  examples  Example[]
+  entry      DictionaryEntry @relation(fields: [entryId], references: [id])
+
+  examples   Example[]
 }
 
 model Example {
   id          String @id @default(uuid())
+
   senseId     String
   text        String
   translation String?
@@ -174,15 +237,36 @@ model Example {
 }
 
 //////////////////////////////////////////////////////
+// UNKNOWN WORDS
+//////////////////////////////////////////////////////
+
+model UnknownWord {
+  id          String   @id @default(uuid())
+
+  word        String
+  normalized  String
+
+  seenCount   Int      @default(1)
+
+  firstSeen   DateTime @default(now())
+  lastSeen    DateTime @default(now())
+
+  @@unique([normalized])
+}
+
+//////////////////////////////////////////////////////
 // TEXTS
 //////////////////////////////////////////////////////
 
 model Text {
   id          String   @id @default(uuid())
+
   title       String
   level       String?
   language    String
+
   contentRaw  String
+
   createdAt   DateTime @default(now())
 
   processingVersions TextProcessingVersion[]
@@ -195,8 +279,10 @@ model Text {
 
 model TextProcessingVersion {
   id        String   @id @default(uuid())
+
   textId    String
   version   Int
+
   createdAt DateTime @default(now())
 
   text      Text @relation(fields: [textId], references: [id])
@@ -210,11 +296,14 @@ model TextProcessingVersion {
 //////////////////////////////////////////////////////
 
 model TextToken {
-  id            String @id @default(uuid())
+  id            String      @id @default(uuid())
+
   versionId     String
   position      Int
+
   original      String
   normalized    String
+
   status        TokenStatus @default(ANALYZED)
 
   version       TextProcessingVersion @relation(fields: [versionId], references: [id])
@@ -225,36 +314,43 @@ model TextToken {
 }
 
 //////////////////////////////////////////////////////
-// TOKEN ANALYSIS (несколько лемм на токен)
+// TOKEN ANALYSIS
 //////////////////////////////////////////////////////
 
 model TokenAnalysis {
   id          String  @id @default(uuid())
+
   tokenId     String
-  lemmaId     String
+  lemmaId     String?
+
   probability Float?
   isPrimary   Boolean @default(false)
 
   token       TextToken @relation(fields: [tokenId], references: [id])
-  lemma       Lemma     @relation(fields: [lemmaId], references: [id])
+  lemma       Lemma? @relation("TokenLemma", fields: [lemmaId], references: [id])
 
   @@index([lemmaId])
   @@index([tokenId])
 }
 
 //////////////////////////////////////////////////////
-// USER WORD PROGRESS (SRS-ready)
+// USER WORD PROGRESS
 //////////////////////////////////////////////////////
 
 model UserWordProgress {
-  id          String @id @default(uuid())
+  id          String     @id @default(uuid())
+
   userId      String
   lemmaId     String
+
   status      WordStatus @default(NEW)
-  repetitions Int @default(0)
+
+  repetitions Int        @default(0)
+
   lastSeen    DateTime?
   nextReview  DateTime?
-  easeFactor  Float?     // для SM2
+
+  easeFactor  Float?
   interval    Int?
 
   user        User  @relation(fields: [userId], references: [id])
@@ -268,14 +364,16 @@ model UserWordProgress {
 //////////////////////////////////////////////////////
 
 model UserTextProgress {
-  id             String  @id @default(uuid())
-  userId         String
-  textId         String
-  progressPercent Float  @default(0)
-  lastOpened     DateTime?
+  id              String   @id @default(uuid())
 
-  user           User @relation(fields: [userId], references: [id])
-  text           Text @relation(fields: [textId], references: [id])
+  userId          String
+  textId          String
+
+  progressPercent Float    @default(0)
+  lastOpened      DateTime?
+
+  user            User @relation(fields: [userId], references: [id])
+  text            Text @relation(fields: [textId], references: [id])
 
   @@unique([userId, textId])
 }
