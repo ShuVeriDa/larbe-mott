@@ -1,47 +1,53 @@
-export function extractTextFromTiptap(node: unknown): string {
-  if (!node || typeof node !== "object") return "";
+export function extractTextFromTiptap(doc: unknown): string {
+  if (!doc || typeof doc !== "object") return "";
 
-  const n = node as Record<string, any>;
-  let text = "";
+  const result: string[] = [];
+  const stack: any[] = [doc];
 
-  // inline text
-  if (typeof n.text === "string") {
-    text += n.text;
-  }
+  while (stack.length) {
+    const node = stack.pop();
 
-  // children
-  if (Array.isArray(n.content)) {
-    for (const child of n.content) {
-      text += extractTextFromTiptap(child);
+    if (!node || typeof node !== "object") continue;
+
+    if (typeof node.text === "string") {
+      result.push(node.text);
+    }
+
+    if (Array.isArray(node.content)) {
+      for (let i = node.content.length - 1; i >= 0; i--) {
+        stack.push(node.content[i]);
+      }
+    }
+
+    switch (node.type) {
+      case "paragraph":
+        result.push("\n");
+        break;
+
+      case "heading":
+        result.push("\n\n");
+        break;
+
+      case "listItem":
+        result.push("\n");
+        break;
+
+      case "hardBreak":
+        result.push("\n");
+        break;
+
+      case "blockquote":
+        result.push("\n");
+        break;
+
+      case "codeBlock":
+        result.push("\n\n");
+        break;
     }
   }
 
-  // block separators
-  switch (n.type) {
-    case "paragraph":
-      text += "\n";
-      break;
-
-    case "heading":
-      text += "\n\n";
-      break;
-
-    case "listItem":
-      text += "\n";
-      break;
-
-    case "hardBreak":
-      text += "\n";
-      break;
-
-    case "blockquote":
-      text += "\n";
-      break;
-
-    case "codeBlock":
-      text += "\n\n";
-      break;
-  }
-
-  return text;
+  return result
+    .join("")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }

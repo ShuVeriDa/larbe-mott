@@ -37,9 +37,7 @@ export class TextService {
       });
 
       for (const page of dto.pages) {
-        const contentRaw = extractTextFromTiptap(page.contentRich)
-          .replace(/\n{3,}/g, "\n\n")
-          .trim();
+        const contentRaw = extractTextFromTiptap(page.contentRich);
 
         await tx.textPage.create({
           data: {
