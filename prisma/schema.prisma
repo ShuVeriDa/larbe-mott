@@ -26,6 +26,15 @@ enum Language {
   RU
 }
 
+enum Level {
+  A1
+  A2
+  B1
+  B2
+  C1
+  C2
+}
+
 enum WordStatus {
   NEW
   LEARNING
@@ -56,6 +65,7 @@ model User {
   wordProgress  UserWordProgress[]
   textProgress  UserTextProgress[]
   adminDictionaryEntries AdminDictionaryEntry[] @relation("AdminDictionaryCreator")
+  texts Text[] @relation("text")
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -279,7 +289,7 @@ model Text {
   id          String   @id @default(uuid())
 
   title       String
-  level       String?
+  level       Level?
   language    Language
   author      String
   source      String?
@@ -290,6 +300,8 @@ model Text {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  createdById   String
+  createdBy     User @relation("text", fields: [createdById], references: [id])
   processingVersions TextProcessingVersion[]
   progress           UserTextProgress[]
   @@map("text")
