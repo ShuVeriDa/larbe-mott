@@ -21,6 +21,11 @@ enum UserRole {
   ADMIN
 }
 
+enum Language {
+  CHE
+  RU
+}
+
 enum WordStatus {
   NEW
   LEARNING
@@ -41,7 +46,7 @@ model User {
   id            String   @id @default(uuid())
   email         String   @unique
   password      String
-  username String
+  username      String
   name          String
   surname       String
   hashedRefreshToken String? @db.Text
@@ -54,6 +59,8 @@ model User {
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  @@map("users")
 }
 
 //////////////////////////////////////////////////////
@@ -78,6 +85,7 @@ model AdminDictionaryEntry {
   morphForms    AdminMorphForm[]
 
   @@index([normalized])
+  @@map("admin_dictionary_entry")
 }
 
 //////////////////////////////////////////////////////
@@ -98,6 +106,7 @@ model AdminHeadword {
   lemma      Lemma? @relation("AdminHeadwordLemma", fields: [lemmaId], references: [id])
 
   @@index([normalized])
+  @@map("admin_headword")
 }
 
 //////////////////////////////////////////////////////
@@ -118,6 +127,7 @@ model AdminMorphForm {
   entry       AdminDictionaryEntry @relation(fields: [entryId], references: [id])
 
   @@index([normalized])
+  @@map("admin_morph_form")
 }
 
 //////////////////////////////////////////////////////
@@ -141,6 +151,7 @@ model DictionaryEntry {
   morphForms    MorphForm[]
 
   @@index([rawWord])
+  @@map("dictionary_entry")
 }
 
 //////////////////////////////////////////////////////
@@ -161,6 +172,7 @@ model Headword {
   lemma      Lemma? @relation("HeadwordLemma", fields: [lemmaId], references: [id])
 
   @@index([normalized])
+  @@map("headword")
 }
 
 //////////////////////////////////////////////////////
@@ -172,7 +184,7 @@ model Lemma {
 
   baseForm      String
   normalized    String
-  language      String
+  language      Language
   partOfSpeech  String?
   frequency     Int?
 
@@ -187,6 +199,7 @@ model Lemma {
 
   @@unique([normalized, language])
   @@index([normalized])
+  @@map("lemma")
 }
 
 //////////////////////////////////////////////////////
@@ -207,6 +220,7 @@ model MorphForm {
   entry       DictionaryEntry? @relation(fields: [entryId], references: [id])
 
   @@index([normalized])
+  @@map("morph_form")
 }
 
 //////////////////////////////////////////////////////
@@ -224,6 +238,7 @@ model Sense {
   entry      DictionaryEntry @relation(fields: [entryId], references: [id])
 
   examples   Example[]
+  @@map("sense")
 }
 
 model Example {
@@ -234,6 +249,7 @@ model Example {
   translation String?
 
   sense       Sense @relation(fields: [senseId], references: [id])
+  @@map("example")
 }
 
 //////////////////////////////////////////////////////
@@ -252,6 +268,7 @@ model UnknownWord {
   lastSeen    DateTime @default(now())
 
   @@unique([normalized])
+  @@map("unknown_word")
 }
 
 //////////////////////////////////////////////////////
@@ -263,14 +280,19 @@ model Text {
 
   title       String
   level       String?
-  language    String
+  language    Language
+  author      String
+  source      String?
 
+  contentRich Json
   contentRaw  String
 
   createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   processingVersions TextProcessingVersion[]
   progress           UserTextProgress[]
+  @@map("text")
 }
 
 //////////////////////////////////////////////////////
@@ -284,11 +306,13 @@ model TextProcessingVersion {
   version   Int
 
   createdAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   text      Text @relation(fields: [textId], references: [id])
   tokens    TextToken[]
 
   @@unique([textId, version])
+  @@map("text_processing_version")
 }
 
 //////////////////////////////////////////////////////
@@ -311,6 +335,7 @@ model TextToken {
 
   @@index([normalized])
   @@index([versionId, position])
+  @@map("text_token")
 }
 
 //////////////////////////////////////////////////////
@@ -331,6 +356,7 @@ model TokenAnalysis {
 
   @@index([lemmaId])
   @@index([tokenId])
+  @@map("token_analysis")
 }
 
 //////////////////////////////////////////////////////
@@ -357,6 +383,7 @@ model UserWordProgress {
   lemma       Lemma @relation(fields: [lemmaId], references: [id])
 
   @@unique([userId, lemmaId])
+  @@map("user_word_progress")
 }
 
 //////////////////////////////////////////////////////
@@ -376,4 +403,5 @@ model UserTextProgress {
   text            Text @relation(fields: [textId], references: [id])
 
   @@unique([userId, textId])
+  @@map("user_text_progress")
 }
