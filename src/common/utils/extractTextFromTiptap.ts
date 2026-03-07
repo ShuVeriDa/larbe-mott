@@ -17,16 +17,30 @@ export function extractTextFromTiptap(node: unknown): string {
   }
 
   // block separators
-  if (n.type === "paragraph") {
-    text += "\n";
-  }
+  switch (n.type) {
+    case "paragraph":
+      text += "\n";
+      break;
 
-  if (n.type === "heading") {
-    text += "\n\n";
-  }
+    case "heading":
+      text += "\n\n";
+      break;
 
-  if (n.type === "listItem") {
-    text += "\n";
+    case "listItem":
+      text += "\n";
+      break;
+
+    case "hardBreak":
+      text += "\n";
+      break;
+
+    case "blockquote":
+      text += "\n";
+      break;
+
+    case "codeBlock":
+      text += "\n\n";
+      break;
   }
 
   return text;
