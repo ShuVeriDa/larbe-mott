@@ -1,15 +1,53 @@
 import { ApiProperty } from "@nestjs/swagger";
 import { Language, Level } from "@prisma/client";
+import { Type } from "class-transformer";
 import {
+  ArrayMinSize,
+  IsArray,
+  IsInt,
   IsNotEmpty,
   IsObject,
   IsOptional,
   IsString,
   Matches,
   MaxLength,
+  Min,
   MinLength,
+  ValidateNested,
 } from "class-validator";
 import { IsTiptapDoc } from "./tiptap-doc.validator";
+
+export class CreateTextPageDto {
+  @ApiProperty({ description: "Page number (1-based)", example: 1 })
+  @IsInt()
+  @Min(1)
+  pageNumber: number;
+
+  @ApiProperty({
+    description:
+      "TipTap/ProseMirror JSON document (type: 'doc', content: block nodes)",
+    example: {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "Со " },
+            { type: "text", marks: [{ type: "bold" }], text: "бусулба нохчи" },
+            { type: "text", text: " ву." },
+          ],
+        },
+      ],
+    },
+  })
+  @IsObject()
+  @IsNotEmpty()
+  @IsTiptapDoc()
+  contentRich: {
+    type: "doc";
+    content?: unknown[];
+  };
+}
 
 export class CreateTextDto {
   @ApiProperty()
@@ -66,27 +104,40 @@ export class CreateTextDto {
   source: string;
 
   @ApiProperty({
-    description:
-      "TipTap/ProseMirror JSON document (type: 'doc', content: block nodes)",
-    example: {
-      type: "doc",
-      content: [
-        {
-          type: "paragraph",
+    type: [CreateTextPageDto],
+    description: "Pages of the text (pageNumber + TipTap document per page)",
+    example: [
+      {
+        pageNumber: 1,
+        contentRich: {
+          type: "doc",
           content: [
-            { type: "text", text: "Со " },
-            { type: "text", marks: [{ type: "bold" }], text: "бусулба нохчи" },
-            { type: "text", text: " ву." },
+            {
+              type: "paragraph",
+              content: [
+                { type: "text", text: "Со " },
+                {
+                  type: "text",
+                  marks: [{ type: "bold" }],
+                  text: "бусулба нохчи",
+                },
+                { type: "text", text: " ву." },
+              ],
+            },
           ],
         },
-      ],
-    },
+      },
+    ],
   })
-  @IsObject()
-  @IsNotEmpty()
-  @IsTiptapDoc()
-  contentRich: {
-    type: "doc";
-    content?: unknown[];
-  };
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => CreateTextPageDto)
+  pages: {
+    pageNumber: number;
+    contentRich: {
+      type: "doc";
+      content?: unknown[];
+    };
+  }[];
 }

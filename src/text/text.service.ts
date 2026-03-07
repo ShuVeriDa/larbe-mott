@@ -24,27 +24,37 @@ export class TextService {
   }
 
   async addNewText(dto: CreateTextDto, userId: string) {
-    const contentRaw = extractTextFromTiptap(dto.contentRich)
-      .replace(/\n{3,}/g, "\n\n")
-      .trim();
+    const text = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.text.create({
+        data: {
+          title: dto.title,
+          language: dto.language,
+          level: dto.level,
+          author: dto.author,
+          source: dto.source,
+          createdById: userId,
+        },
+      });
 
-    const textData = {
-      title: dto.title,
-      language: dto.language,
-      level: dto.level,
-      author: dto.author,
-      source: dto.source,
-      contentRich: dto.contentRich as Prisma.InputJsonValue,
-      contentRaw,
-    };
+      for (const page of dto.pages) {
+        const contentRaw = extractTextFromTiptap(page.contentRich)
+          .replace(/\n{3,}/g, "\n\n")
+          .trim();
 
-    console.log({ textData });
+        await tx.textPage.create({
+          data: {
+            textId: created.id,
+            pageNumber: page.pageNumber,
+            contentRich: page.contentRich as Prisma.InputJsonValue,
+            contentRaw,
+          },
+        });
+      }
 
-    const text = await this.prisma.text.create({
-      data: {
-        ...textData,
-        createdById: userId,
-      },
+      return tx.text.findUniqueOrThrow({
+        where: { id: created.id },
+        include: { pages: true },
+      });
     });
 
     return text;

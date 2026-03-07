@@ -39,7 +39,11 @@ async function bootstrap() {
   });
 
   app.useGlobalPipes(
-    new ValidationPipe({ whitelist: true, stopAtFirstError: true }), // Включение глобальной валидации данных: удаление невалидных полей (whitelist) и остановка на первой ошибке
+    new ValidationPipe({
+      whitelist: true,
+      stopAtFirstError: true,
+      transform: true,
+    }), // Включение глобальной валидации данных: удаление невалидных полей (whitelist) и остановка на первой ошибке
   );
 
   // Swagger only in development

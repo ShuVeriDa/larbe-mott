@@ -294,17 +294,35 @@ model Text {
   author      String
   source      String?
 
-  contentRich Json
-  contentRaw  String
+  createdById   String
+  createdBy     User @relation("text", fields: [createdById], references: [id])
+  
+  pages         TextPage[]
+
+  processingVersions TextProcessingVersion[]
+  progress           UserTextProgress[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-
-  createdById   String
-  createdBy     User @relation("text", fields: [createdById], references: [id])
-  processingVersions TextProcessingVersion[]
-  progress           UserTextProgress[]
   @@map("text")
+}
+
+model TextPage {
+  id        String @id @default(cuid())
+
+  textId    String
+  text      Text   @relation(fields: [textId], references: [id])
+
+  pageNumber Int
+
+  contentRich Json
+  contentRaw  String
+
+  createdAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([textId, pageNumber])
+  @@map("text_page")
 }
 
 //////////////////////////////////////////////////////
