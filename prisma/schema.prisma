@@ -350,7 +350,7 @@ model TextProcessingVersion {
 //////////////////////////////////////////////////////
 
 model TextToken {
-  id            String      @id @default(uuid())
+  id            String      @id @default(cuid())
 
   versionId     String
   position      Int
@@ -365,6 +365,7 @@ model TextToken {
 
   @@index([normalized])
   @@index([versionId, position])
+  @@index([versionId, normalized])
   @@map("text_token")
 }
 
@@ -373,7 +374,7 @@ model TextToken {
 //////////////////////////////////////////////////////
 
 model TokenAnalysis {
-  id          String  @id @default(uuid())
+  id          String  @id @default(cuid())
 
   tokenId     String
   lemmaId     String?
@@ -394,7 +395,7 @@ model TokenAnalysis {
 //////////////////////////////////////////////////////
 
 model UserWordProgress {
-  id          String     @id @default(uuid())
+  id          String     @id @default(cuid())
 
   userId      String
   lemmaId     String

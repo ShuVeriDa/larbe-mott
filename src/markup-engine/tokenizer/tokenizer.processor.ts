@@ -54,6 +54,18 @@ export class TokenizerProcessor {
       data: tokensToInsert,
     });
 
+    await this.buildVocabularyIndex(version.id);
+
     return version;
+  }
+
+  private async buildVocabularyIndex(versionId: string) {
+    const uniqueWords = await this.prisma.textToken.findMany({
+      where: { versionId },
+      select: { normalized: true },
+      distinct: ["normalized"],
+    });
+
+    return uniqueWords.map((w) => w.normalized);
   }
 }
