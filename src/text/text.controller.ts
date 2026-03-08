@@ -26,9 +26,9 @@ export class TextController {
 
   @Get(":id")
   @ApiOperation({ summary: "Get text by identifier" })
-  @ApiParam({ name: "textId", description: "Text identifier" })
+  @ApiParam({ name: "id", description: "Text identifier" })
   @ApiOkResponse({ description: "Text data" })
-  async getTextById(@Param("textId") textId: string) {
+  async getTextById(@Param("id") textId: string) {
     return await this.textService.getTextById(textId);
   }
 

@@ -1,20 +1,30 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { extractTextFromTiptap } from "src/common/utils/extractTextFromTiptap";
+import { TokenizerProcessor } from "src/markup-engine/tokenizer/tokenizer.processor";
 import { PrismaService } from "src/prisma.service";
 import { CreateTextDto } from "./dto/create.dto";
 
 @Injectable()
 export class TextService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly tokenizerProcessor: TokenizerProcessor,
+  ) {}
   async getTexts() {
     return await this.prisma.text.findMany();
   }
 
   async getTextById(textId: string) {
-    const text = await this.prisma.text.findFirst({
-      where: {
-        id: textId,
+    const text = await this.prisma.text.findUnique({
+      where: { id: textId },
+      include: {
+        pages: { orderBy: { pageNumber: "asc" } },
+        processingVersions: {
+          include: {
+            tokens: true,
+          },
+        },
       },
     });
 
@@ -54,6 +64,8 @@ export class TextService {
         include: { pages: true },
       });
     });
+
+    await this.tokenizerProcessor.processText(text.id);
 
     return text;
   }
