@@ -164,6 +164,20 @@ model DictionaryEntry {
   @@map("dictionary_entry")
 }
 
+model DictionaryCache {
+  id          String   @id @default(cuid())
+
+  normalized  String   @unique
+  lemmaId     String?
+  translation String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([normalized])
+  @@map("dictionary_cache")
+}
+
 //////////////////////////////////////////////////////
 // HEADWORDS
 //////////////////////////////////////////////////////
