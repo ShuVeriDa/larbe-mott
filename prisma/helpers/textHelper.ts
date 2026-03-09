@@ -5,7 +5,7 @@ import { textData } from "./textData";
 
 const prisma = new PrismaClient();
 
-export const createChats = async () => {
+export const createText = async () => {
   const user = await prisma.user.findFirst({
     where: {
       username: "tallar",
