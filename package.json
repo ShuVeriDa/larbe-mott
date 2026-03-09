@@ -28,7 +28,8 @@
     "migrate:deploy": "prisma migrate deploy",
     "migrate:status": "prisma migrate status",
     "seed": "ts-node prisma/seed.ts",
-    "seed2": "ts-node prisma/seed2.ts"
+    "seed2": "ts-node prisma/seed2.ts",
+    "seed:clear-texts": "ts-node prisma/seed-clear-texts.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
