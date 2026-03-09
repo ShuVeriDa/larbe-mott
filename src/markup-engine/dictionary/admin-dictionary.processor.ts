@@ -1,0 +1,53 @@
+import { Injectable } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
+import { PrismaService } from "src/prisma.service";
+import { AdminDictionaryService } from "./admin-dictionary.service";
+
+@Injectable()
+export class AdminDictionaryProcessor {
+  constructor(
+    private prisma: PrismaService,
+    private dictionaryService: AdminDictionaryService,
+  ) {}
+
+  async analyzeVersion(versionId: string) {
+    const tokens = await this.prisma.textToken.findMany({
+      where: { versionId },
+      select: {
+        id: true,
+        normalized: true,
+      },
+    });
+
+    const words = [...new Set(tokens.map((t) => t.normalized))];
+
+    const dictionaryEntries = await this.dictionaryService.findWords(words);
+
+    const dictionaryMap = new Map();
+
+    for (const entry of dictionaryEntries) {
+      dictionaryMap.set(entry.word, entry);
+    }
+
+    const analyses: Prisma.TokenAnalysisCreateManyInput[] = [];
+
+    for (const token of tokens) {
+      const entry = dictionaryMap.get(token.normalized);
+
+      if (!entry) continue;
+
+      analyses.push({
+        tokenId: token.id,
+        lemmaId: entry.lemmaId,
+        isPrimary: true,
+      });
+    }
+
+    if (analyses.length) {
+      await this.prisma.tokenAnalysis.createMany({
+        data: analyses,
+        skipDuplicates: true,
+      });
+    }
+  }
+}
