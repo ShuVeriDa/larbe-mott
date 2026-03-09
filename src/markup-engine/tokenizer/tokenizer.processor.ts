@@ -4,6 +4,7 @@ import { PrismaService } from "src/prisma.service";
 import { DictionaryCacheProcessor } from "../dictionary-cache/dictionary-cache.processor";
 import { AdminDictionaryProcessor } from "../dictionary/admin-dictionary.processor";
 import { NormalizerService } from "../normalizer/normalizer.service";
+import { OnlineDictionaryProcessor } from "../online-dictionary/online-dictionary.processor";
 import { TokenizerService } from "./tokenizer.service";
 import { normalizeToken } from "./tokenizer.utils";
 
@@ -15,6 +16,7 @@ export class TokenizerProcessor {
     private normalizerService: NormalizerService,
     private adminDictionaryProcessor: AdminDictionaryProcessor,
     private dictionaryCacheProcessor: DictionaryCacheProcessor,
+    private onlineDictionaryProcessor: OnlineDictionaryProcessor,
   ) {}
 
   async processText(textId: string) {
@@ -63,7 +65,7 @@ export class TokenizerProcessor {
     await this.normalizerService.normalizeVersion(version.id);
     await this.adminDictionaryProcessor.analyzeVersion(version.id);
     await this.dictionaryCacheProcessor.analyzeVersion(version.id);
-
+    await this.onlineDictionaryProcessor.analyzeVersion(version.id);
     await this.buildVocabularyIndex(version.id);
 
     return version;

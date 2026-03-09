@@ -86,7 +86,7 @@ model AdminDictionaryEntry {
   notes         String?
 
   createdById   String
-  createdBy     User @relation("AdminDictionaryCreator", fields: [createdById], references: [id])
+  createdBy     User @relation("AdminDictionaryCreator", fields: [createdById], references: [id], onDelete: Cascade)
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -110,10 +110,10 @@ model AdminHeadword {
   normalized String
   order      Int @default(0)
 
-  entry      AdminDictionaryEntry @relation(fields: [entryId], references: [id])
+  entry      AdminDictionaryEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
 
   lemmaId    String?
-  lemma      Lemma? @relation("AdminHeadwordLemma", fields: [lemmaId], references: [id])
+  lemma      Lemma? @relation("AdminHeadwordLemma", fields: [lemmaId], references: [id], onDelete: SetNull)
 
   @@index([normalized])
   @@map("admin_headword")
@@ -133,8 +133,8 @@ model AdminMorphForm {
   lemmaId     String
   entryId     String
 
-  lemma       Lemma @relation("AdminMorphLemma", fields: [lemmaId], references: [id])
-  entry       AdminDictionaryEntry @relation(fields: [entryId], references: [id])
+  lemma       Lemma @relation("AdminMorphLemma", fields: [lemmaId], references: [id], onDelete: Cascade)
+  entry       AdminDictionaryEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
 
   @@index([normalized])
   @@map("admin_morph_form")
@@ -190,10 +190,10 @@ model Headword {
   normalized String
   order      Int @default(0)
 
-  entry      DictionaryEntry @relation(fields: [entryId], references: [id])
+  entry      DictionaryEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
 
   lemmaId    String?
-  lemma      Lemma? @relation("HeadwordLemma", fields: [lemmaId], references: [id])
+  lemma      Lemma? @relation("HeadwordLemma", fields: [lemmaId], references: [id], onDelete: SetNull)
 
   @@index([normalized])
   @@map("headword")
@@ -216,6 +216,7 @@ model Lemma {
 
   morphForms    MorphForm[]
   tokenAnalyses TokenAnalysis[] @relation("TokenLemma")
+  vocabulary TextVocabulary[]
   wordProgress  UserWordProgress[]
 
   adminHeadwords AdminHeadword[] @relation("AdminHeadwordLemma")
@@ -240,8 +241,8 @@ model MorphForm {
   lemmaId     String
   entryId     String?
 
-  lemma       Lemma @relation(fields: [lemmaId], references: [id])
-  entry       DictionaryEntry? @relation(fields: [entryId], references: [id])
+  lemma       Lemma @relation(fields: [lemmaId], references: [id], onDelete: Cascade)
+  entry       DictionaryEntry? @relation(fields: [entryId], references: [id], onDelete: SetNull)
 
   @@index([normalized])
   @@map("morph_form")
@@ -259,7 +260,7 @@ model Sense {
   definition String
   notes      String?
 
-  entry      DictionaryEntry @relation(fields: [entryId], references: [id])
+  entry      DictionaryEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
 
   examples   Example[]
   @@map("sense")
@@ -272,7 +273,7 @@ model Example {
   text        String
   translation String?
 
-  sense       Sense @relation(fields: [senseId], references: [id])
+  sense       Sense @relation(fields: [senseId], references: [id], onDelete: Cascade)
   @@map("example")
 }
 
@@ -309,7 +310,7 @@ model Text {
   source      String?
 
   createdById   String
-  createdBy     User @relation("text", fields: [createdById], references: [id])
+  createdBy     User @relation("text", fields: [createdById], references: [id], onDelete: Cascade)
   
   pages         TextPage[]
 
@@ -325,7 +326,7 @@ model TextPage {
   id        String @id @default(cuid())
 
   textId    String
-  text      Text   @relation(fields: [textId], references: [id])
+  text      Text   @relation(fields: [textId], references: [id], onDelete: Cascade)
 
   pageNumber Int
 
@@ -352,8 +353,9 @@ model TextProcessingVersion {
   createdAt DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  text      Text @relation(fields: [textId], references: [id])
+  text      Text @relation(fields: [textId], references: [id], onDelete: Cascade)
   tokens    TextToken[]
+  vocabulary TextVocabulary[]
 
   @@unique([textId, version])
   @@map("text_processing_version")
@@ -374,13 +376,43 @@ model TextToken {
 
   status        TokenStatus @default(ANALYZED)
 
-  version       TextProcessingVersion @relation(fields: [versionId], references: [id])
+  vocabId       String?
+  vocabulary    TextVocabulary? @relation(fields: [vocabId], references: [id], onDelete: SetNull)
+
+  version       TextProcessingVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
   analyses      TokenAnalysis[]
 
   @@index([normalized])
   @@index([versionId, position])
   @@index([versionId, normalized])
+    @@index([vocabId])
   @@map("text_token")
+}
+
+//////////////////////////////////////////////////////
+// TEXT_VOCABULARY
+//////////////////////////////////////////////////////
+
+model TextVocabulary {
+  id          String   @id @default(cuid())
+
+  versionId   String
+  normalized  String
+
+  lemmaId     String?
+  translation String?
+
+  createdAt   DateTime @default(now())
+
+  version     TextProcessingVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  lemma       Lemma? @relation(fields: [lemmaId], references: [id], onDelete: SetNull)
+
+  tokens      TextToken[]
+
+  @@unique([versionId, normalized])
+  @@index([normalized])
+  @@index([versionId])  
+  @@map("text_vocabulary")
 }
 
 //////////////////////////////////////////////////////
@@ -396,8 +428,8 @@ model TokenAnalysis {
   probability Float?
   isPrimary   Boolean @default(false)
 
-  token       TextToken @relation(fields: [tokenId], references: [id])
-  lemma       Lemma? @relation("TokenLemma", fields: [lemmaId], references: [id])
+  token       TextToken @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  lemma       Lemma? @relation("TokenLemma", fields: [lemmaId], references: [id], onDelete: SetNull)
 
   @@index([lemmaId])
   @@index([tokenId])
@@ -424,8 +456,8 @@ model UserWordProgress {
   easeFactor  Float?
   interval    Int?
 
-  user        User  @relation(fields: [userId], references: [id])
-  lemma       Lemma @relation(fields: [lemmaId], references: [id])
+  user        User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lemma       Lemma @relation(fields: [lemmaId], references: [id], onDelete: Cascade)
 
   @@unique([userId, lemmaId])
   @@map("user_word_progress")
@@ -444,8 +476,8 @@ model UserTextProgress {
   progressPercent Float    @default(0)
   lastOpened      DateTime?
 
-  user            User @relation(fields: [userId], references: [id])
-  text            Text @relation(fields: [textId], references: [id])
+  user            User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  text            Text @relation(fields: [textId], references: [id], onDelete: Cascade)
 
   @@unique([userId, textId])
   @@map("user_text_progress")

@@ -12,7 +12,10 @@ export class AdminDictionaryProcessor {
 
   async analyzeVersion(versionId: string) {
     const tokens = await this.prisma.textToken.findMany({
-      where: { versionId },
+      where: {
+        versionId,
+        analyses: { none: {} },
+      },
       select: {
         id: true,
         normalized: true,
@@ -23,10 +26,10 @@ export class AdminDictionaryProcessor {
 
     const dictionaryEntries = await this.dictionaryService.findWords(words);
 
-    const dictionaryMap = new Map();
+    const dictionaryMap = new Map<string, any>();
 
     for (const entry of dictionaryEntries) {
-      dictionaryMap.set(entry.word, entry);
+      dictionaryMap.set(entry.normalized, entry);
     }
 
     const analyses: Prisma.TokenAnalysisCreateManyInput[] = [];
