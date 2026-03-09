@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
+import { NormalizerService } from "../normalizer/normalizer.service";
 import { TokenizerService } from "./tokenizer.service";
 import { normalizeToken } from "./tokenizer.utils";
 
@@ -8,7 +9,8 @@ import { normalizeToken } from "./tokenizer.utils";
 export class TokenizerProcessor {
   constructor(
     private prisma: PrismaService,
-    private tokenizer: TokenizerService,
+    private tokenizerService: TokenizerService,
+    private normalizerService: NormalizerService,
   ) {}
 
   async processText(textId: string) {
@@ -38,7 +40,7 @@ export class TokenizerProcessor {
     const tokensToInsert: Prisma.TextTokenCreateManyInput[] = [];
 
     for (const page of pages) {
-      const tokens = this.tokenizer.tokenize(page.contentRaw);
+      const tokens = this.tokenizerService.tokenize(page.contentRaw);
 
       for (const token of tokens) {
         tokensToInsert.push({
@@ -53,6 +55,8 @@ export class TokenizerProcessor {
     await this.prisma.textToken.createMany({
       data: tokensToInsert,
     });
+
+    await this.normalizerService.normalizeVersion(version.id);
 
     await this.buildVocabularyIndex(version.id);
 

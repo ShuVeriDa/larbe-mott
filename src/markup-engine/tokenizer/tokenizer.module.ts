@@ -1,11 +1,13 @@
 import { Module } from "@nestjs/common";
 import { PrismaService } from "src/prisma.service";
-import { TokenizerController } from "./tokenizer.controller";
+import { NormalizerModule } from "src/markup-engine/normalizer/normalizer.module";
+
 import { TokenizerProcessor } from "./tokenizer.processor";
 import { TokenizerService } from "./tokenizer.service";
 
 @Module({
-  controllers: [TokenizerController],
+  imports: [NormalizerModule],
+  controllers: [],
   providers: [TokenizerService, TokenizerProcessor, PrismaService],
   exports: [TokenizerProcessor],
 })
