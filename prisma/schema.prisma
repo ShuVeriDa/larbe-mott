@@ -253,6 +253,8 @@ model MorphForm {
   entry       DictionaryEntry? @relation(fields: [entryId], references: [id], onDelete: SetNull)
 
   @@index([normalized])
+  @@unique([normalized, lemmaId])
+
   @@map("morph_form")
 }
 
