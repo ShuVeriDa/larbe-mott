@@ -16,6 +16,13 @@ datasource db {
 // ENUMS
 //////////////////////////////////////////////////////
 
+enum DictionarySource {
+  ADMIN
+  IMPORT
+  ONLINE
+  CACHE
+}
+
 enum UserRole {
   USER
   ADMIN
@@ -159,7 +166,7 @@ model DictionaryEntry {
   rawWordAlt    String?
   rawTranslate  String
 
-  source        String?
+  source        DictionarySource?
 
   cachedAt      DateTime @default(now())
 
