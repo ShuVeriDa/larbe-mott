@@ -81,6 +81,25 @@ export class TokenizerProcessor {
       distinct: ["normalized"],
     });
 
-    return uniqueWords.map((w) => w.normalized);
+    const words = uniqueWords.map((w) => w.normalized);
+
+    if (!words.length) return;
+
+    await this.prisma.textVocabulary.createMany({
+      data: words.map((word) => ({
+        versionId,
+        normalized: word,
+      })),
+      skipDuplicates: true,
+    });
+
+    await this.prisma.$executeRaw`
+      UPDATE text_token t
+      SET "vocabId" = v.id
+      FROM text_vocabulary v
+      WHERE t."versionId" = ${versionId}
+      AND v."versionId" = ${versionId}
+      AND t.normalized = v.normalized
+    `;
   }
 }

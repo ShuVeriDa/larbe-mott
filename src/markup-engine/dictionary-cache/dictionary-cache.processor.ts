@@ -24,13 +24,7 @@ export class DictionaryCacheProcessor {
 
     const words = [...new Set(tokens.map((t) => t.normalized))];
 
-    const cacheEntries = await this.cacheService.findWords(words);
-
-    const cacheMap = new Map();
-
-    for (const entry of cacheEntries) {
-      cacheMap.set(entry.normalized, entry);
-    }
+    const cacheMap = await this.cacheService.findMap(words);
 
     const analyses: Prisma.TokenAnalysisCreateManyInput[] = [];
 
