@@ -9,17 +9,26 @@ export class NormalizerService {
   async normalizeVersion(versionId: string) {
     const tokens = await this.prisma.textToken.findMany({
       where: { versionId },
+      select: {
+        id: true,
+        original: true,
+      },
     });
 
-    const updates = tokens.map((token) => {
-      const normalized = normalizeToken(token.original);
+    if (!tokens.length) return;
 
-      return this.prisma.textToken.update({
-        where: { id: token.id },
-        data: { normalized },
-      });
-    });
+    const updates = tokens.map((t) => ({
+      id: t.id,
+      normalized: normalizeToken(t.original),
+    }));
 
-    await this.prisma.$transaction(updates);
+    await this.prisma.$transaction(
+      updates.map((u) =>
+        this.prisma.textToken.update({
+          where: { id: u.id },
+          data: { normalized: u.normalized },
+        }),
+      ),
+    );
   }
 }

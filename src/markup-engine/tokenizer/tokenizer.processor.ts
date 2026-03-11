@@ -5,6 +5,7 @@ import { DictionaryCacheProcessor } from "../dictionary-cache/dictionary-cache.p
 import { AdminDictionaryProcessor } from "../dictionary/admin-dictionary.processor";
 import { NormalizerService } from "../normalizer/normalizer.service";
 import { OnlineDictionaryProcessor } from "../online-dictionary/online-dictionary.processor";
+import { UnknownWordProcessor } from "../unknown-word/unknown-word.processor";
 import { TokenizerService } from "./tokenizer.service";
 import { normalizeToken } from "./tokenizer.utils";
 
@@ -17,6 +18,7 @@ export class TokenizerProcessor {
     private adminDictionaryProcessor: AdminDictionaryProcessor,
     private dictionaryCacheProcessor: DictionaryCacheProcessor,
     private onlineDictionaryProcessor: OnlineDictionaryProcessor,
+    private unknownWordProcessor: UnknownWordProcessor,
   ) {}
 
   async processText(textId: string) {
@@ -66,6 +68,7 @@ export class TokenizerProcessor {
     await this.adminDictionaryProcessor.analyzeVersion(version.id);
     await this.dictionaryCacheProcessor.analyzeVersion(version.id);
     await this.onlineDictionaryProcessor.analyzeVersion(version.id);
+    await this.unknownWordProcessor.analyzeVersion(version.id);
     await this.buildVocabularyIndex(version.id);
 
     return version;

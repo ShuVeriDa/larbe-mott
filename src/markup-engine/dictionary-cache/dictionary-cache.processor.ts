@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { AnalysisSource, Prisma } from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
 import { DictionaryCacheService } from "./dictionary-cache.service";
 
@@ -12,7 +12,10 @@ export class DictionaryCacheProcessor {
 
   async analyzeVersion(versionId: string) {
     const tokens = await this.prisma.textToken.findMany({
-      where: { versionId },
+      where: {
+        versionId,
+        analyses: { none: {} },
+      },
       select: {
         id: true,
         normalized: true,
@@ -39,6 +42,7 @@ export class DictionaryCacheProcessor {
       analyses.push({
         tokenId: token.id,
         lemmaId: entry.lemmaId,
+        source: AnalysisSource.CACHE,
         isPrimary: true,
       });
     }

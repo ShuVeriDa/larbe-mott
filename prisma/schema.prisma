@@ -47,6 +47,13 @@ enum TokenStatus {
   NOT_FOUND
 }
 
+enum AnalysisSource {
+  ADMIN
+  CACHE
+  ONLINE
+  MORPHOLOGY
+}
+
 //////////////////////////////////////////////////////
 // USERS
 //////////////////////////////////////////////////////
@@ -224,6 +231,7 @@ model Lemma {
 
   @@unique([normalized, language])
   @@index([normalized])
+  @@index([language, normalized])   // ← добавить
   @@map("lemma")
 }
 
@@ -384,8 +392,7 @@ model TextToken {
 
   @@index([normalized])
   @@index([versionId, position])
-  @@index([versionId, normalized])
-    @@index([vocabId])
+  @@index([vocabId])
   @@map("text_token")
 }
 
@@ -424,6 +431,8 @@ model TokenAnalysis {
 
   tokenId     String
   lemmaId     String?
+
+  source      AnalysisSource
 
   probability Float?
   isPrimary   Boolean @default(false)

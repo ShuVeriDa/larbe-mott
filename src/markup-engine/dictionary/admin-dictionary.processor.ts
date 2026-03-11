@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { AnalysisSource, Prisma } from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
 import { AdminDictionaryService } from "./admin-dictionary.service";
 
@@ -42,6 +42,7 @@ export class AdminDictionaryProcessor {
       analyses.push({
         tokenId: token.id,
         lemmaId: entry.lemmaId,
+        source: AnalysisSource.ADMIN,
         isPrimary: true,
       });
     }

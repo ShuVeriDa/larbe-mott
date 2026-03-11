@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { AnalysisSource, Prisma } from "@prisma/client";
 import pLimit from "p-limit";
 import { PrismaService } from "src/prisma.service";
 import { OnlineDictionaryService } from "./online-dictionary.service";
@@ -62,6 +62,7 @@ export class OnlineDictionaryProcessor {
           for (const tokenId of tokenIds) {
             analysisRows.push({
               tokenId,
+              source: AnalysisSource.ONLINE,
               isPrimary: true,
             });
           }
