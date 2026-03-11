@@ -50,11 +50,36 @@ export class TextController {
     return await this.textService.getTexts();
   }
 
+  @Get(":id/pages/:pageNumber")
+  @Auth()
+  @ApiOperation({
+    summary: "Get one page of a text (optimized)",
+    description:
+      "Returns text metadata, one page (content + tokens). Use this for reading: 1 page = 1 request.",
+  })
+  @ApiParam({ name: "id", description: "Text ID (UUID)" })
+  @ApiParam({ name: "pageNumber", description: "Page number (1-based)" })
+  @ApiOkResponse({
+    description: "Text metadata, page (contentRich, contentRaw), tokens for the page, progress.",
+  })
+  @ApiNotFoundResponse({ description: "Text or page not found." })
+  async getPage(
+    @Param("id") textId: string,
+    @Param("pageNumber") pageNumber: string,
+    @User("id") userId: string,
+  ) {
+    return await this.textService.getPage(
+      textId,
+      parseInt(pageNumber, 10),
+      userId,
+    );
+  }
+
   @Get(":id")
   @Auth()
   @ApiOperation({
-    summary: "Get a text by ID",
-    description: "Returns a single text with full details including pages.",
+    summary: "Get a text by ID (all pages)",
+    description: "Returns a single text with full details including all pages.",
   })
   @ApiParam({
     name: "id",

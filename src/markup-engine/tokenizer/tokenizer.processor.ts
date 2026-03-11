@@ -53,6 +53,7 @@ export class TokenizerProcessor {
       for (const token of tokens) {
         tokensToInsert.push({
           versionId: version.id,
+          pageId: page.id,
           position: position++,
           original: token.value,
           normalized: normalizeToken(token.value),
@@ -101,5 +102,53 @@ export class TokenizerProcessor {
       AND v."versionId" = ${versionId}
       AND t.normalized = v.normalized
     `;
+
+    await this.fillVocabularyLemmaAndTranslation(versionId);
+  }
+
+  /** Заполняет lemmaId и translation в TextVocabulary из первичного анализа токенов. */
+  private async fillVocabularyLemmaAndTranslation(versionId: string) {
+    const tokens = await this.prisma.textToken.findMany({
+      where: { versionId, vocabId: { not: null } },
+      select: {
+        vocabId: true,
+        analyses: {
+          where: { isPrimary: true },
+          take: 1,
+          select: {
+            lemmaId: true,
+            lemma: {
+              select: {
+                headwords: { orderBy: { order: "asc" }, take: 1, select: { text: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const vocabData = new Map<
+      string,
+      { lemmaId: string | null; translation: string | null }
+    >();
+    for (const t of tokens) {
+      const vocabId = t.vocabId!;
+      if (vocabData.has(vocabId)) continue;
+      const primary = t.analyses[0];
+      const lemmaId = primary?.lemmaId ?? null;
+      const translation =
+        primary?.lemma?.headwords?.[0]?.text ?? null;
+      vocabData.set(vocabId, { lemmaId, translation });
+    }
+
+    for (const [vocabId, data] of vocabData) {
+      await this.prisma.textVocabulary.update({
+        where: { id: vocabId },
+        data: {
+          lemmaId: data.lemmaId,
+          translation: data.translation,
+        },
+      });
+    }
   }
 }

@@ -1,11 +1,12 @@
 import {
   ArrayNotEmpty,
   IsArray,
-  IsEnum,
   IsOptional,
   IsString,
+  Matches,
 } from "class-validator";
 
+import { ApiProperty } from "@nestjs/swagger";
 import { Language } from "@prisma/client";
 
 export class CreateEntryDto {
@@ -15,7 +16,16 @@ export class CreateEntryDto {
   @IsString()
   normalized: string;
 
-  @IsEnum(Language)
+  @ApiProperty({
+    enum: Language,
+    description: `${Language.CHE} | ${Language.RU}`,
+  })
+  @Matches(
+    `^${Object.values(Language)
+      .filter((v) => typeof v !== "number")
+      .join("|")}$`,
+    "i",
+  )
   language: Language;
 
   @IsOptional()
@@ -24,6 +34,10 @@ export class CreateEntryDto {
 
   @IsString()
   translation: string;
+
+  @IsOptional()
+  @IsString()
+  notes?: string;
 
   @IsOptional()
   @IsArray()

@@ -78,80 +78,13 @@ model User {
 
   wordProgress  UserWordProgress[]
   textProgress  UserTextProgress[]
-  adminDictionaryEntries AdminDictionaryEntry[] @relation("AdminDictionaryCreator")
+  dictionaryEntries DictionaryEntry[] @relation("DictionaryEntryCreator")
   texts Text[] @relation("text")
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   @@map("users")
-}
-
-//////////////////////////////////////////////////////
-// ADMIN DICTIONARY (дополнение к онлайн словарю)
-//////////////////////////////////////////////////////
-
-model AdminDictionaryEntry {
-  id            String   @id @default(uuid())
-
-  word          String
-  normalized    String
-  translation   String
-  notes         String?
-
-  createdById   String
-  createdBy     User @relation("AdminDictionaryCreator", fields: [createdById], references: [id], onDelete: Cascade)
-
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  headwords     AdminHeadword[]
-  morphForms    AdminMorphForm[]
-
-  @@index([normalized])
-  @@map("admin_dictionary_entry")
-}
-
-//////////////////////////////////////////////////////
-// ADMIN HEADWORDS
-//////////////////////////////////////////////////////
-
-model AdminHeadword {
-  id         String @id @default(uuid())
-
-  entryId    String
-  text       String
-  normalized String
-  order      Int @default(0)
-
-  entry      AdminDictionaryEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
-
-  lemmaId    String?
-  lemma      Lemma? @relation("AdminHeadwordLemma", fields: [lemmaId], references: [id], onDelete: SetNull)
-
-  @@index([normalized])
-  @@map("admin_headword")
-}
-
-//////////////////////////////////////////////////////
-// ADMIN MORPH FORMS
-//////////////////////////////////////////////////////
-
-model AdminMorphForm {
-  id          String @id @default(uuid())
-
-  form        String
-  normalized  String
-  grammarTag  String?
-
-  lemmaId     String
-  entryId     String
-
-  lemma       Lemma @relation("AdminMorphLemma", fields: [lemmaId], references: [id], onDelete: Cascade)
-  entry       AdminDictionaryEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
-
-  @@index([normalized])
-  @@map("admin_morph_form")
 }
 
 //////////////////////////////////////////////////////
@@ -165,16 +98,20 @@ model DictionaryEntry {
   rawWord       String
   rawWordAlt    String?
   rawTranslate  String
+  notes         String?
 
   source        DictionarySource?
+  createdById   String?
 
   cachedAt      DateTime @default(now())
+  createdBy     User?    @relation("DictionaryEntryCreator", fields: [createdById], references: [id], onDelete: SetNull)
 
   headwords     Headword[]
   senses        Sense[]
   morphForms    MorphForm[]
 
   @@index([rawWord])
+  @@index([createdById])
   @@map("dictionary_entry")
 }
 
@@ -232,9 +169,6 @@ model Lemma {
   tokenAnalyses TokenAnalysis[] @relation("TokenLemma")
   vocabulary TextVocabulary[]
   wordProgress  UserWordProgress[]
-
-  adminHeadwords AdminHeadword[] @relation("AdminHeadwordLemma")
-  adminForms     AdminMorphForm[] @relation("AdminMorphLemma")
 
   @@unique([normalized, language])
   @@index([normalized])
@@ -350,6 +284,8 @@ model TextPage {
   contentRich Json
   contentRaw  String
 
+  tokens    TextToken[]
+
   createdAt DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -386,6 +322,7 @@ model TextToken {
   id            String      @id @default(cuid())
 
   versionId     String
+  pageId        String?   // опционально для обратной совместимости; при токенизации всегда задаётся
   position      Int
 
   original      String
@@ -397,10 +334,12 @@ model TextToken {
   vocabulary    TextVocabulary? @relation(fields: [vocabId], references: [id], onDelete: SetNull)
 
   version       TextProcessingVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  page          TextPage?  @relation(fields: [pageId], references: [id], onDelete: Cascade)
   analyses      TokenAnalysis[]
 
   @@index([normalized])
   @@index([versionId, position])
+  @@index([pageId])
   @@index([vocabId])
   @@map("text_token")
 }

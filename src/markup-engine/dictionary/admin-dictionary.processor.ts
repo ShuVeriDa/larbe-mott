@@ -23,25 +23,17 @@ export class AdminDictionaryProcessor {
     });
 
     const words = [...new Set(tokens.map((t) => t.normalized))];
-
-    const dictionaryEntries = await this.dictionaryService.findWords(words);
-
-    const dictionaryMap = new Map<string, any>();
-
-    for (const entry of dictionaryEntries) {
-      dictionaryMap.set(entry.normalized, entry);
-    }
+    const lemmaMap = await this.dictionaryService.findWords(words);
 
     const analyses: Prisma.TokenAnalysisCreateManyInput[] = [];
 
     for (const token of tokens) {
-      const entry = dictionaryMap.get(token.normalized);
-
-      if (!entry) continue;
+      const item = lemmaMap.get(token.normalized);
+      if (!item?.lemmaId) continue;
 
       analyses.push({
         tokenId: token.id,
-        lemmaId: entry.lemmaId,
+        lemmaId: item.lemmaId,
         source: AnalysisSource.ADMIN,
         isPrimary: true,
       });

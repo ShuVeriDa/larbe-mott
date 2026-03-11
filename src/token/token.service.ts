@@ -12,15 +12,12 @@ export class TokenService {
   ) {}
 
   async getTokenInfo(tokenId: string, userId: string) {
-    // 1️⃣ проверяем кэш
+    // 1️⃣ кэш по tokenId
     const cached = this.cache.get(tokenId);
-
     if (cached) {
-      // всё равно обновляем прогресс слова
       if (cached.lemmaId) {
         await this.wordProgress.registerClick(userId, cached.lemmaId);
       }
-
       return cached;
     }
 
@@ -45,18 +42,33 @@ export class TokenService {
       throw new NotFoundException("Token not found");
     }
 
+    // 3️⃣ кэш по (versionId, normalized): то же слово на другой странице — без повторного разбора
+    const cachedByWord = this.cache.getByVersionNormalized(
+      token.versionId,
+      token.normalized,
+    );
+    if (cachedByWord) {
+      const result = {
+        ...cachedByWord,
+        tokenId: token.id,
+        word: token.original,
+      };
+      if (result.lemmaId) {
+        await this.wordProgress.registerClick(userId, result.lemmaId);
+      }
+      this.cache.set(token.id, token.versionId, token.normalized, result);
+      return result;
+    }
+
     const primary =
       token.analyses.find((a) => a.isPrimary) ?? token.analyses[0];
-
     const lemmaId = primary?.lemmaId;
 
-    // 🔥 ЭТАП 10
     if (lemmaId) {
       await this.wordProgress.registerClick(userId, lemmaId);
     }
 
     const headword = primary?.lemma?.headwords?.[0];
-
     const result = {
       tokenId: token.id,
       word: token.original,
@@ -67,9 +79,7 @@ export class TokenService {
       source: primary?.source ?? null,
     };
 
-    // 3️⃣ сохраняем в кэш
-    this.cache.set(tokenId, result);
-
+    this.cache.set(token.id, token.versionId, token.normalized, result);
     return result;
   }
 }

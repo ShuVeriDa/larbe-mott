@@ -20,6 +20,92 @@ export class TextService {
     return await this.prisma.text.findMany();
   }
 
+  /**
+   * Возвращает одну страницу текста с токенами (оптимизация: 1 страница = 1 запрос).
+   */
+  async getPage(
+    textId: string,
+    pageNumber: number,
+    userId: string,
+  ) {
+    const text = await this.prisma.text.findUnique({
+      where: { id: textId },
+      select: {
+        id: true,
+        title: true,
+        level: true,
+        language: true,
+        author: true,
+        source: true,
+      },
+    });
+    if (!text) throw new NotFoundException("Text not found");
+
+    const page = await this.prisma.textPage.findFirst({
+      where: { textId, pageNumber },
+    });
+    if (!page) throw new NotFoundException("Page not found");
+
+    const latestVersion = await this.prisma.textProcessingVersion.findFirst({
+      where: { textId },
+      orderBy: { version: "desc" },
+      select: { id: true },
+    });
+    if (!latestVersion) {
+      return {
+        ...text,
+        page: {
+          id: page.id,
+          pageNumber: page.pageNumber,
+          contentRich: page.contentRich,
+          contentRaw: page.contentRaw,
+        },
+        tokens: [],
+        progress: 0,
+      };
+    }
+
+    const tokens = await this.prisma.textToken.findMany({
+      where: { versionId: latestVersion.id, pageId: page.id },
+      orderBy: { position: "asc" },
+      select: {
+        id: true,
+        position: true,
+        original: true,
+        normalized: true,
+        status: true,
+        vocabId: true,
+      },
+    });
+
+    const lemmaIds = await this.prisma.tokenAnalysis.findMany({
+      where: {
+        tokenId: { in: tokens.map((t) => t.id) },
+        isPrimary: true,
+      },
+      select: { lemmaId: true },
+    }).then((rows) =>
+      [...new Set(rows.map((r) => r.lemmaId).filter((id): id is string => id !== null))],
+    );
+    if (lemmaIds.length) {
+      await this.wordProgress.registerSeenWords(userId, lemmaIds);
+    }
+
+    const progress = await this.textProgress.calculateProgress(userId, textId);
+
+    return {
+      ...text,
+      page: {
+        id: page.id,
+        pageNumber: page.pageNumber,
+        contentRich: page.contentRich,
+        contentRaw: page.contentRaw,
+      },
+      tokens,
+      progress,
+    };
+  }
+
   async getTextById(textId: string, userId: string) {
     const text = await this.prisma.text.findUnique({
       where: { id: textId },

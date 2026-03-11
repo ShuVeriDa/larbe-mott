@@ -8,7 +8,7 @@ import { CreateEntryDto } from "./dto/create-entry.dto";
 export class AdminDictionaryService {
   constructor(private prisma: PrismaService) {}
 
-  async createEntry(dto: CreateEntryDto) {
+  async createEntry(dto: CreateEntryDto, userId: string) {
     const normalized = normalizeToken(dto.word);
 
     return this.prisma.$transaction(async (tx) => {
@@ -34,12 +34,14 @@ export class AdminDictionaryService {
         });
       }
 
-      // 3️⃣ создаём dictionary entry
+      // 3️⃣ создаём dictionary entry (унифицированная иерархия: DictionaryEntry + Headword)
       const entry = await tx.dictionaryEntry.create({
         data: {
           rawWord: dto.word,
           rawTranslate: dto.translation,
           source: DictionarySource.ADMIN,
+          createdById: userId,
+          notes: dto.notes ?? null,
         },
       });
 
