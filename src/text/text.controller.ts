@@ -23,6 +23,7 @@ import {
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
 import { Admin } from "src/auth/decorators/admin.decorator";
+import { Auth } from "src/auth/decorators/auth.decorator";
 import { User } from "src/user/decorators/user.decorator";
 import { CreateTextDto } from "./dto/create.dto";
 import { PatchTextDto } from "./dto/update.dto";
@@ -42,13 +43,15 @@ export class TextController {
       "Returns a list of all texts available to the authenticated user.",
   })
   @ApiOkResponse({
-    description: "Array of text items (id, title, language, level, author, etc.).",
+    description:
+      "Array of text items (id, title, language, level, author, etc.).",
   })
   async getTexts() {
     return await this.textService.getTexts();
   }
 
   @Get(":id")
+  @Auth()
   @ApiOperation({
     summary: "Get a text by ID",
     description: "Returns a single text with full details including pages.",
@@ -58,10 +61,12 @@ export class TextController {
     description: "Unique text identifier (UUID)",
     example: "550e8400-e29b-41d4-a716-446655440000",
   })
-  @ApiOkResponse({ description: "Text with metadata and pages (TipTap content)." })
+  @ApiOkResponse({
+    description: "Text with metadata and pages (TipTap content).",
+  })
   @ApiNotFoundResponse({ description: "Text with the given ID was not found." })
-  async getTextById(@Param("id") textId: string) {
-    return await this.textService.getTextById(textId);
+  async getTextById(@Param("id") textId: string, @User("id") userId: string) {
+    return await this.textService.getTextById(textId, userId);
   }
 
   @HttpCode(201)
@@ -73,7 +78,8 @@ export class TextController {
       "Creates a new text with title, language, level, author, source, and pages. Requires admin role.",
   })
   @ApiBody({
-    description: "Text payload: title, language, level (optional), author, source (optional), pages (TipTap docs).",
+    description:
+      "Text payload: title, language, level (optional), author, source (optional), pages (TipTap docs).",
     type: CreateTextDto,
   })
   @ApiCreatedResponse({
@@ -97,10 +103,13 @@ export class TextController {
     example: "550e8400-e29b-41d4-a716-446655440000",
   })
   @ApiBody({
-    description: "Partial payload. All fields are optional; only sent fields are updated.",
+    description:
+      "Partial payload. All fields are optional; only sent fields are updated.",
     type: PatchTextDto,
   })
-  @ApiOkResponse({ description: "Text updated successfully. Returns the updated text." })
+  @ApiOkResponse({
+    description: "Text updated successfully. Returns the updated text.",
+  })
   @ApiNotFoundResponse({ description: "Text with the given ID was not found." })
   @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
   async patchText(@Param("id") textId: string, @Body() dto: PatchTextDto) {

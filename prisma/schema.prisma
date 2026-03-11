@@ -494,5 +494,7 @@ model UserTextProgress {
   text            Text @relation(fields: [textId], references: [id], onDelete: Cascade)
 
   @@unique([userId, textId])
+  @@index([userId])
+  @@index([textId])
   @@map("user_text_progress")
 }

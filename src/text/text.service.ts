@@ -3,6 +3,8 @@ import { Prisma } from "@prisma/client";
 import { extractTextFromTiptap } from "src/common/utils/extractTextFromTiptap";
 import { TokenizerProcessor } from "src/markup-engine/tokenizer/tokenizer.processor";
 import { PrismaService } from "src/prisma.service";
+import { TextProgressService } from "src/progress/text-progress/text-progress.service";
+import { WordProgressService } from "src/progress/word-progress/word-progress.service";
 import { CreateTextDto } from "./dto/create.dto";
 import { PatchTextDto } from "./dto/update.dto";
 
@@ -11,27 +13,55 @@ export class TextService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tokenizerProcessor: TokenizerProcessor,
+    private readonly wordProgress: WordProgressService,
+    private readonly textProgress: TextProgressService,
   ) {}
   async getTexts() {
     return await this.prisma.text.findMany();
   }
 
-  async getTextById(textId: string) {
+  async getTextById(textId: string, userId: string) {
     const text = await this.prisma.text.findUnique({
       where: { id: textId },
       include: {
         pages: { orderBy: { pageNumber: "asc" } },
-        processingVersions: {
-          include: {
-            tokens: true,
-          },
-        },
       },
     });
 
     if (!text) throw new NotFoundException("Text not found");
 
-    return text;
+    // получаем lemmaId всех слов текста
+    const analyses = await this.prisma.tokenAnalysis.findMany({
+      where: {
+        token: {
+          version: {
+            textId,
+          },
+        },
+        isPrimary: true,
+      },
+      select: {
+        lemmaId: true,
+      },
+    });
+
+    const lemmaIds = [
+      ...new Set(
+        analyses
+          .map((a) => a.lemmaId)
+          .filter((id): id is string => id !== null),
+      ),
+    ];
+
+    await this.wordProgress.registerSeenWords(userId, lemmaIds);
+
+    // ЭТАП 11
+    const progress = await this.textProgress.calculateProgress(userId, textId);
+
+    return {
+      ...text,
+      progress,
+    };
   }
 
   async addNewText(dto: CreateTextDto, userId: string) {
