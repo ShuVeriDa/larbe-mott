@@ -5,6 +5,7 @@ import { TokenizerModule } from "./markup-engine/tokenizer/tokenizer.module";
 import { TextModule } from "./text/text.module";
 import { TokenModule } from "./token/token.module";
 import { UserModule } from "./user/user.module";
+import { ProgressModule } from './progress/progress.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { UserModule } from "./user/user.module";
     TextModule,
     TokenizerModule,
     TokenModule,
+    ProgressModule,
   ],
   controllers: [],
   providers: [],

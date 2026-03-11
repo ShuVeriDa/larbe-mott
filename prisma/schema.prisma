@@ -459,6 +459,7 @@ model UserWordProgress {
 
   status      WordStatus @default(NEW)
 
+  seenCount   Int        @default(0)
   repetitions Int        @default(0)
 
   lastSeen    DateTime?
@@ -471,6 +472,8 @@ model UserWordProgress {
   lemma       Lemma @relation(fields: [lemmaId], references: [id], onDelete: Cascade)
 
   @@unique([userId, lemmaId])
+  @@index([userId])
+  @@index([lemmaId])
   @@map("user_word_progress")
 }
 
