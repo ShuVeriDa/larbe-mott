@@ -9,6 +9,6 @@ import { OnlineDictionaryService } from "./online-dictionary.service";
     OnlineDictionaryProcessor,
     PrismaService,
   ],
-  exports: [OnlineDictionaryProcessor],
+  exports: [OnlineDictionaryService, OnlineDictionaryProcessor],
 })
 export class OnlineDictionaryModule {}

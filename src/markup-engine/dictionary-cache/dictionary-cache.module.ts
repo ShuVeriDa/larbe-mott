@@ -5,6 +5,6 @@ import { DictionaryCacheService } from "./dictionary-cache.service";
 
 @Module({
   providers: [DictionaryCacheService, DictionaryCacheProcessor, PrismaService],
-  exports: [DictionaryCacheProcessor],
+  exports: [DictionaryCacheService, DictionaryCacheProcessor],
 })
 export class DictionaryCacheModule {}
