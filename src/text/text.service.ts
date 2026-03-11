@@ -54,14 +54,15 @@ export class TextService {
     if (!latestVersion) {
       return {
         ...text,
+        contentRich: page.contentRich,
+        tokens: [],
+        progress: 0,
         page: {
           id: page.id,
           pageNumber: page.pageNumber,
           contentRich: page.contentRich,
           contentRaw: page.contentRaw,
         },
-        tokens: [],
-        progress: 0,
       };
     }
 
@@ -93,16 +94,18 @@ export class TextService {
 
     const progress = await this.textProgress.calculateProgress(userId, textId);
 
+    // ЭТАП 15: ответ «страница текста» — tokens[], contentRich (и дублируем в page для совместимости)
     return {
       ...text,
+      contentRich: page.contentRich,
+      tokens,
+      progress,
       page: {
         id: page.id,
         pageNumber: page.pageNumber,
         contentRich: page.contentRich,
         contentRaw: page.contentRaw,
       },
-      tokens,
-      progress,
     };
   }
 

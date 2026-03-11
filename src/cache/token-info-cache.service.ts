@@ -11,6 +11,10 @@ export type TokenInfoCacheValue = {
   lemma: string | null;
   forms: string[];
   source: string | null;
+  /** Для ЭТАП 15: ответ «перевод слова» */
+  translation: string | null;
+  grammar: string | null;
+  baseForm: string | null;
 };
 
 @Injectable()

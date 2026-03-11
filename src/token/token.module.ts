@@ -9,6 +9,6 @@ import { TokenService } from "./token.service";
   imports: [WordProgressModule],
   controllers: [TokenController],
   providers: [TokenService, PrismaService, TokenInfoCacheService],
-  exports: [TokenInfoCacheService],
+  exports: [TokenService, TokenInfoCacheService],
 })
 export class TokenModule {}

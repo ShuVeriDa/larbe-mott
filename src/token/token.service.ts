@@ -25,11 +25,16 @@ export class TokenService {
     const token = await this.prisma.textToken.findUnique({
       where: { id: tokenId },
       include: {
+        vocabulary: { select: { translation: true } },
         analyses: {
           include: {
             lemma: {
               include: {
-                headwords: true,
+                headwords: {
+                  include: {
+                    entry: { select: { rawTranslate: true } },
+                  },
+                },
                 morphForms: true,
               },
             },
@@ -52,6 +57,9 @@ export class TokenService {
         ...cachedByWord,
         tokenId: token.id,
         word: token.original,
+        translation: cachedByWord.translation ?? null,
+        grammar: cachedByWord.grammar ?? null,
+        baseForm: cachedByWord.baseForm ?? null,
       };
       if (result.lemmaId) {
         await this.wordProgress.registerClick(userId, result.lemmaId);
@@ -69,6 +77,11 @@ export class TokenService {
     }
 
     const headword = primary?.lemma?.headwords?.[0];
+    const entry = headword?.entry as { rawTranslate?: string } | undefined;
+    const translation =
+      entry?.rawTranslate ??
+      token.vocabulary?.translation ??
+      null;
     const result = {
       tokenId: token.id,
       word: token.original,
@@ -77,6 +90,9 @@ export class TokenService {
       lemma: headword?.text ?? null,
       forms: primary?.lemma?.morphForms?.map((f) => f.form) ?? [],
       source: primary?.source ?? null,
+      translation,
+      grammar: primary?.lemma?.partOfSpeech ?? null,
+      baseForm: primary?.lemma?.baseForm ?? headword?.text ?? null,
     };
 
     this.cache.set(token.id, token.versionId, token.normalized, result);

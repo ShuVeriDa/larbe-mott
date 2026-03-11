@@ -8,18 +8,24 @@ import {
   Patch,
 } from "@nestjs/common";
 import {
+  ApiBearerAuth,
   ApiCreatedResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiParam,
+  ApiTags,
+  ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
 import { Auth } from "src/auth/decorators/auth.decorator";
 import { User } from "./decorators/user.decorator";
 import { UpdateUserDto } from "./dto/update-user.dto";
 import { UserService } from "./user.service";
 
+@ApiTags("users")
+@ApiBearerAuth()
 @Controller("users")
+@ApiUnauthorizedResponse({ description: "Missing or invalid bearer token" })
 export class UserController {
   constructor(private readonly userService: UserService) {}
 

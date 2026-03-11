@@ -15,6 +15,7 @@ import {
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiTags,
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
 import * as express from "express";
@@ -26,6 +27,7 @@ import { CreateUserDto } from "src/user/dto/create-user.dto";
 import { AuthService } from "./auth.service";
 import { Auth } from "./decorators/auth.decorator";
 
+@ApiTags("auth")
 @Controller("auth")
 export class AuthController {
   constructor(
