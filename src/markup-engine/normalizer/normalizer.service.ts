@@ -1,6 +1,8 @@
+import { Injectable } from "@nestjs/common";
 import { PrismaService } from "src/prisma.service";
 import { normalizeToken } from "../tokenizer/tokenizer.utils";
 
+@Injectable()
 export class NormalizerService {
   constructor(private prisma: PrismaService) {}
 
