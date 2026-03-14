@@ -19,6 +19,6 @@ import { TokenizerService } from "./tokenizer.service";
   ],
   controllers: [],
   providers: [TokenizerService, TokenizerProcessor, PrismaService],
-  exports: [TokenizerProcessor],
+  exports: [TokenizerProcessor, TokenizerService],
 })
 export class TokenizerModule {}

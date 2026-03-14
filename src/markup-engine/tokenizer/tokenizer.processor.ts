@@ -48,7 +48,7 @@ export class TokenizerProcessor {
     const tokensToInsert: Prisma.TextTokenCreateManyInput[] = [];
 
     for (const page of pages) {
-      const tokens = this.tokenizerService.tokenize(page.contentRaw);
+      const tokens = this.tokenizerService.tokenizeWithOffsets(page.contentRaw);
 
       for (const token of tokens) {
         tokensToInsert.push({
@@ -57,6 +57,8 @@ export class TokenizerProcessor {
           position: position++,
           original: token.value,
           normalized: normalizeToken(token.value),
+          startOffset: token.startOffset,
+          endOffset: token.endOffset,
         });
       }
     }

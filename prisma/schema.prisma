@@ -328,6 +328,10 @@ model TextToken {
   original      String
   normalized    String
 
+  /// Смещение в contentRaw страницы (символы), для замены слова в тексте при редактировании токена
+  startOffset   Int?
+  endOffset     Int?
+
   status        TokenStatus @default(ANALYZED)
 
   vocabId       String?

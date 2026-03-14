@@ -48,4 +48,16 @@ export class TokenInfoCacheService {
       value,
     );
   }
+
+  /** Remove cache entry by token ID (e.g. after admin edits the token). */
+  deleteByTokenId(tokenId: string): void {
+    this.byTokenId.delete(tokenId);
+  }
+
+  /** Remove cache entry by (versionId, normalized) so next lookup refetches. */
+  deleteByVersionNormalized(versionId: string, normalized: string): void {
+    this.byVersionNormalized.delete(
+      KEY_VERSION_NORMALIZED(versionId, normalized),
+    );
+  }
 }
