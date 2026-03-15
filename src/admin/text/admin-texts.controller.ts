@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  Get,
   HttpCode,
   HttpStatus,
   Param,
@@ -33,6 +34,22 @@ import { AdminTextService } from "./admin-text.service";
 @ApiUnauthorizedResponse({ description: "Missing or invalid bearer token" })
 export class AdminTextsController {
   constructor(private readonly adminTextService: AdminTextService) {}
+
+  @Admin()
+  @Get()
+  @ApiOperation({
+    summary: "List all texts for admin (admin only)",
+    description:
+      "Returns all texts with wordCount and publishedAt (null = draft). Requires admin role.",
+  })
+  @ApiOkResponse({
+    description:
+      "Array of texts with id, title, level, language, author, source, publishedAt, wordCount, createdAt, etc.",
+  })
+  @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
+  async getTexts() {
+    return await this.adminTextService.getTextsForAdmin();
+  }
 
   @HttpCode(201)
   @Admin()

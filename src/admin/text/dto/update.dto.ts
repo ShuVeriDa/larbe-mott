@@ -4,6 +4,7 @@ import { Type } from "class-transformer";
 import {
   ArrayMinSize,
   IsArray,
+  IsDateString,
   IsInt,
   IsNotEmpty,
   IsObject,
@@ -13,6 +14,7 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
   ValidateNested,
 } from "class-validator";
 import { IsTiptapDoc } from "../../../text/dto/tiptap-doc.validator";
@@ -105,6 +107,17 @@ export class PatchTextDto {
   @IsOptional()
   @IsString()
   source?: string;
+
+  @ApiProperty({
+    description:
+      "Publish: ISO date string (e.g. '2025-01-15T00:00:00.000Z'). Unpublish: null. Omit to leave unchanged.",
+    required: false,
+    nullable: true,
+  })
+  @IsOptional()
+  @ValidateIf((_o, v) => v != null && v !== "")
+  @IsDateString()
+  publishedAt?: string | null;
 
   @ApiProperty({
     type: [CreateTextPageDto],

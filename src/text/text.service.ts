@@ -12,8 +12,41 @@ export class TextService {
     private readonly wordProgress: WordProgressService,
     private readonly textProgress: TextProgressService,
   ) {}
+  /**
+   * Список только опубликованных текстов с количеством слов (по токенам последней версии).
+   */
   async getTexts() {
-    return await this.prisma.text.findMany();
+    const texts = await this.prisma.text.findMany({
+      where: { publishedAt: { not: null } },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!texts.length) return [];
+    const ids = texts.map((t) => t.id);
+    const versions = await this.prisma.textProcessingVersion.findMany({
+      where: { textId: { in: ids } },
+      orderBy: { version: "desc" },
+      select: { id: true, textId: true },
+    });
+    const latestVersionIdByTextId = new Map<string, string>();
+    for (const v of versions) {
+      if (!latestVersionIdByTextId.has(v.textId)) {
+        latestVersionIdByTextId.set(v.textId, v.id);
+      }
+    }
+    const versionIds = [...latestVersionIdByTextId.values()];
+    const tokenCounts = await this.prisma.textToken.groupBy({
+      by: ["versionId"],
+      where: { versionId: { in: versionIds } },
+      _count: { id: true },
+    });
+    const countByVersionId = new Map(
+      tokenCounts.map((c) => [c.versionId, c._count.id]),
+    );
+    return texts.map((t) => {
+      const versionId = latestVersionIdByTextId.get(t.id);
+      const wordCount = versionId ? (countByVersionId.get(versionId) ?? 0) : 0;
+      return { ...t, wordCount };
+    });
   }
 
   /**

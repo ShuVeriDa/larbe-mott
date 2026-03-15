@@ -17,6 +17,44 @@ export class AdminTextService {
     private readonly textProgress: TextProgressService,
   ) {}
 
+  /**
+   * Список всех текстов для админки: с wordCount и publishedAt (черновик = null).
+   */
+  async getTextsForAdmin() {
+    const texts = await this.prisma.text.findMany({
+      orderBy: { createdAt: "desc" },
+    });
+    if (!texts.length) return [];
+    const ids = texts.map((t) => t.id);
+    const versions = await this.prisma.textProcessingVersion.findMany({
+      where: { textId: { in: ids } },
+      orderBy: { version: "desc" },
+      select: { id: true, textId: true },
+    });
+    const latestVersionIdByTextId = new Map<string, string>();
+    for (const v of versions) {
+      if (!latestVersionIdByTextId.has(v.textId)) {
+        latestVersionIdByTextId.set(v.textId, v.id);
+      }
+    }
+    const versionIds = [...latestVersionIdByTextId.values()];
+    const tokenCounts = await this.prisma.textToken.groupBy({
+      by: ["versionId"],
+      where: { versionId: { in: versionIds } },
+      _count: { id: true },
+    });
+    const countByVersionId = new Map(
+      tokenCounts.map((c) => [c.versionId, c._count.id]),
+    );
+    return texts.map((t) => {
+      const versionId = latestVersionIdByTextId.get(t.id);
+      const wordCount = versionId
+        ? countByVersionId.get(versionId) ?? 0
+        : 0;
+      return { ...t, wordCount };
+    });
+  }
+
   async addNewText(dto: CreateTextDto, userId: string) {
     const text = await this.prisma.$transaction(async (tx) => {
       const created = await tx.text.create({
@@ -26,6 +64,7 @@ export class AdminTextService {
           level: dto.level,
           author: dto.author,
           source: dto.source,
+          publishedAt: null,
           createdById: userId,
         },
       });
@@ -68,6 +107,12 @@ export class AdminTextService {
       if (dto.level !== undefined) textData.level = dto.level;
       if (dto.author !== undefined) textData.author = dto.author;
       if (dto.source !== undefined) textData.source = dto.source;
+      if (dto.publishedAt !== undefined) {
+        textData.publishedAt =
+          dto.publishedAt === null || dto.publishedAt === ""
+            ? null
+            : new Date(dto.publishedAt);
+      }
 
       if (Object.keys(textData).length > 0) {
         await tx.text.update({

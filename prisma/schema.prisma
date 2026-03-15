@@ -304,9 +304,11 @@ model Text {
   author      String
   source      String?
 
+  publishedAt DateTime?
+
   createdById   String
   createdBy     User @relation("text", fields: [createdById], references: [id], onDelete: Cascade)
-  
+
   pages         TextPage[]
 
   processingVersions TextProcessingVersion[]
@@ -314,6 +316,8 @@ model Text {
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@index([publishedAt])
   @@map("text")
 }
 
