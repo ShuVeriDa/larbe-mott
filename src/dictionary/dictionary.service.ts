@@ -48,7 +48,11 @@ export class DictionaryService {
         _sum: { repetitionCount: true },
       }),
     ]);
-    const byLevel: Record<string, number> = {};
+    const byLevel: Record<string, number> = {
+      NEW: 0,
+      LEARNING: 0,
+      KNOWN: 0,
+    };
     for (const row of grouped) {
       byLevel[row.learningLevel] = row._count;
     }
