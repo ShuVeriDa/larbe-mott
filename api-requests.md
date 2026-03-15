@@ -225,6 +225,7 @@
 | ----- | ----------------------- | ----------------------------------------------- | -------------- |
 | GET   | `/api/tokens/:id`       | Информация о токене по ID (перевод, грамматика) | Bearer         |
 | GET   | `/api/tokens/:id/admin` | Данные токена для редактирования в админке      | Bearer + Admin |
+| PATCH | `/api/tokens/bulk`      | Массовое обновление токенов (до 100 за запрос) | Bearer + Admin |
 | PATCH | `/api/tokens/:id`       | Обновить отдельный токен (слово в тексте)       | Bearer + Admin |
 
 ### 5.1 GET `/api/tokens/:id`
@@ -268,6 +269,37 @@
 **Важно:**
 - При изменении `original` обновляется и сам текст на странице: правка вносится в `contentRaw` и `contentRich` (TipTap), затем пересчитываются токены этой страницы (original, normalized, смещения). Остальные страницы и полная переразметка текста не затрагиваются.
 - При изменении только `normalized` или `vocabId` обновляется только запись токена и кэш перевода.
+
+---
+
+### 5.4 PATCH `/api/tokens/bulk` (только админ)
+
+Массовое редактирование токенов: применить несколько правок за один запрос (одна и та же опечатка в нескольких местах, нормализация или привязка к словарю для выбранных слов).
+
+**Тело запроса (JSON):**
+
+```json
+{
+  "updates": [
+    { "tokenId": "cuid1", "original": "исправлено" },
+    { "tokenId": "cuid2", "normalized": "форма", "vocabId": null }
+  ]
+}
+```
+
+- `updates` — массив от 1 до 100 элементов.
+- В каждом элементе обязателен `tokenId`; хотя бы одно из полей: `original`, `normalized`, `vocabId` (иначе элемент попадает в `errors`).
+
+**Ответ:**
+
+```json
+{
+  "updated": [ /* массив объектов токенов в формате GET .../admin */ ],
+  "errors": [ { "tokenId": "cuid", "message": "Token not found" } ]
+}
+```
+
+Успешные обновления возвращаются в `updated`; для каждого неудачного элемента в `errors` добавляется запись с `tokenId` и `message`.
 
 ---
 
@@ -338,6 +370,7 @@
 | Words    | POST   | `/api/words/lookup-by-word`        |
 | Tokens   | GET    | `/api/tokens/:id`                  |
 | Tokens   | GET    | `/api/tokens/:id/admin`            |
+| Tokens   | PATCH  | `/api/tokens/bulk`                 |
 | Tokens   | PATCH  | `/api/tokens/:id`                  |
 | Progress | GET    | `/api/progress/text/:id`           |
 | Admin    | POST   | `/api/admin/dictionary`            |

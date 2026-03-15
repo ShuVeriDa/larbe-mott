@@ -18,6 +18,7 @@ import {
 import { Admin } from "src/auth/decorators/admin.decorator";
 import { Auth } from "src/auth/decorators/auth.decorator";
 import { User } from "src/user/decorators/user.decorator";
+import { BulkUpdateTokenDto } from "./dto/bulk-update-token.dto";
 import { UpdateTokenDto } from "./dto/update-token.dto";
 import { TokenService } from "./token.service";
 
@@ -59,6 +60,21 @@ export class TokenController {
   @ApiNotFoundResponse({ description: "Token not found or not accessible." })
   async getToken(@Param("id") tokenId: string, @User("id") userId: string) {
     return this.tokenService.getTokenInfo(tokenId, userId);
+  }
+
+  @Admin()
+  @Patch("bulk")
+  @ApiOperation({
+    summary: "Bulk update tokens (admin only)",
+    description:
+      "Apply multiple token updates in one request. Each item can set original, normalized, vocabId. Returns updated tokens and per-item errors.",
+  })
+  @ApiOkResponse({
+    description: "Object with updated[] and errors[] (tokenId, message).",
+  })
+  @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
+  async updateTokensBulk(@Body() dto: BulkUpdateTokenDto) {
+    return this.tokenService.updateTokensBulk(dto.updates);
   }
 
   @Admin()

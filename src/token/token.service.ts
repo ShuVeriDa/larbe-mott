@@ -10,6 +10,7 @@ import { TokenizerService } from "src/markup-engine/tokenizer/tokenizer.service"
 import { normalizeToken } from "src/markup-engine/tokenizer/tokenizer.utils";
 import { PrismaService } from "src/prisma.service";
 import { WordProgressService } from "src/progress/word-progress/word-progress.service";
+import { BulkUpdateTokenItemDto } from "./dto/bulk-update-token.dto";
 import { UpdateTokenDto } from "./dto/update-token.dto";
 
 @Injectable()
@@ -302,5 +303,50 @@ export class TokenService {
     }
 
     return this.getTokenForAdmin(updated.id);
+  }
+
+  /**
+   * Mass update of tokens (admin). Each item is applied via the same logic as updateToken.
+   * Returns successful updates and per-item errors (e.g. token not found, invalid vocabId).
+   */
+  async updateTokensBulk(
+    items: BulkUpdateTokenItemDto[],
+  ): Promise<{
+    updated: Awaited<ReturnType<TokenService["getTokenForAdmin"]>>[];
+    errors: { tokenId: string; message: string }[];
+  }> {
+    const updated: Awaited<ReturnType<TokenService["getTokenForAdmin"]>>[] = [];
+    const errors: { tokenId: string; message: string }[] = [];
+
+    for (const item of items) {
+      const dto: UpdateTokenDto = {
+        original: item.original,
+        normalized: item.normalized,
+        vocabId: item.vocabId,
+      };
+      const hasUpdate =
+        dto.original !== undefined ||
+        dto.normalized !== undefined ||
+        dto.vocabId !== undefined;
+
+      if (!hasUpdate) {
+        errors.push({
+          tokenId: item.tokenId,
+          message: "No fields to update (provide original, normalized, or vocabId)",
+        });
+        continue;
+      }
+
+      try {
+        const result = await this.updateToken(item.tokenId, dto);
+        updated.push(result);
+      } catch (e) {
+        const message =
+          e instanceof Error ? e.message : "Unknown error";
+        errors.push({ tokenId: item.tokenId, message });
+      }
+    }
+
+    return { updated, errors };
   }
 }
