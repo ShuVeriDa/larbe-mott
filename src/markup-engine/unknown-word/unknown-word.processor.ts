@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
 
 @Injectable()
@@ -71,21 +72,35 @@ export class UnknownWordProcessor {
       });
     }
 
-    // 5️⃣ batch update существующих
+    // 5️⃣ batch update существующих — один массовый UPDATE вместо N отдельных
     if (updateRows.length) {
-      const now = new Date();
-
-      await this.prisma.$transaction(
-        updateRows.map((row) =>
-          this.prisma.unknownWord.update({
-            where: { normalized: row.normalized },
-            data: {
-              seenCount: { increment: row.count },
-              lastSeen: now,
-            },
-          }),
-        ),
+      const values = Prisma.join(
+        updateRows.map((r) => Prisma.sql`(${r.normalized}, ${r.count})`),
+        ", ",
       );
+      await this.prisma.$executeRaw`
+        UPDATE unknown_word uw
+        SET "seenCount" = uw."seenCount" + v.count, "lastSeen" = now()
+        FROM (VALUES ${values}) AS v(normalized, count)
+        WHERE uw.normalized = v.normalized
+      `;
     }
+  }
+
+  /**
+   * Записать неизвестное слово при неудачном lookup (клик по слову или ввод).
+   * Вызывается тихо, не влияет на ответ пользователю.
+   */
+  async recordFromLookup(normalized: string): Promise<void> {
+    if (!normalized?.trim()) return;
+    const n = normalized.trim();
+    await this.prisma.unknownWord.upsert({
+      where: { normalized: n },
+      create: { word: n, normalized: n, seenCount: 1 },
+      update: {
+        seenCount: { increment: 1 },
+        lastSeen: new Date(),
+      },
+    });
   }
 }

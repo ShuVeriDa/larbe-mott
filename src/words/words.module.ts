@@ -3,6 +3,7 @@ import { DictionaryCacheModule } from "src/markup-engine/dictionary-cache/dictio
 import { DictionaryModule } from "src/markup-engine/dictionary/dictionary.module";
 import { MorphologyModule } from "src/markup-engine/morphology/morphology.module";
 import { OnlineDictionaryModule } from "src/markup-engine/online-dictionary/online-dictionary.module";
+import { UnknownWordModule } from "src/markup-engine/unknown-word/unknown-word.module";
 import { PrismaService } from "src/prisma.service";
 import { TokenModule } from "src/token/token.module";
 import { WordLookupByWordService } from "./word-lookup-by-word.service";
@@ -16,6 +17,7 @@ import { WordsService } from "./words.service";
     DictionaryCacheModule,
     OnlineDictionaryModule,
     MorphologyModule,
+    UnknownWordModule,
   ],
   controllers: [WordsController],
   providers: [WordsService, WordLookupByWordService, PrismaService],

@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { UnknownWordProcessor } from "src/markup-engine/unknown-word/unknown-word.processor";
 import { TokenService } from "src/token/token.service";
 import { WordLookupByWordService } from "./word-lookup-by-word.service";
 
@@ -7,6 +8,7 @@ export class WordsService {
   constructor(
     private readonly tokenService: TokenService,
     private readonly wordLookupByWordService: WordLookupByWordService,
+    private readonly unknownWordProcessor: UnknownWordProcessor,
   ) {}
 
   async lookup(tokenId: string, userId: string) {
@@ -23,10 +25,20 @@ export class WordsService {
       };
     }
     const byWord = await this.wordLookupByWordService.lookup(info.normalized);
-    return {
+    const result = {
       translation: byWord.translation ?? null,
       grammar: byWord.grammar ?? null,
       baseForm: byWord.baseForm ?? null,
     };
+    const notFound =
+      result.translation == null &&
+      result.grammar == null &&
+      result.baseForm == null;
+    if (notFound) {
+      void this.unknownWordProcessor
+        .recordFromLookup(info.normalized)
+        .catch(() => {});
+    }
+    return result;
   }
 }

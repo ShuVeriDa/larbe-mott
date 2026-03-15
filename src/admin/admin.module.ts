@@ -13,6 +13,8 @@ import { AdminTextService } from "./text/admin-text.service";
 import { AdminTextsController } from "./text/admin-texts.controller";
 import { AdminTokensController } from "./token/admin-tokens.controller";
 import { AdminTokenService } from "./token/admin-tokens.service";
+import { AdminUnknownWordsController } from "./unknown-words/admin-unknown-words.controller";
+import { AdminUnknownWordsService } from "./unknown-words/admin-unknown-words.service";
 
 @Module({
   imports: [
@@ -28,7 +30,14 @@ import { AdminTokenService } from "./token/admin-tokens.service";
     AdminTextsController,
     AdminTokensController,
     AdminDictionaryController,
+    AdminUnknownWordsController,
   ],
-  providers: [AdminService, AdminTextService, AdminTokenService, PrismaService],
+  providers: [
+    AdminService,
+    AdminTextService,
+    AdminTokenService,
+    AdminUnknownWordsService,
+    PrismaService,
+  ],
 })
 export class AdminModule {}

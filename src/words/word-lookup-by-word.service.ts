@@ -4,6 +4,7 @@ import { DictionaryService } from "src/markup-engine/dictionary/dictionary.servi
 import { MorphologyService } from "src/markup-engine/morphology/morphology.service";
 import { OnlineDictionaryService } from "src/markup-engine/online-dictionary/online-dictionary.service";
 import { normalizeToken } from "src/markup-engine/tokenizer/tokenizer.utils";
+import { UnknownWordProcessor } from "src/markup-engine/unknown-word/unknown-word.processor";
 import { PrismaService } from "src/prisma.service";
 
 export type WordLookupResult = {
@@ -24,6 +25,7 @@ export class WordLookupByWordService {
     private dictionaryCache: DictionaryCacheService,
     private onlineDictionary: OnlineDictionaryService,
     private morphology: MorphologyService,
+    private unknownWordProcessor: UnknownWordProcessor,
   ) {}
 
   async lookup(normalizedOrRaw: string): Promise<WordLookupResult> {
@@ -44,6 +46,9 @@ export class WordLookupByWordService {
     // 4️⃣ Морфология
     const fromMorphology = await this.fromMorphology(normalized);
     if (fromMorphology) return fromMorphology;
+
+    // Не найдено — тихо записываем в неизвестные (без задержки ответа)
+    void this.unknownWordProcessor.recordFromLookup(normalized).catch(() => {});
 
     return { translation: null, grammar: null, baseForm: null };
   }
