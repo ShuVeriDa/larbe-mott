@@ -7,6 +7,7 @@ import { TokenModule } from "./token/token.module";
 import { UserModule } from "./user/user.module";
 import { ProgressModule } from "./progress/progress.module";
 import { WordsModule } from "./words/words.module";
+import { DictionaryModule } from './dictionary/dictionary.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { WordsModule } from "./words/words.module";
     TokenModule,
     ProgressModule,
     WordsModule,
+    DictionaryModule,
   ],
   controllers: [],
   providers: [],

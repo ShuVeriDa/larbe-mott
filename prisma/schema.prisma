@@ -79,6 +79,8 @@ model User {
   wordProgress  UserWordProgress[]
   textProgress  UserTextProgress[]
   dictionaryEntries DictionaryEntry[] @relation("DictionaryEntryCreator")
+  userDictionaryEntries UserDictionaryEntry[] @relation("UserDictionaryEntryUser")
+  userDictionaryFolders UserDictionaryFolder[] @relation("UserDictionaryFolderUser")
   texts Text[] @relation("text")
 
   createdAt     DateTime @default(now())
@@ -87,6 +89,48 @@ model User {
   @@map("users")
 }
 
+//////////////////////////////////////////////////////
+// USER DICTIONARY FOLDER
+//////////////////////////////////////////////////////
+
+model UserDictionaryFolder {
+  id        String   @id @default(uuid())
+  userId    String
+  name      String   // название папки
+  sortOrder Int      @default(0)
+  user     User     @relation("UserDictionaryFolderUser", fields: [userId], references: [id], onDelete: Cascade)
+  entries  UserDictionaryEntry[] @relation("UserDictionaryEntryFolder")
+  @@index([userId])
+  @@map("user_dictionary_folder")
+}
+
+//////////////////////////////////////////////////////
+// DICTIONARY CACHE (ONLINE)
+//////////////////////////////////////////////////////
+
+model UserDictionaryEntry {
+  id               String   @id @default(uuid())
+  word             String   // как пользователь видит (или normalized)
+  normalized       String?  // для дедупликации и поиска
+  translation      String
+  addedAt          DateTime @default(now())
+  learningLevel    WordStatus @default(NEW)  // NEW | LEARNING | KNOWN
+  repetitionCount  Int      @default(0)
+  folderId         String?
+  lemmaId          String?  // опционально: связь с Lemma, если слово из словаря
+  
+  userId           String
+  user             User     @relation("UserDictionaryEntryUser", fields: [userId], references: [id], onDelete: Cascade)
+  
+  folder           UserDictionaryFolder? @relation("UserDictionaryEntryFolder", fields: [folderId], references: [id], onDelete: SetNull)
+  
+  lemma            Lemma?   @relation("UserDictionaryEntryLemma", fields: [lemmaId], references: [id], onDelete: SetNull)
+  @@unique([userId, normalized])  // одно и то же слово — одна запись на пользователя (при желании)
+  @@index([userId])
+  @@index([folderId])
+  @@index([learningLevel])
+  @@map("user_dictionary_entry")
+}
 //////////////////////////////////////////////////////
 // DICTIONARY CACHE (ONLINE)
 //////////////////////////////////////////////////////
@@ -164,7 +208,7 @@ model Lemma {
   frequency     Int?
 
   headwords     Headword[] @relation("HeadwordLemma")
-
+  userDictionaryEntries UserDictionaryEntry[] @relation("UserDictionaryEntryLemma")
   morphForms    MorphForm[]
   tokenAnalyses TokenAnalysis[] @relation("TokenLemma")
   vocabulary TextVocabulary[]
