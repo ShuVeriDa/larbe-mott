@@ -15,7 +15,7 @@ import {
   MinLength,
   ValidateNested,
 } from "class-validator";
-import { IsTiptapDoc } from "./tiptap-doc.validator";
+import { IsTiptapDoc } from "../../../text/dto/tiptap-doc.validator";
 
 export class CreateTextPageDto {
   @ApiProperty({ description: "Page number (1-based)", example: 1 })
@@ -136,7 +136,9 @@ export class PatchTextDto {
   })
   @IsOptional()
   @IsArray()
-  @ArrayMinSize(1, { message: "If pages are sent, at least one page is required" })
+  @ArrayMinSize(1, {
+    message: "If pages are sent, at least one page is required",
+  })
   @ValidateNested({ each: true })
   @Type(() => CreateTextPageDto)
   pages?: {

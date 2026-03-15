@@ -2,7 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
 import { DictionaryCacheProcessor } from "../dictionary-cache/dictionary-cache.processor";
-import { AdminDictionaryProcessor } from "../dictionary/admin-dictionary.processor";
+import { DictionaryProcessor } from "../dictionary/dictionary.processor";
 import { NormalizerService } from "../normalizer/normalizer.service";
 import { OnlineDictionaryProcessor } from "../online-dictionary/online-dictionary.processor";
 import { UnknownWordProcessor } from "../unknown-word/unknown-word.processor";
@@ -15,7 +15,7 @@ export class TokenizerProcessor {
     private prisma: PrismaService,
     private tokenizerService: TokenizerService,
     private normalizerService: NormalizerService,
-    private adminDictionaryProcessor: AdminDictionaryProcessor,
+    private dictionaryProcessor: DictionaryProcessor,
     private dictionaryCacheProcessor: DictionaryCacheProcessor,
     private onlineDictionaryProcessor: OnlineDictionaryProcessor,
     private unknownWordProcessor: UnknownWordProcessor,
@@ -68,7 +68,7 @@ export class TokenizerProcessor {
     });
 
     await this.normalizerService.normalizeVersion(version.id);
-    await this.adminDictionaryProcessor.analyzeVersion(version.id);
+    await this.dictionaryProcessor.analyzeVersion(version.id);
     await this.dictionaryCacheProcessor.analyzeVersion(version.id);
     await this.onlineDictionaryProcessor.analyzeVersion(version.id);
     await this.unknownWordProcessor.analyzeVersion(version.id);
@@ -121,7 +121,11 @@ export class TokenizerProcessor {
             lemmaId: true,
             lemma: {
               select: {
-                headwords: { orderBy: { order: "asc" }, take: 1, select: { text: true } },
+                headwords: {
+                  orderBy: { order: "asc" },
+                  take: 1,
+                  select: { text: true },
+                },
               },
             },
           },
@@ -138,8 +142,7 @@ export class TokenizerProcessor {
       if (vocabData.has(vocabId)) continue;
       const primary = t.analyses[0];
       const lemmaId = primary?.lemmaId ?? null;
-      const translation =
-        primary?.lemma?.headwords?.[0]?.text ?? null;
+      const translation = primary?.lemma?.headwords?.[0]?.text ?? null;
       vocabData.set(vocabId, { lemmaId, translation });
     }
 

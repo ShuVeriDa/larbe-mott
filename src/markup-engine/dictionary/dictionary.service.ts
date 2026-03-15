@@ -1,18 +1,21 @@
 import { Injectable } from "@nestjs/common";
 import { DictionarySource } from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
+import { CreateEntryDto } from "../../admin/dictionary/dto/create-entry.dto";
 import { normalizeToken } from "../tokenizer/tokenizer.utils";
-import { CreateEntryDto } from "./dto/create-entry.dto";
 
+/** Унифицированный админ-словарь: одна иерархия DictionaryEntry + Headword (source=ADMIN). */
 @Injectable()
-export class AdminDictionaryService {
+export class DictionaryService {
   constructor(private prisma: PrismaService) {}
 
+  /**
+   * Создаёт запись в словаре (лемма, entry, headword, формы).
+   */
   async createEntry(dto: CreateEntryDto, userId: string) {
     const normalized = normalizeToken(dto.word);
 
     return this.prisma.$transaction(async (tx) => {
-      // 1️⃣ ищем существующую lemma
       let lemma = await tx.lemma.findUnique({
         where: {
           normalized_language: {
@@ -22,7 +25,6 @@ export class AdminDictionaryService {
         },
       });
 
-      // 2️⃣ если нет — создаём
       if (!lemma) {
         lemma = await tx.lemma.create({
           data: {
@@ -34,7 +36,6 @@ export class AdminDictionaryService {
         });
       }
 
-      // 3️⃣ создаём dictionary entry (унифицированная иерархия: DictionaryEntry + Headword)
       const entry = await tx.dictionaryEntry.create({
         data: {
           rawWord: dto.word,
@@ -45,7 +46,6 @@ export class AdminDictionaryService {
         },
       });
 
-      // 4️⃣ создаём headword
       await tx.headword.create({
         data: {
           entryId: entry.id,
@@ -56,7 +56,6 @@ export class AdminDictionaryService {
         },
       });
 
-      // 5️⃣ формы слова
       if (dto.forms?.length) {
         await tx.morphForm.createMany({
           data: dto.forms.map((form) => ({
@@ -70,5 +69,37 @@ export class AdminDictionaryService {
 
       return lemma;
     });
+  }
+
+  /**
+   * Ищет слова в админском словаре (DictionaryEntry с source=ADMIN).
+   * Возвращает карту: normalized -> { lemmaId } для использования в пайплайне.
+   */
+  async findWords(words: string[]): Promise<Map<string, { lemmaId: string }>> {
+    if (!words.length) return new Map();
+
+    const unique = [...new Set(words)];
+
+    const entries = await this.prisma.dictionaryEntry.findMany({
+      where: {
+        source: DictionarySource.ADMIN,
+        headwords: {
+          some: {
+            normalized: { in: unique },
+          },
+        },
+      },
+      include: { headwords: true },
+    });
+
+    const map = new Map<string, { lemmaId: string }>();
+    for (const entry of entries) {
+      for (const h of entry.headwords) {
+        if (h.lemmaId) {
+          map.set(h.normalized, { lemmaId: h.lemmaId });
+        }
+      }
+    }
+    return map;
   }
 }

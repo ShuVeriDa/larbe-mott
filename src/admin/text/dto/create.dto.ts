@@ -15,7 +15,7 @@ import {
   MinLength,
   ValidateNested,
 } from "class-validator";
-import { IsTiptapDoc } from "./tiptap-doc.validator";
+import { IsTiptapDoc } from "../../../text/dto/tiptap-doc.validator";
 
 export class CreateTextPageDto {
   @ApiProperty({ description: "Page number (1-based)", example: 1 })

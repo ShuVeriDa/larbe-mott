@@ -1,13 +1,6 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Param,
-  Patch,
-} from "@nestjs/common";
+import { Controller, Get, Param } from "@nestjs/common";
 import {
   ApiBearerAuth,
-  ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -15,11 +8,8 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
-import { Admin } from "src/auth/decorators/admin.decorator";
 import { Auth } from "src/auth/decorators/auth.decorator";
 import { User } from "src/user/decorators/user.decorator";
-import { BulkUpdateTokenDto } from "./dto/bulk-update-token.dto";
-import { UpdateTokenDto } from "./dto/update-token.dto";
 import { TokenService } from "./token.service";
 
 @ApiTags("tokens")
@@ -28,23 +18,6 @@ import { TokenService } from "./token.service";
 @ApiUnauthorizedResponse({ description: "Missing or invalid bearer token" })
 export class TokenController {
   constructor(private readonly tokenService: TokenService) {}
-
-  @Admin()
-  @Get(":id/admin")
-  @ApiOperation({
-    summary: "Get token for admin edit (admin only)",
-    description:
-      "Returns full token details for editing: original, normalized, position, vocabId, vocabulary. Does not use cache.",
-  })
-  @ApiParam({ name: "id", description: "Token ID (cuid)" })
-  @ApiOkResponse({
-    description: "Token admin detail: id, original, normalized, position, vocabId, vocabulary.",
-  })
-  @ApiNotFoundResponse({ description: "Token not found." })
-  @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
-  async getTokenForAdmin(@Param("id") tokenId: string) {
-    return this.tokenService.getTokenForAdmin(tokenId);
-  }
 
   @Auth()
   @Get(":id")
@@ -60,40 +33,5 @@ export class TokenController {
   @ApiNotFoundResponse({ description: "Token not found or not accessible." })
   async getToken(@Param("id") tokenId: string, @User("id") userId: string) {
     return this.tokenService.getTokenInfo(tokenId, userId);
-  }
-
-  @Admin()
-  @Patch("bulk")
-  @ApiOperation({
-    summary: "Bulk update tokens (admin only)",
-    description:
-      "Apply multiple token updates in one request. Each item can set original, normalized, vocabId. Returns updated tokens and per-item errors.",
-  })
-  @ApiOkResponse({
-    description: "Object with updated[] and errors[] (tokenId, message).",
-  })
-  @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
-  async updateTokensBulk(@Body() dto: BulkUpdateTokenDto) {
-    return this.tokenService.updateTokensBulk(dto.updates);
-  }
-
-  @Admin()
-  @Patch(":id")
-  @ApiOperation({
-    summary: "Update single token (admin only)",
-    description:
-      "Update original, normalized, or vocabId. Does not trigger re-tokenization. Invalidates cache for this token.",
-  })
-  @ApiParam({ name: "id", description: "Token ID (cuid)" })
-  @ApiOkResponse({
-    description: "Updated token admin detail.",
-  })
-  @ApiNotFoundResponse({ description: "Token not found." })
-  @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
-  async updateToken(
-    @Param("id") tokenId: string,
-    @Body() dto: UpdateTokenDto,
-  ) {
-    return this.tokenService.updateToken(tokenId, dto);
   }
 }

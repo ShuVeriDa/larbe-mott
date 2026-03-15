@@ -1,13 +1,13 @@
 import { Injectable } from "@nestjs/common";
 import { AnalysisSource, Prisma } from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
-import { AdminDictionaryService } from "./admin-dictionary.service";
+import { DictionaryService } from "./dictionary.service";
 
 @Injectable()
-export class AdminDictionaryProcessor {
+export class DictionaryProcessor {
   constructor(
     private prisma: PrismaService,
-    private dictionaryService: AdminDictionaryService,
+    private dictionaryService: DictionaryService,
   ) {}
 
   async analyzeVersion(versionId: string) {

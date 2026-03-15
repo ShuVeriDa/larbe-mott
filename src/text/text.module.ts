@@ -11,5 +11,6 @@ import { TextService } from "./text.service";
   imports: [AuthModule, TokenizerModule, WordProgressModule],
   controllers: [TextController],
   providers: [TextService, PrismaService, TextProgressService],
+  exports: [TextService],
 })
 export class TextModule {}

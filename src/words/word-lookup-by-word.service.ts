@@ -1,9 +1,9 @@
 import { Injectable } from "@nestjs/common";
-import { normalizeToken } from "src/markup-engine/tokenizer/tokenizer.utils";
-import { AdminDictionaryService } from "src/markup-engine/dictionary/admin-dictionary.service";
 import { DictionaryCacheService } from "src/markup-engine/dictionary-cache/dictionary-cache.service";
+import { DictionaryService } from "src/markup-engine/dictionary/dictionary.service";
 import { MorphologyService } from "src/markup-engine/morphology/morphology.service";
 import { OnlineDictionaryService } from "src/markup-engine/online-dictionary/online-dictionary.service";
+import { normalizeToken } from "src/markup-engine/tokenizer/tokenizer.utils";
 import { PrismaService } from "src/prisma.service";
 
 export type WordLookupResult = {
@@ -20,7 +20,7 @@ export type WordLookupResult = {
 export class WordLookupByWordService {
   constructor(
     private prisma: PrismaService,
-    private adminDictionary: AdminDictionaryService,
+    private adminDictionary: DictionaryService,
     private dictionaryCache: DictionaryCacheService,
     private onlineDictionary: OnlineDictionaryService,
     private morphology: MorphologyService,
@@ -48,14 +48,18 @@ export class WordLookupByWordService {
     return { translation: null, grammar: null, baseForm: null };
   }
 
-  private async fromAdmin(normalized: string): Promise<WordLookupResult | null> {
+  private async fromAdmin(
+    normalized: string,
+  ): Promise<WordLookupResult | null> {
     const map = await this.adminDictionary.findWords([normalized]);
     const item = map.get(normalized);
     if (!item?.lemmaId) return null;
     return this.lemmaToResult(item.lemmaId);
   }
 
-  private async fromCache(normalized: string): Promise<WordLookupResult | null> {
+  private async fromCache(
+    normalized: string,
+  ): Promise<WordLookupResult | null> {
     const map = await this.dictionaryCache.findMap([normalized]);
     const row = map.get(normalized);
     if (!row) return null;
@@ -74,7 +78,9 @@ export class WordLookupByWordService {
     return { translation, grammar: null, baseForm: null };
   }
 
-  private async fromOnline(normalized: string): Promise<WordLookupResult | null> {
+  private async fromOnline(
+    normalized: string,
+  ): Promise<WordLookupResult | null> {
     const result = await this.onlineDictionary.lookupWord(normalized);
     if (!result?.translation) return null;
     return {
@@ -84,10 +90,15 @@ export class WordLookupByWordService {
     };
   }
 
-  private async fromMorphology(normalized: string): Promise<WordLookupResult | null> {
+  private async fromMorphology(
+    normalized: string,
+  ): Promise<WordLookupResult | null> {
     const analyzed = await this.morphology.analyze(normalized);
     if (!analyzed) return null;
-    const lemma = "lemma" in analyzed ? (analyzed as { lemma: { id: string } }).lemma : (analyzed as { id: string });
+    const lemma =
+      "lemma" in analyzed
+        ? (analyzed as { lemma: { id: string } }).lemma
+        : (analyzed as { id: string });
     const lemmaId = lemma?.id ?? null;
     if (lemmaId) return this.lemmaToResult(lemmaId);
     return null;
@@ -105,8 +116,7 @@ export class WordLookupByWordService {
       },
     });
     if (!lemma) return { translation: null, grammar: null, baseForm: null };
-    const translation =
-      lemma.headwords[0]?.entry?.rawTranslate ?? null;
+    const translation = lemma.headwords[0]?.entry?.rawTranslate ?? null;
     return {
       translation,
       grammar: lemma.partOfSpeech ?? null,

@@ -1,7 +1,7 @@
 import {
   registerDecorator,
-  ValidationOptions,
   ValidationArguments,
+  ValidationOptions,
 } from "class-validator";
 
 const MAX_DEPTH = 30;
@@ -15,7 +15,10 @@ function isValidNode(node: unknown, depth: number): boolean {
   if (typeof n.type !== "string") return false;
 
   if (n.type === "text") {
-    return typeof n.text === "string" && (n.marks === undefined || Array.isArray(n.marks));
+    return (
+      typeof n.text === "string" &&
+      (n.marks === undefined || Array.isArray(n.marks))
+    );
   }
 
   if (n.content !== undefined) {

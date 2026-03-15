@@ -8,6 +8,7 @@ import { UserModule } from "./user/user.module";
 import { ProgressModule } from "./progress/progress.module";
 import { WordsModule } from "./words/words.module";
 import { DictionaryModule } from './dictionary/dictionary.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { DictionaryModule } from './dictionary/dictionary.module';
     ProgressModule,
     WordsModule,
     DictionaryModule,
+    AdminModule,
   ],
   controllers: [],
   providers: [],
