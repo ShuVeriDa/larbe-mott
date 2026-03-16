@@ -9,6 +9,7 @@ import { JwtService } from "@nestjs/jwt";
 import { hash, verify } from "argon2";
 import { Response } from "express";
 import { PrismaService } from "src/prisma.service";
+import { UserEventType } from "@prisma/client";
 import { CreateUserDto } from "src/user/dto/create-user.dto";
 import { LoginDto } from "src/user/dto/login.dto";
 import { UserService } from "src/user/user.service";
@@ -28,6 +29,13 @@ export class AuthService {
     const tokens = await this.issueTokens(user.id);
 
     await this.updateRefreshTokenHash(user.id, tokens.refreshToken);
+
+    await this.prisma.userEvent.create({
+      data: {
+        userId: user.id,
+        type: UserEventType.START_SESSION,
+      },
+    });
 
     return {
       user,
@@ -56,6 +64,13 @@ export class AuthService {
     const tokens = await this.issueTokens(user.id);
 
     await this.updateRefreshTokenHash(user.id, tokens.refreshToken);
+
+    await this.prisma.userEvent.create({
+      data: {
+        userId: user.id,
+        type: UserEventType.START_SESSION,
+      },
+    });
 
     return {
       user,

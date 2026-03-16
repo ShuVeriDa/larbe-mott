@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { Prisma, UserEventType } from "@prisma/client";
 import { normalizeToken } from "src/markup-engine/tokenizer/tokenizer.utils";
 import { PrismaService } from "src/prisma.service";
 import { TokenService } from "src/token/token.service";
@@ -114,9 +114,22 @@ export class DictionaryService {
     };
 
     try {
-      return await this.prismaService.userDictionaryEntry.create({
+      const entry = await this.prismaService.userDictionaryEntry.create({
         data,
       });
+
+      await this.prismaService.userEvent.create({
+        data: {
+          userId,
+          type: UserEventType.ADD_TO_DICTIONARY,
+          metadata: {
+            entryId: entry.id,
+            lemmaId,
+          },
+        },
+      });
+
+      return entry;
     } catch (e) {
       if (
         e instanceof Prisma.PrismaClientKnownRequestError &&

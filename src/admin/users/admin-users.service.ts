@@ -1,14 +1,19 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma, UserStatus } from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
+import { AdminUserDetailsDto } from "./dto/admin-user-details.dto";
 import { AdminUserListItemDto } from "./dto/admin-user-list-item.dto";
 import { AdminUserStatusDto } from "./dto/admin-user-status.dto";
 import { AdminUsersListResponseDto } from "./dto/admin-users-list-response.dto";
 import { FetchUsersDto } from "./dto/fetch-users.dto";
+import { UserAnalyticsService } from "./user-analytics.service";
 
 @Injectable()
 export class AdminUsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly userAnalytics: UserAnalyticsService,
+  ) {}
 
   async getUsers(query: FetchUsersDto): Promise<AdminUsersListResponseDto> {
     const page = Math.max(1, query.page ?? 1);
@@ -83,7 +88,7 @@ export class AdminUsersService {
     };
   }
 
-  async getUserById(id: string): Promise<AdminUserListItemDto> {
+  async getUserById(id: string): Promise<AdminUserDetailsDto> {
     const user = await this.prisma.user.findUnique({
       where: { id },
       select: {
@@ -98,8 +103,6 @@ export class AdminUsersService {
         level: true,
         lastActiveAt: true,
         createdAt: true,
-        updatedAt: true,
-        signupAt: true,
       },
     });
 
@@ -107,22 +110,11 @@ export class AdminUsersService {
       throw new NotFoundException("User not found");
     }
 
-    const [textsRead, wordsKnown] = await Promise.all([
-      this.prisma.userTextProgress.count({
-        where: { userId: id, progressPercent: { gt: 0 } },
-      }),
-      this.prisma.userWordProgress.count({
-        where: { userId: id, status: "KNOWN" },
-      }),
-    ]);
-
-    const subscriptions: null = null; // TODO: replace with real subscriptions aggregation
+    const learningStats = await this.userAnalytics.getUserLearningStats(id);
 
     return {
       ...user,
-      textsRead,
-      wordsKnown,
-      subscriptions,
+      learningStats,
     };
   }
 

@@ -6,6 +6,7 @@ import { OnlineDictionaryService } from "src/markup-engine/online-dictionary/onl
 import { normalizeToken } from "src/markup-engine/tokenizer/tokenizer.utils";
 import { UnknownWordProcessor } from "src/markup-engine/unknown-word/unknown-word.processor";
 import { PrismaService } from "src/prisma.service";
+import { UserEventType } from "@prisma/client";
 
 export type WordLookupResult = {
   translation: string | null;
@@ -28,7 +29,10 @@ export class WordLookupByWordService {
     private unknownWordProcessor: UnknownWordProcessor,
   ) {}
 
-  async lookup(normalizedOrRaw: string): Promise<WordLookupResult> {
+  async lookup(
+    normalizedOrRaw: string,
+    userId?: string,
+  ): Promise<WordLookupResult> {
     const normalized = normalizeToken(normalizedOrRaw);
 
     // 1️⃣ Админский словарь
@@ -49,6 +53,20 @@ export class WordLookupByWordService {
 
     // Не найдено — тихо записываем в неизвестные (без задержки ответа)
     void this.unknownWordProcessor.recordFromLookup(normalized).catch(() => {});
+
+    if (userId) {
+      void this.prisma.userEvent
+        .create({
+          data: {
+            userId,
+            type: UserEventType.FAIL_LOOKUP,
+            metadata: {
+              normalized,
+            },
+          },
+        })
+        .catch(() => {});
+    }
 
     return { translation: null, grammar: null, baseForm: null };
   }

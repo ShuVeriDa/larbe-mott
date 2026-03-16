@@ -69,6 +69,18 @@ enum UserStatus {
 }
 
 //////////////////////////////////////////////////////
+// USER EVENTS (ANALYTICS)
+//////////////////////////////////////////////////////
+
+enum UserEventType {
+  START_SESSION
+  OPEN_TEXT
+  CLICK_WORD
+  ADD_TO_DICTIONARY
+  FAIL_LOOKUP
+}
+
+//////////////////////////////////////////////////////
 // USERS
 //////////////////////////////////////////////////////
 
@@ -88,7 +100,10 @@ model User {
   dictionaryEntries DictionaryEntry[] @relation("DictionaryEntryCreator")
   userDictionaryEntries UserDictionaryEntry[] @relation("UserDictionaryEntryUser")
   userDictionaryFolders UserDictionaryFolder[] @relation("UserDictionaryFolderUser")
+  
   texts Text[] @relation("text")
+
+  events UserEvent[] @relation("UserEventUser")
 
   status        UserStatus @default(ACTIVE)
   language      Language? @default(CHE)
@@ -308,6 +323,26 @@ model UnknownWord {
 
   @@unique([normalized])
   @@map("unknown_word")
+}
+
+//////////////////////////////////////////////////////
+// USER EVENTS
+//////////////////////////////////////////////////////
+
+model UserEvent {
+  id        String       @id @default(uuid())
+
+  userId    String
+  type      UserEventType
+
+  metadata  Json?
+  createdAt DateTime     @default(now())
+
+  user      User @relation("UserEventUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type])
+  @@map("user_event")
 }
 
 //////////////////////////////////////////////////////

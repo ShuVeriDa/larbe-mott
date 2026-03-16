@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
+import { UserEventType } from "@prisma/client";
 import { TokenizerProcessor } from "src/markup-engine/tokenizer/tokenizer.processor";
 import { PrismaService } from "src/prisma.service";
 import { TextProgressService } from "src/progress/text-progress/text-progress.service";
@@ -121,6 +122,17 @@ export class TextService {
       await this.wordProgress.registerSeenWords(userId, lemmaIds);
     }
 
+    await this.prisma.userEvent.create({
+      data: {
+        userId,
+        type: UserEventType.OPEN_TEXT,
+        metadata: {
+          textId,
+          pageNumber,
+        },
+      },
+    });
+
     const progress = await this.textProgress.calculateProgress(userId, textId);
 
     // ЭТАП 15: ответ «страница текста» — tokens[], contentRich (и дублируем в page для совместимости)
@@ -172,6 +184,17 @@ export class TextService {
     ];
 
     await this.wordProgress.registerSeenWords(userId, lemmaIds);
+
+    await this.prisma.userEvent.create({
+      data: {
+        userId,
+        type: UserEventType.OPEN_TEXT,
+        metadata: {
+          textId,
+          mode: "full",
+        },
+      },
+    });
 
     // ЭТАП 11
     const progress = await this.textProgress.calculateProgress(userId, textId);

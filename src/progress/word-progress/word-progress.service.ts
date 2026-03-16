@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { UserEventType } from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
 
 @Injectable()
@@ -24,6 +25,16 @@ export class WordProgressService {
         repetitions: 1,
         status: "LEARNING",
         lastSeen: new Date(),
+      },
+    });
+
+    await this.prisma.userEvent.create({
+      data: {
+        userId,
+        type: UserEventType.CLICK_WORD,
+        metadata: {
+          lemmaId,
+        },
       },
     });
   }

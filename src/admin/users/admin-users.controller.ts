@@ -10,6 +10,7 @@ import { UserStatus } from "@prisma/client";
 import { Admin } from "src/auth/decorators/admin.decorator";
 import { AdminUsersService } from "./admin-users.service";
 import { AdminUserListItemDto } from "./dto/admin-user-list-item.dto";
+import { AdminUserDetailsDto } from "./dto/admin-user-details.dto";
 import { AdminUsersListResponseDto } from "./dto/admin-users-list-response.dto";
 import { FetchUsersDto } from "./dto/fetch-users.dto";
 
@@ -38,11 +39,12 @@ export class AdminUsersController {
   @Get(":id")
   @ApiOperation({
     summary: "Get user by ID",
-    description: "Fetch user by ID",
+    description:
+      "Fetch user by ID with aggregated learning statistics and activity",
   })
   @ApiOkResponse({
     description: "User fetched successfully",
-    type: AdminUserListItemDto,
+    type: AdminUserDetailsDto,
   })
   async getUserById(@Param("id") id: string) {
     return this.adminUsersService.getUserById(id);
