@@ -1,8 +1,15 @@
+import { PrismaPg } from "@prisma/adapter-pg";
 import { Prisma, PrismaClient } from "@prisma/client";
+import "dotenv/config";
 import { normalizeToken } from "src/markup-engine/tokenizer/tokenizer.utils";
 import { tokenize } from "./tokenize";
 
-const prisma = new PrismaClient();
+const connectionString = process.env["DATABASE_URL"];
+if (!connectionString) {
+  throw new Error("DATABASE_URL environment variable is not set");
+}
+const adapter = new PrismaPg({ connectionString });
+const prisma = new PrismaClient({ adapter });
 
 export const processText = async (textId: string) => {
   const pages = await prisma.textPage.findMany({

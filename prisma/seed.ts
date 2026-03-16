@@ -1,13 +1,14 @@
 import { PrismaClient } from "@prisma/client";
 import * as dotenv from "dotenv";
 import { createText } from "./helpers/textHelper";
-import { createTallarUser } from "./helpers/userHelper";
+import { createFakeUsers, createTallarUser } from "./helpers/userHelper";
 
 const prisma = new PrismaClient();
 
 async function up() {
   dotenv.config();
   await createTallarUser();
+  await createFakeUsers();
   await createText();
 }
 

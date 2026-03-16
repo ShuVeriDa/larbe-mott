@@ -29,7 +29,8 @@
     "migrate:status": "prisma migrate status",
     "seed": "ts-node prisma/seed.ts",
     "seed2": "ts-node prisma/seed2.ts",
-    "seed:clear-texts": "ts-node prisma/seed-clear-texts.ts"
+    "seed:clear-texts": "ts-node prisma/seed-clear-texts.ts",
+    "seed:fake-users": "ts-node prisma/seed-fake-users.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

@@ -1,6 +1,8 @@
-import { Injectable } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { Prisma, UserStatus } from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
+import { AdminUserListItemDto } from "./dto/admin-user-list-item.dto";
+import { AdminUserStatusDto } from "./dto/admin-user-status.dto";
 import { AdminUsersListResponseDto } from "./dto/admin-users-list-response.dto";
 import { FetchUsersDto } from "./dto/fetch-users.dto";
 
@@ -13,7 +15,9 @@ export class AdminUsersService {
     const limit = Math.min(100, Math.max(1, query.limit ?? 20));
     const skip = (page - 1) * limit;
 
-    const where: Prisma.UserWhereInput = {};
+    const where: Prisma.UserWhereInput = {
+      status: { not: UserStatus.DELETED },
+    };
     if (query.q?.trim()) {
       const q = query.q.trim();
       where.OR = [
@@ -61,8 +65,10 @@ export class AdminUsersService {
           status: true,
           language: true,
           level: true,
-          createdAt: true,
           lastActiveAt: true,
+          createdAt: true,
+          updatedAt: true,
+          signupAt: true,
         },
       }),
       this.prisma.user.count({ where }),
@@ -75,5 +81,87 @@ export class AdminUsersService {
       limit,
       skip,
     };
+  }
+
+  async getUserById(id: string): Promise<AdminUserListItemDto> {
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        email: true,
+        username: true,
+        name: true,
+        surname: true,
+        role: true,
+        status: true,
+        language: true,
+        level: true,
+        lastActiveAt: true,
+        createdAt: true,
+        updatedAt: true,
+        signupAt: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException("User not found");
+    }
+
+    const [textsRead, wordsKnown] = await Promise.all([
+      this.prisma.userTextProgress.count({
+        where: { userId: id, progressPercent: { gt: 0 } },
+      }),
+      this.prisma.userWordProgress.count({
+        where: { userId: id, status: "KNOWN" },
+      }),
+    ]);
+
+    const subscriptions: null = null; // TODO: replace with real subscriptions aggregation
+
+    return {
+      ...user,
+      textsRead,
+      wordsKnown,
+      subscriptions,
+    };
+  }
+
+  async updateUserStatus(
+    id: string,
+    dto: AdminUserStatusDto,
+  ): Promise<AdminUserListItemDto> {
+    const user = await this.prisma.user.update({
+      where: { id },
+      data: {
+        status: dto.status,
+        lastActiveAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    return this.getUserById(user.id);
+  }
+
+  async deleteUser(
+    id: string,
+    dto: AdminUserStatusDto,
+  ): Promise<AdminUserListItemDto> {
+    const user = await this.prisma.user.update({
+      where: { id },
+      data: {
+        status: dto.status,
+        deletedAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    return this.getUserById(user.id);
+  }
+
+  async logoutAllSessions(id: string): Promise<void> {
+    await this.prisma.user.update({
+      where: { id },
+      data: {
+        hashedRefreshToken: null,
+      },
+    });
   }
 }

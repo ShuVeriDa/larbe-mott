@@ -1,9 +1,16 @@
+import "dotenv/config";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { Level, Prisma, PrismaClient } from "@prisma/client";
 import { extractTextFromTiptap } from "src/common/utils/extractTextFromTiptap";
 import { processText } from "./text/processText";
 import { textData } from "./textData";
 
-const prisma = new PrismaClient();
+const connectionString = process.env["DATABASE_URL"];
+if (!connectionString) {
+  throw new Error("DATABASE_URL environment variable is not set");
+}
+const adapter = new PrismaPg({ connectionString });
+const prisma = new PrismaClient({ adapter });
 
 export const createText = async () => {
   const user = await prisma.user.findFirst({

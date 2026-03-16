@@ -93,12 +93,14 @@ model User {
   status        UserStatus @default(ACTIVE)
   language      Language? @default(CHE)
   level         Level? @default(A1)
+
   lastActiveAt  DateTime?
-  signupAt      DateTime @default(now())
   trialEndsAt   DateTime? //пригодится для trial
+  signupAt      DateTime @default(now())
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+  deletedAt     DateTime?
 
   @@index([status]) 
   @@index([language])
