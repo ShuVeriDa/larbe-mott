@@ -15,6 +15,8 @@ import { AdminTokensController } from "./token/admin-tokens.controller";
 import { AdminTokenService } from "./token/admin-tokens.service";
 import { AdminUnknownWordsController } from "./unknown-words/admin-unknown-words.controller";
 import { AdminUnknownWordsService } from "./unknown-words/admin-unknown-words.service";
+import { AdminUsersController } from "./users/admin-users.controller";
+import { AdminUsersService } from "./users/admin-users.service";
 
 @Module({
   imports: [
@@ -31,12 +33,14 @@ import { AdminUnknownWordsService } from "./unknown-words/admin-unknown-words.se
     AdminTokensController,
     AdminDictionaryController,
     AdminUnknownWordsController,
+    AdminUsersController,
   ],
   providers: [
     AdminService,
     AdminTextService,
     AdminTokenService,
     AdminUnknownWordsService,
+    AdminUsersService,
     PrismaService,
   ],
 })

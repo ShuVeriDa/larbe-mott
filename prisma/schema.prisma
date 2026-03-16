@@ -61,6 +61,13 @@ enum AnalysisSource {
   MORPHOLOGY
 }
 
+enum UserStatus {
+  ACTIVE
+  BLOCKED
+  FROZEN
+  DELETED
+}
+
 //////////////////////////////////////////////////////
 // USERS
 //////////////////////////////////////////////////////
@@ -83,9 +90,19 @@ model User {
   userDictionaryFolders UserDictionaryFolder[] @relation("UserDictionaryFolderUser")
   texts Text[] @relation("text")
 
+  status        UserStatus @default(ACTIVE)
+  language      Language? @default(CHE)
+  level         Level? @default(A1)
+  lastActiveAt  DateTime?
+  signupAt      DateTime @default(now())
+  trialEndsAt   DateTime? //пригодится для trial
+
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  @@index([status]) 
+  @@index([language])
+  @@index([level])
   @@map("users")
 }
 
