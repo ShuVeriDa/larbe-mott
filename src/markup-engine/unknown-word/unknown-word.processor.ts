@@ -7,18 +7,26 @@ export class UnknownWordProcessor {
   constructor(private prisma: PrismaService) {}
 
   async analyzeVersion(versionId: string) {
-    // 1️⃣ получить все токены без анализа
-    const tokens = await this.prisma.textToken.findMany({
-      where: {
-        versionId,
-        analyses: { none: {} },
-      },
-      select: {
-        normalized: true,
-      },
-    });
+    // 1️⃣ получить textId версии и все токены без анализа
+    const [version, tokens] = await Promise.all([
+      this.prisma.textProcessingVersion.findUnique({
+        where: { id: versionId },
+        select: { textId: true },
+      }),
+      this.prisma.textToken.findMany({
+        where: {
+          versionId,
+          analyses: { none: {} },
+        },
+        select: {
+          normalized: true,
+        },
+      }),
+    ]);
 
     if (!tokens.length) return;
+
+    const textId = version?.textId ?? null;
 
     // 2️⃣ посчитать частоту слов
     const counts = new Map<string, number>();
@@ -45,6 +53,7 @@ export class UnknownWordProcessor {
       word: string;
       normalized: string;
       seenCount: number;
+      lastTextId: string | null;
     }[] = [];
 
     const updateRows: {
@@ -60,6 +69,7 @@ export class UnknownWordProcessor {
           word,
           normalized: word,
           seenCount: count,
+          lastTextId: textId,
         });
       }
     }
@@ -80,7 +90,9 @@ export class UnknownWordProcessor {
       );
       await this.prisma.$executeRaw`
         UPDATE unknown_word uw
-        SET "seenCount" = uw."seenCount" + v.count, "lastSeen" = now()
+        SET "seenCount" = uw."seenCount" + v.count,
+            "lastSeen" = now(),
+            "lastTextId" = COALESCE(${textId}, uw."lastTextId")
         FROM (VALUES ${values}) AS v(normalized, count)
         WHERE uw.normalized = v.normalized
       `;
@@ -91,15 +103,27 @@ export class UnknownWordProcessor {
    * Записать неизвестное слово при неудачном lookup (клик по слову или ввод).
    * Вызывается тихо, не влияет на ответ пользователю.
    */
-  async recordFromLookup(normalized: string): Promise<void> {
+  async recordFromLookup(
+    normalized: string,
+    tokenId?: string,
+    textId?: string,
+  ): Promise<void> {
     if (!normalized?.trim()) return;
     const n = normalized.trim();
     await this.prisma.unknownWord.upsert({
       where: { normalized: n },
-      create: { word: n, normalized: n, seenCount: 1 },
+      create: {
+        word: n,
+        normalized: n,
+        seenCount: 1,
+        lastTokenId: tokenId ?? null,
+        lastTextId: textId ?? null,
+      },
       update: {
         seenCount: { increment: 1 },
         lastSeen: new Date(),
+        ...(tokenId && { lastTokenId: tokenId }),
+        ...(textId && { lastTextId: textId }),
       },
     });
   }

@@ -603,6 +603,9 @@ model UnknownWord {
   firstSeen   DateTime @default(now())
   lastSeen    DateTime @default(now())
 
+  lastTokenId String?
+  lastTextId  String?
+
   @@unique([normalized])
   @@map("unknown_word")
 }

@@ -7,6 +7,7 @@ export type TokenInfoCacheValue = {
   tokenId: string;
   word: string;
   normalized: string;
+  textId?: string;
   lemmaId: string | null;
   lemma: string | null;
   forms: string[];

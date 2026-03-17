@@ -36,7 +36,7 @@ export class WordsService {
       result.baseForm == null;
     if (notFound) {
       void this.unknownWordProcessor
-        .recordFromLookup(info.normalized)
+        .recordFromLookup(info.normalized, info.tokenId, info.textId)
         .catch(() => {});
     }
     return result;
