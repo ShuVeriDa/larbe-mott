@@ -18,6 +18,8 @@ import { AdminUnknownWordsService } from "./unknown-words/admin-unknown-words.se
 import { AdminUsersController } from "./users/admin-users.controller";
 import { AdminUsersService } from "./users/admin-users.service";
 import { UserAnalyticsService } from "./users/user-analytics.service";
+import { AdminBillingController } from "./billing/admin-billing.controller";
+import { AdminBillingService } from "./billing/admin-billing.service";
 
 @Module({
   imports: [
@@ -35,6 +37,7 @@ import { UserAnalyticsService } from "./users/user-analytics.service";
     AdminDictionaryController,
     AdminUnknownWordsController,
     AdminUsersController,
+    AdminBillingController,
   ],
   providers: [
     AdminService,
@@ -43,6 +46,7 @@ import { UserAnalyticsService } from "./users/user-analytics.service";
     AdminUnknownWordsService,
     AdminUsersService,
     UserAnalyticsService,
+    AdminBillingService,
     PrismaService,
   ],
 })

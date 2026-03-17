@@ -1,6 +1,7 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Prisma, PrismaClient } from "@prisma/client";
 import * as dotenv from "dotenv";
+import { seedPlans } from "./helpers/billingHelper";
 import { createText } from "./helpers/textHelper";
 import { seedRolesAndPermissions } from "./helpers/rbacHelper";
 import { createFakeUsers, createTallarUser } from "./helpers/userHelper";
@@ -16,6 +17,7 @@ const prisma = new PrismaClient({ adapter });
 
 async function up() {
   await seedRolesAndPermissions();
+  await seedPlans();
   await createTallarUser();
   await createFakeUsers();
   await createText();
@@ -25,6 +27,11 @@ async function down() {
   try {
     await prisma.$executeRaw`
       TRUNCATE TABLE
+        "coupon_redemption",
+        "coupon",
+        "payment",
+        "subscription",
+        "plan",
         "example",
         "dictionary_cache",
         "token_analysis",

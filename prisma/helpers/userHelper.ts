@@ -32,7 +32,7 @@ export const createTallarUser = async () => {
   });
 
   const adminRole = await prisma.role.findUnique({
-    where: { name: RoleName.ADMIN },
+    where: { name: RoleName.SUPERADMIN },
     select: { id: true },
   });
   if (adminRole) {

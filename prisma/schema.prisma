@@ -47,6 +47,45 @@ enum PermissionCode {
   CAN_MANAGE_FEATURE_FLAGS
 }
 
+//////////////////////////////////////////////////////
+// BILLING / MONETIZATION
+//////////////////////////////////////////////////////
+
+enum PlanType {
+  FREE
+  BASIC
+  PRO
+  PREMIUM
+  LIFETIME
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  CANCELED
+  EXPIRED
+}
+
+enum PaymentProvider {
+  STRIPE
+  PAYPAL
+  PADDLE
+  LEMONSQUEEZY
+  MANUAL
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+enum CouponType {
+  PERCENT
+  FIXED
+}
+
 enum Language {
   CHE
   RU
@@ -137,10 +176,132 @@ model User {
 
   roles         UserRoleAssignment[]
 
+  subscriptions Subscription[]
+  payments      Payment[]
+  couponRedemptions CouponRedemption[]
+
   @@index([status]) 
   @@index([language])
   @@index([level])
   @@map("users")
+}
+
+model Plan {
+  id         String   @id @default(uuid())
+  code       String   @unique // e.g. "FREE", "PRO_MONTHLY"
+  name       String
+  type       PlanType
+
+  priceCents Int      @default(0)
+  currency   String   @default("USD")
+  interval   String?  // "month" | "year" | null (for lifetime/free)
+  isActive   Boolean  @default(true)
+
+  limits     Json?
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  subscriptions Subscription[]
+
+  @@index([type])
+  @@index([isActive])
+  @@map("plan")
+}
+
+model Subscription {
+  id            String             @id @default(uuid())
+  userId        String
+  planId        String
+
+  status        SubscriptionStatus @default(TRIALING)
+  isLifetime    Boolean            @default(false)
+
+  startDate     DateTime
+  endDate       DateTime?
+  canceledAt    DateTime?
+
+  provider      PaymentProvider    @default(MANUAL)
+  providerSubId String?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user          User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan          Plan @relation(fields: [planId], references: [id], onDelete: Restrict)
+  payments      Payment[]
+
+  @@index([userId])
+  @@index([planId])
+  @@index([status])
+  @@map("subscription")
+}
+
+model Payment {
+  id                String         @id @default(uuid())
+  userId            String
+  subscriptionId    String?
+
+  provider          PaymentProvider @default(MANUAL)
+  providerPaymentId String?
+
+  status            PaymentStatus   @default(PENDING)
+  amountCents       Int
+  currency          String          @default("USD")
+  refundedCents     Int             @default(0)
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription      Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+
+  couponRedemptions CouponRedemption[]
+
+  @@index([userId])
+  @@index([subscriptionId])
+  @@index([status])
+  @@map("payment")
+}
+
+model Coupon {
+  id             String     @id @default(uuid())
+  code           String     @unique
+  type           CouponType
+  amount         Int        // percent OR cents depending on type
+
+  maxRedemptions Int?
+  redeemedCount  Int        @default(0)
+
+  validFrom      DateTime?
+  validUntil     DateTime?
+
+  isActive       Boolean    @default(true)
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  redemptions    CouponRedemption[]
+
+  @@index([isActive])
+  @@map("coupon")
+}
+
+model CouponRedemption {
+  id        String   @id @default(uuid())
+  couponId  String
+  userId    String
+  paymentId String?
+
+  redeemedAt DateTime @default(now())
+
+  coupon   Coupon @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payment  Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@index([couponId])
+  @@index([userId])
+  @@map("coupon_redemption")
 }
 
 model Role {
