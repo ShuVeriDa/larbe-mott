@@ -9,8 +9,8 @@ import {
 import { UserStatus } from "@prisma/client";
 import { Admin } from "src/auth/decorators/admin.decorator";
 import { AdminUsersService } from "./admin-users.service";
-import { AdminUserListItemDto } from "./dto/admin-user-list-item.dto";
 import { AdminUserDetailsDto } from "./dto/admin-user-details.dto";
+import { AdminUserListItemDto } from "./dto/admin-user-list-item.dto";
 import { AdminUsersListResponseDto } from "./dto/admin-users-list-response.dto";
 import { FetchUsersDto } from "./dto/fetch-users.dto";
 

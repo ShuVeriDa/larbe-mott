@@ -1,6 +1,7 @@
-import "dotenv/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Level, Prisma, PrismaClient } from "@prisma/client";
+import "dotenv/config";
+
 import { extractTextFromTiptap } from "src/common/utils/extractTextFromTiptap";
 import { processText } from "./text/processText";
 import { textData } from "./textData";

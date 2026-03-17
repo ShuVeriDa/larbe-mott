@@ -34,6 +34,27 @@ export const createTallarUser = async () => {
   });
 };
 
+// await prisma.user.upsert({
+//   where: { email: user.email },
+//   create: {
+//     email: user.email,
+//     username: user.username,
+//     password: await hash(user.password),
+//     phone: user.phone,
+//     name: user.name,
+//     surname: user.surname,
+//     role: user.role,
+//   },
+//   update: {
+//     username: user.username,
+//     password: await hash(user.password),
+//     phone: user.phone,
+//     name: user.name,
+//     surname: user.surname,
+//     role: user.role,
+//   },
+// });
+
 const fakeUsers = [
   {
     email: "user1@example.com",

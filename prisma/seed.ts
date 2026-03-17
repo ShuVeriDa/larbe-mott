@@ -1,40 +1,60 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { Prisma, PrismaClient } from "@prisma/client";
 import * as dotenv from "dotenv";
 import { createText } from "./helpers/textHelper";
 import { createFakeUsers, createTallarUser } from "./helpers/userHelper";
 
-const prisma = new PrismaClient();
+dotenv.config();
+
+const connectionString = process.env["DATABASE_URL"];
+if (!connectionString) {
+  throw new Error("DATABASE_URL environment variable is not set");
+}
+const adapter = new PrismaPg({ connectionString });
+const prisma = new PrismaClient({ adapter });
 
 async function up() {
-  dotenv.config();
   await createTallarUser();
   await createFakeUsers();
   await createText();
 }
 
 async function down() {
-  await prisma.$executeRaw`
-    TRUNCATE TABLE
-      "example",
-      "token_analysis",
-      "user_word_progress",
-      "user_text_progress",
-      "text_token",
-      "admin_headword",
-      "admin_morph_form",
-      "headword",
-      "morph_form",
-      "sense",
-      "text_page",
-      "text_processing_version",
-      "admin_dictionary_entry",
-      "dictionary_entry",
-      "lemma",
-      "unknown_word",
-      "text",
-      "users"
-    RESTART IDENTITY CASCADE
-  `;
+  try {
+    await prisma.$executeRaw`
+      TRUNCATE TABLE
+        "example",
+        "dictionary_cache",
+        "token_analysis",
+        "user_event",
+        "user_word_progress",
+        "user_text_progress",
+        "text_token",
+        "headword",
+        "morph_form",
+        "sense",
+        "text_page",
+        "text_processing_version",
+        "dictionary_entry",
+        "user_dictionary_entry",
+        "user_dictionary_folder",
+        "lemma",
+        "unknown_word",
+        "text_vocabulary",
+        "text",
+        "users"
+      RESTART IDENTITY CASCADE
+    `;
+  } catch (e) {
+    if (
+      e instanceof Prisma.PrismaClientKnownRequestError &&
+      e.code === "P2010" &&
+      /does not exist|не существует/i.test(e.message)
+    ) {
+      return;
+    }
+    throw e;
+  }
 }
 
 async function main() {
