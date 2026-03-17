@@ -20,7 +20,8 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
-import { Admin } from "src/auth/decorators/admin.decorator";
+import { PermissionCode } from "@prisma/client";
+import { AdminPermission } from "src/auth/decorators/admin-permission.decorator";
 import { User } from "src/user/decorators/user.decorator";
 import { AdminUnknownWordsService } from "./admin-unknown-words.service";
 import { AddToDictionaryDto } from "./dto/add-dictionary.dto";
@@ -36,7 +37,7 @@ export class AdminUnknownWordsController {
     private readonly adminUnknownWordsService: AdminUnknownWordsService,
   ) {}
 
-  @Admin()
+  @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
   @Get()
   @ApiOperation({
     summary: "List unknown words",
@@ -51,7 +52,7 @@ export class AdminUnknownWordsController {
     return this.adminUnknownWordsService.getUnknownWords(query);
   }
 
-  @Admin()
+  @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
   @Post(":id/add-to-dictionary")
   @ApiOperation({
     summary: "Add unknown word to dictionary",
@@ -76,7 +77,7 @@ export class AdminUnknownWordsController {
     );
   }
 
-  @Admin()
+  @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
   @Post(":id/link")
   @ApiOperation({
     summary: "Link unknown word to existing lemma",
@@ -96,7 +97,7 @@ export class AdminUnknownWordsController {
     return this.adminUnknownWordsService.linkToLemma(id, dto.lemmaId);
   }
 
-  @Admin()
+  @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
   @Get(":id")
   @ApiOperation({
     summary: "Get unknown word by id",
@@ -112,7 +113,7 @@ export class AdminUnknownWordsController {
     return this.adminUnknownWordsService.getUnknownWordById(id);
   }
 
-  @Admin()
+  @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
   @Delete(":id")
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({

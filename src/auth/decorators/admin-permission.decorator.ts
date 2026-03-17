@@ -4,8 +4,9 @@ import { JwtAuthGuard } from "../jwt/jwt.guard";
 import { RequirePermission } from "../permissions/permission.decorator";
 import { PermissionGuard } from "../permissions/permission.guard";
 
-export const Admin = () =>
+export const AdminPermission = (permission: PermissionCode) =>
   applyDecorators(
     UseGuards(JwtAuthGuard, PermissionGuard),
-    RequirePermission(PermissionCode.CAN_MANAGE_USERS),
+    RequirePermission(permission),
   );
+

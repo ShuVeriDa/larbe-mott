@@ -1,5 +1,5 @@
 import { ApiProperty } from "@nestjs/swagger";
-import { Language, Level, UserRole, UserStatus } from "@prisma/client";
+import { Language, Level, UserStatus } from "@prisma/client";
 import {
   IsDate,
   IsEmail,
@@ -29,10 +29,6 @@ export class AdminUserListItemDto {
   @ApiProperty({ description: "Last name" })
   @IsString()
   surname: string;
-
-  @ApiProperty({ description: "Primary user role" })
-  @IsEnum(UserRole)
-  role: UserRole;
 
   @ApiProperty({ description: "User status" })
   @IsEnum(UserStatus)

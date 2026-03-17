@@ -19,10 +19,11 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
+import { PermissionCode } from "@prisma/client";
 import { CreateEntryDto } from "src/admin/dictionary/dto/create-entry.dto";
 import { DictionaryListQueryDto } from "src/admin/dictionary/dto/list-query.dto";
 import { PatchEntryDto } from "src/admin/dictionary/dto/update-entry.dto";
-import { Admin } from "src/auth/decorators/admin.decorator";
+import { AdminPermission } from "src/auth/decorators/admin-permission.decorator";
 import { DictionaryService } from "src/markup-engine/dictionary/dictionary.service";
 import { User } from "src/user/decorators/user.decorator";
 
@@ -33,7 +34,7 @@ import { User } from "src/user/decorators/user.decorator";
 export class AdminDictionaryController {
   constructor(private dictionaryService: DictionaryService) {}
 
-  @Admin()
+  @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
   @Get()
   @ApiOperation({
     summary: "List dictionary entries (admin only)",
@@ -53,7 +54,7 @@ export class AdminDictionaryController {
     });
   }
 
-  @Admin()
+  @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
   @Get(":id")
   @ApiOperation({
     summary: "Get dictionary entry card by lemma id (admin only)",
@@ -69,7 +70,7 @@ export class AdminDictionaryController {
     return this.dictionaryService.getCardForAdmin(lemmaId);
   }
 
-  @Admin()
+  @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
   @Post()
   @ApiOperation({
     summary: "Create dictionary entry (admin only)",
@@ -88,7 +89,7 @@ export class AdminDictionaryController {
     return this.dictionaryService.createEntry(dto, userId);
   }
 
-  @Admin()
+  @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
   @Patch(":id")
   @ApiOperation({
     summary: "Update dictionary entry (admin only)",

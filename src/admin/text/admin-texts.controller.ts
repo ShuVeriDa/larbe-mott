@@ -22,9 +22,10 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
+import { PermissionCode } from "@prisma/client";
 import { CreateTextDto } from "src/admin/text/dto/create.dto";
 import { PatchTextDto } from "src/admin/text/dto/update.dto";
-import { Admin } from "src/auth/decorators/admin.decorator";
+import { AdminPermission } from "src/auth/decorators/admin-permission.decorator";
 import { User } from "src/user/decorators/user.decorator";
 import { AdminTextService } from "./admin-text.service";
 
@@ -35,7 +36,7 @@ import { AdminTextService } from "./admin-text.service";
 export class AdminTextsController {
   constructor(private readonly adminTextService: AdminTextService) {}
 
-  @Admin()
+  @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
   @Get()
   @ApiOperation({
     summary: "List all texts for admin (admin only)",
@@ -52,7 +53,7 @@ export class AdminTextsController {
   }
 
   @HttpCode(201)
-  @Admin()
+  @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
   @Post()
   @ApiOperation({
     summary: "Create a new text (admin only)",
@@ -72,7 +73,7 @@ export class AdminTextsController {
     return await this.adminTextService.addNewText(dto, userId);
   }
 
-  @Admin()
+  @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
   @Patch(":id")
   @ApiOperation({
     summary: "Partially update a text (admin only)",
@@ -98,7 +99,7 @@ export class AdminTextsController {
     return await this.adminTextService.patchText(textId, dto);
   }
 
-  @Admin()
+  @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
   @Delete(":id")
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({

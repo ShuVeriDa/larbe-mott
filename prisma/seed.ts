@@ -2,6 +2,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { Prisma, PrismaClient } from "@prisma/client";
 import * as dotenv from "dotenv";
 import { createText } from "./helpers/textHelper";
+import { seedRolesAndPermissions } from "./helpers/rbacHelper";
 import { createFakeUsers, createTallarUser } from "./helpers/userHelper";
 
 dotenv.config();
@@ -14,6 +15,7 @@ const adapter = new PrismaPg({ connectionString });
 const prisma = new PrismaClient({ adapter });
 
 async function up() {
+  await seedRolesAndPermissions();
   await createTallarUser();
   await createFakeUsers();
   await createText();
@@ -27,6 +29,10 @@ async function down() {
         "dictionary_cache",
         "token_analysis",
         "user_event",
+        "role_permission",
+        "user_role_assignment",
+        "permission",
+        "role",
         "user_word_progress",
         "user_text_progress",
         "text_token",

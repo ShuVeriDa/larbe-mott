@@ -1,11 +1,11 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { Prisma, UserStatus } from "@prisma/client";
+import { Prisma, RoleName, UserStatus } from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
 import { AdminUserDetailsDto } from "./dto/admin-user-details.dto";
 import { AdminUserListItemDto } from "./dto/admin-user-list-item.dto";
 import { AdminUserStatusDto } from "./dto/admin-user-status.dto";
 import { AdminUsersListResponseDto } from "./dto/admin-users-list-response.dto";
-import { FetchUsersDto } from "./dto/fetch-users.dto";
+import { FetchAdminUsersDto } from "./dto/fetch-admin-users.dto";
 import { UserAnalyticsService } from "./user-analytics.service";
 
 @Injectable()
@@ -15,7 +15,9 @@ export class AdminUsersService {
     private readonly userAnalytics: UserAnalyticsService,
   ) {}
 
-  async getUsers(query: FetchUsersDto): Promise<AdminUsersListResponseDto> {
+  async getUsers(
+    query: FetchAdminUsersDto,
+  ): Promise<AdminUsersListResponseDto> {
     const page = Math.max(1, query.page ?? 1);
     const limit = Math.min(100, Math.max(1, query.limit ?? 20));
     const skip = (page - 1) * limit;
@@ -51,7 +53,13 @@ export class AdminUsersService {
       where.status = { equals: query.status };
     }
     if (query.role) {
-      where.role = { equals: query.role };
+      where.roles = {
+        some: {
+          role: {
+            name: { equals: query.role },
+          },
+        },
+      };
     }
 
     const [users, total] = await Promise.all([
@@ -66,7 +74,6 @@ export class AdminUsersService {
           username: true,
           name: true,
           surname: true,
-          role: true,
           status: true,
           language: true,
           level: true,
@@ -97,7 +104,6 @@ export class AdminUsersService {
         username: true,
         name: true,
         surname: true,
-        role: true,
         status: true,
         language: true,
         level: true,
@@ -155,5 +161,52 @@ export class AdminUsersService {
         hashedRefreshToken: null,
       },
     });
+  }
+
+  async getUserRoles(userId: string) {
+    const roles = await this.prisma.userRoleAssignment.findMany({
+      where: { userId },
+      select: {
+        role: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+    return roles.map((r) => r.role);
+  }
+
+  async assignRole(userId: string, role: RoleName, assignedBy?: string) {
+    const roleRow = await this.prisma.role.findUnique({
+      where: { name: role },
+      select: { id: true },
+    });
+    if (!roleRow) {
+      throw new NotFoundException("Role not found");
+    }
+
+    await this.prisma.userRoleAssignment.create({
+      data: {
+        userId,
+        roleId: roleRow.id,
+        assignedBy: assignedBy ?? null,
+      },
+    });
+
+    return this.getUserRoles(userId);
+  }
+
+  async revokeRole(userId: string, roleId: string) {
+    await this.prisma.userRoleAssignment.delete({
+      where: {
+        userId_roleId: {
+          userId,
+          roleId,
+        },
+      },
+    });
+    return this.getUserRoles(userId);
   }
 }

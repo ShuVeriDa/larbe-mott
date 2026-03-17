@@ -5,8 +5,9 @@ import { PrismaService } from "src/prisma.service";
 import { UserService } from "src/user/user.service";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
-import { AdminGuard } from "./guards/admin.guard";
 import { JwtStrategy } from "./strategies/jwt.strategy";
+import { PermissionGuard } from "./permissions/permission.guard";
+import { PermissionsService } from "./permissions/permissions.service";
 
 @Module({
   controllers: [AuthController],
@@ -14,12 +15,13 @@ import { JwtStrategy } from "./strategies/jwt.strategy";
     AuthService,
     PrismaService,
     JwtStrategy,
-    AdminGuard,
+    PermissionsService,
+    PermissionGuard,
     UserService,
     JwtService,
     ConfigService,
   ],
-  exports: [AdminGuard],
+  exports: [PermissionsService],
   imports: [
     ConfigModule,
     JwtModule.registerAsync({

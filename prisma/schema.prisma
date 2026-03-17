@@ -23,9 +23,28 @@ enum DictionarySource {
   CACHE
 }
 
-enum UserRole {
-  USER
+//////////////////////////////////////////////////////
+// ROLES & PERMISSIONS (RBAC)
+//////////////////////////////////////////////////////
+
+enum RoleName {
+  LEARNER
+  SUPPORT
+  CONTENT
+  LINGUIST
   ADMIN
+  SUPERADMIN
+}
+
+enum PermissionCode {
+  CAN_EDIT_TEXTS
+  CAN_EDIT_DICTIONARY
+  CAN_EDIT_MORPHOLOGY
+  CAN_MANAGE_USERS
+  CAN_MANAGE_BILLING
+  CAN_VIEW_ANALYTICS
+  CAN_VIEW_LOGS
+  CAN_MANAGE_FEATURE_FLAGS
 }
 
 enum Language {
@@ -92,7 +111,6 @@ model User {
   name          String
   surname       String
   hashedRefreshToken String? @db.Text
-  role          UserRole @default(USER)
   phone         String?
 
   wordProgress  UserWordProgress[]
@@ -117,10 +135,63 @@ model User {
   updatedAt     DateTime @updatedAt
   deletedAt     DateTime?
 
+  roles         UserRoleAssignment[]
+
   @@index([status]) 
   @@index([language])
   @@index([level])
   @@map("users")
+}
+
+model Role {
+  id        String   @id @default(uuid())
+  name      RoleName @unique
+
+  users     UserRoleAssignment[]
+  permissions RolePermission[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("role")
+}
+
+model Permission {
+  id        String          @id @default(uuid())
+  code      PermissionCode  @unique
+
+  roles     RolePermission[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("permission")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permission")
+}
+
+model UserRoleAssignment {
+  userId String
+  roleId String
+
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  assignedAt DateTime @default(now())
+  assignedBy String?
+
+  @@id([userId, roleId])
+  @@index([roleId])
+  @@map("user_role_assignment")
 }
 
 //////////////////////////////////////////////////////

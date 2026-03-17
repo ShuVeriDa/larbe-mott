@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { Prisma, UserRole } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { hash } from "argon2";
 import { PrismaService } from "../prisma.service";
 import { CreateUserDto } from "./dto/create-user.dto";
@@ -103,7 +103,6 @@ export class UserService {
       surname: dto.surname,
       username: dto.username,
       phone: dto.phone,
-      role: UserRole.USER,
     } as Prisma.UserCreateInput;
 
     return user;

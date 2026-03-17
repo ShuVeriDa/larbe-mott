@@ -9,7 +9,8 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
-import { Admin } from "src/auth/decorators/admin.decorator";
+import { PermissionCode } from "@prisma/client";
+import { AdminPermission } from "src/auth/decorators/admin-permission.decorator";
 import { BulkUpdateTokenDto } from "src/token/dto/bulk-update-token.dto";
 import { UpdateTokenDto } from "src/token/dto/update-token.dto";
 import { AdminTokenService } from "./admin-tokens.service";
@@ -21,7 +22,7 @@ import { AdminTokenService } from "./admin-tokens.service";
 export class AdminTokensController {
   constructor(private readonly adminTokenService: AdminTokenService) {}
 
-  @Admin()
+  @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
   @Get(":id")
   @ApiOperation({
     summary: "Get token for admin edit (admin only)",
@@ -39,7 +40,7 @@ export class AdminTokensController {
     return this.adminTokenService.getTokenForAdmin(tokenId);
   }
 
-  @Admin()
+  @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
   @Patch("bulk")
   @ApiOperation({
     summary: "Bulk update tokens (admin only)",
@@ -54,7 +55,7 @@ export class AdminTokensController {
     return this.adminTokenService.updateTokensBulk(dto.updates);
   }
 
-  @Admin()
+  @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
   @Patch(":id")
   @ApiOperation({
     summary: "Update single token (admin only)",

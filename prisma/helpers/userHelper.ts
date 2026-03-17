@@ -1,5 +1,5 @@
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient, UserRole } from "@prisma/client";
+import { PrismaClient, RoleName } from "@prisma/client";
 import { hash } from "argon2";
 import "dotenv/config";
 
@@ -18,10 +18,9 @@ export const createTallarUser = async () => {
     phone: "+79635940530",
     name: "Tallar",
     surname: "Vu So",
-    role: UserRole.ADMIN,
   };
 
-  await prisma.user.create({
+  const created = await prisma.user.create({
     data: {
       email: user.email,
       username: user.username,
@@ -29,9 +28,18 @@ export const createTallarUser = async () => {
       phone: user.phone,
       name: user.name,
       surname: user.surname,
-      role: user.role,
     },
   });
+
+  const adminRole = await prisma.role.findUnique({
+    where: { name: RoleName.ADMIN },
+    select: { id: true },
+  });
+  if (adminRole) {
+    await prisma.userRoleAssignment.create({
+      data: { userId: created.id, roleId: adminRole.id, assignedBy: null },
+    });
+  }
 };
 
 // await prisma.user.upsert({
@@ -100,7 +108,23 @@ export const createFakeUsers = async () => {
       password: await hash(user.password),
     })),
   );
-  await prisma.user.createMany({
+  const created = await prisma.user.createMany({
     data: hashedUsers,
+    skipDuplicates: true,
+  });
+
+  // Assign default LEARNER role to all users without roles (idempotent)
+  const learnerRole = await prisma.role.findUnique({
+    where: { name: RoleName.LEARNER },
+    select: { id: true },
+  });
+  if (!learnerRole) return;
+
+  const users = await prisma.user.findMany({
+    select: { id: true },
+  });
+  await prisma.userRoleAssignment.createMany({
+    data: users.map((u) => ({ userId: u.id, roleId: learnerRole.id })),
+    skipDuplicates: true,
   });
 };

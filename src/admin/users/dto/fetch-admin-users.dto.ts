@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { Language, Level, UserRole, UserStatus } from "@prisma/client";
+import { Language, Level, RoleName, UserStatus } from "@prisma/client";
 import { Type } from "class-transformer";
 import {
   IsEnum,
@@ -11,7 +11,7 @@ import {
   Min,
 } from "class-validator";
 
-export class FetchUsersDto {
+export class FetchAdminUsersDto {
   @ApiPropertyOptional({
     description:
       "Free text search across email, username, name and surname (case-insensitive)",
@@ -70,12 +70,12 @@ export class FetchUsersDto {
   status?: UserStatus;
 
   @ApiPropertyOptional({
-    description: "Filter by primary role (legacy field)",
-    enum: UserRole,
+    description: "Filter by RBAC role (RoleName)",
+    enum: RoleName,
   })
   @IsOptional()
-  @IsEnum(UserRole)
-  role?: UserRole;
+  @IsEnum(RoleName)
+  role?: RoleName;
 
   @ApiPropertyOptional({
     description: "Page number (1-based)",

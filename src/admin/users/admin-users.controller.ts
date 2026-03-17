@@ -1,4 +1,12 @@
-import { Controller, Delete, Get, Param, Post, Query } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Query,
+} from "@nestjs/common";
 import {
   ApiBearerAuth,
   ApiOkResponse,
@@ -6,13 +14,15 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
-import { UserStatus } from "@prisma/client";
-import { Admin } from "src/auth/decorators/admin.decorator";
+import { PermissionCode, UserStatus } from "@prisma/client";
+import { AdminPermission } from "src/auth/decorators/admin-permission.decorator";
+import { User } from "src/user/decorators/user.decorator";
 import { AdminUsersService } from "./admin-users.service";
 import { AdminUserDetailsDto } from "./dto/admin-user-details.dto";
 import { AdminUserListItemDto } from "./dto/admin-user-list-item.dto";
 import { AdminUsersListResponseDto } from "./dto/admin-users-list-response.dto";
-import { FetchUsersDto } from "./dto/fetch-users.dto";
+import { AssignRoleDto } from "./dto/assign-role.dto";
+import { FetchAdminUsersDto } from "./dto/fetch-admin-users.dto";
 
 @ApiTags("admin/users")
 @ApiBearerAuth()
@@ -21,7 +31,7 @@ import { FetchUsersDto } from "./dto/fetch-users.dto";
 export class AdminUsersController {
   constructor(private readonly adminUsersService: AdminUsersService) {}
 
-  @Admin()
+  @AdminPermission(PermissionCode.CAN_MANAGE_USERS)
   @Get()
   @ApiOperation({
     summary: "Get users list",
@@ -31,11 +41,11 @@ export class AdminUsersController {
     description: "Users fetched successfully",
     type: AdminUsersListResponseDto,
   })
-  async getUsers(@Query() query: FetchUsersDto) {
+  async getUsers(@Query() query: FetchAdminUsersDto) {
     return this.adminUsersService.getUsers(query);
   }
 
-  @Admin()
+  @AdminPermission(PermissionCode.CAN_MANAGE_USERS)
   @Get(":id")
   @ApiOperation({
     summary: "Get user by ID",
@@ -50,7 +60,51 @@ export class AdminUsersController {
     return this.adminUsersService.getUserById(id);
   }
 
-  @Admin()
+  @AdminPermission(PermissionCode.CAN_MANAGE_USERS)
+  @Get(":id/roles")
+  @ApiOperation({
+    summary: "Get user roles",
+    description: "Returns RBAC roles assigned to the user",
+  })
+  @ApiOkResponse({
+    description: "List of roles (id, name)",
+  })
+  async getUserRoles(@Param("id") id: string) {
+    return this.adminUsersService.getUserRoles(id);
+  }
+
+  @AdminPermission(PermissionCode.CAN_MANAGE_USERS)
+  @Post(":id/roles")
+  @ApiOperation({
+    summary: "Assign role to user",
+    description:
+      "Assigns an RBAC role to the user (idempotency not guaranteed)",
+  })
+  @ApiOkResponse({
+    description: "Updated list of roles for the user",
+  })
+  async assignRole(
+    @Param("id") id: string,
+    @Body() dto: AssignRoleDto,
+    @User("id") assignedBy: string,
+  ) {
+    return this.adminUsersService.assignRole(id, dto.role, assignedBy);
+  }
+
+  @AdminPermission(PermissionCode.CAN_MANAGE_USERS)
+  @Delete(":id/roles/:roleId")
+  @ApiOperation({
+    summary: "Revoke role from user",
+    description: "Revokes an RBAC role assignment from the user",
+  })
+  @ApiOkResponse({
+    description: "Updated list of roles for the user",
+  })
+  async revokeRole(@Param("id") id: string, @Param("roleId") roleId: string) {
+    return this.adminUsersService.revokeRole(id, roleId);
+  }
+
+  @AdminPermission(PermissionCode.CAN_MANAGE_USERS)
   @Post(":id/block")
   @ApiOperation({
     summary: "Block user by ID",
@@ -66,7 +120,7 @@ export class AdminUsersController {
     });
   }
 
-  @Admin()
+  @AdminPermission(PermissionCode.CAN_MANAGE_USERS)
   @Post(":id/freeze")
   @ApiOperation({
     summary: "Freeze user by ID",
@@ -82,7 +136,7 @@ export class AdminUsersController {
     });
   }
 
-  @Admin()
+  @AdminPermission(PermissionCode.CAN_MANAGE_USERS)
   @Post(":id/unblock")
   @ApiOperation({
     summary: "Unblock user by ID",
@@ -98,7 +152,7 @@ export class AdminUsersController {
     });
   }
 
-  @Admin()
+  @AdminPermission(PermissionCode.CAN_MANAGE_USERS)
   @Post(":id/logout-all")
   @ApiOperation({
     summary: "Logout user from all sessions",
@@ -112,7 +166,7 @@ export class AdminUsersController {
     return true;
   }
 
-  @Admin()
+  @AdminPermission(PermissionCode.CAN_MANAGE_USERS)
   @Delete(":id")
   @ApiOperation({
     summary: "Delete user by ID",
