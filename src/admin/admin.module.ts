@@ -20,6 +20,10 @@ import { AdminUsersService } from "./users/admin-users.service";
 import { UserAnalyticsService } from "./users/user-analytics.service";
 import { AdminBillingController } from "./billing/admin-billing.controller";
 import { AdminBillingService } from "./billing/admin-billing.service";
+import { AdminAnalyticsController } from "./analytics/admin-analytics.controller";
+import { AdminAnalyticsService } from "./analytics/admin-analytics.service";
+import { AdminFeatureFlagsController } from "./feature-flags/admin-feature-flags.controller";
+import { AdminFeatureFlagsService } from "./feature-flags/admin-feature-flags.service";
 
 @Module({
   imports: [
@@ -38,6 +42,8 @@ import { AdminBillingService } from "./billing/admin-billing.service";
     AdminUnknownWordsController,
     AdminUsersController,
     AdminBillingController,
+    AdminAnalyticsController,
+    AdminFeatureFlagsController,
   ],
   providers: [
     AdminService,
@@ -47,6 +53,8 @@ import { AdminBillingService } from "./billing/admin-billing.service";
     AdminUsersService,
     UserAnalyticsService,
     AdminBillingService,
+    AdminAnalyticsService,
+    AdminFeatureFlagsService,
     PrismaService,
   ],
 })

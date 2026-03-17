@@ -78,6 +78,20 @@ export class AuthService {
     };
   }
 
+  async recordSession(
+    userId: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
+    await this.prisma.userSession.create({
+      data: {
+        userId,
+        ipAddress: ipAddress ?? null,
+        userAgent: userAgent ?? null,
+      },
+    });
+  }
+
   addRefreshTokenResponse(res: Response, refreshToken: string) {
     const expiresIn = new Date();
     const expireDays = Number(

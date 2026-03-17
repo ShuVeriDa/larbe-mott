@@ -179,11 +179,61 @@ model User {
   subscriptions Subscription[]
   payments      Payment[]
   couponRedemptions CouponRedemption[]
+  sessions UserSession[]
+  featureFlags UserFeatureFlag[]
 
   @@index([status]) 
   @@index([language])
   @@index([level])
   @@map("users")
+}
+
+model FeatureFlag {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  description String?
+  isEnabled   Boolean  @default(false)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userOverrides UserFeatureFlag[]
+
+  @@index([isEnabled])
+  @@map("feature_flag")
+}
+
+model UserFeatureFlag {
+  id            String   @id @default(uuid())
+  userId        String
+  featureFlagId String
+  isEnabled     Boolean
+
+  createdAt     DateTime @default(now())
+
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  featureFlag   FeatureFlag @relation(fields: [featureFlagId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, featureFlagId])
+  @@index([featureFlagId])
+  @@map("user_feature_flag")
+}
+
+model UserSession {
+  id        String   @id @default(uuid())
+  userId    String
+
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+  revokedAt DateTime?
+
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("user_session")
 }
 
 model Plan {

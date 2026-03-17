@@ -43,11 +43,18 @@ export class AuthController {
   @ApiOkResponse({ description: "Access and refresh tokens have been issued" })
   async login(
     @Body() dto: LoginDto,
+    @Req() req: express.Request,
     @Res({ passthrough: true }) res: express.Response,
   ) {
     const { refreshToken, ...response } = await this.authService.login(dto);
 
     this.authService.addRefreshTokenResponse(res, refreshToken);
+
+    await this.authService.recordSession(
+      response.user.id,
+      req.ip,
+      req.headers["user-agent"],
+    );
 
     return response;
   }
@@ -63,11 +70,18 @@ export class AuthController {
   })
   async register(
     @Body() dto: CreateUserDto,
+    @Req() req: express.Request,
     @Res({ passthrough: true }) res: express.Response,
   ) {
     const { refreshToken, ...response } = await this.authService.register(dto);
 
     this.authService.addRefreshTokenResponse(res, refreshToken);
+
+    await this.authService.recordSession(
+      response.user.id,
+      req.ip,
+      req.headers["user-agent"],
+    );
 
     return response;
   }

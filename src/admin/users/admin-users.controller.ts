@@ -22,6 +22,8 @@ import { AdminUserDetailsDto } from "./dto/admin-user-details.dto";
 import { AdminUserListItemDto } from "./dto/admin-user-list-item.dto";
 import { AdminUsersListResponseDto } from "./dto/admin-users-list-response.dto";
 import { AssignRoleDto } from "./dto/assign-role.dto";
+import { FetchUserEventsDto } from "./dto/fetch-user-events.dto";
+import { FetchUserEventsSummaryDto } from "./dto/fetch-user-events-summary.dto";
 import { FetchAdminUsersDto } from "./dto/fetch-admin-users.dto";
 
 @ApiTags("admin/users")
@@ -58,6 +60,41 @@ export class AdminUsersController {
   })
   async getUserById(@Param("id") id: string) {
     return this.adminUsersService.getUserById(id);
+  }
+
+  @AdminPermission(PermissionCode.CAN_VIEW_ANALYTICS)
+  @Get(":id/events")
+  @ApiOperation({
+    summary: "List user events",
+    description:
+      "Returns paginated user events with optional filters: type, dateFrom, dateTo.",
+  })
+  @ApiOkResponse({
+    description: "Object with items[], total, page, limit, skip.",
+  })
+  async getUserEvents(
+    @Param("id") id: string,
+    @Query() query: FetchUserEventsDto,
+  ) {
+    return this.adminUsersService.getUserEvents(id, query);
+  }
+
+  @AdminPermission(PermissionCode.CAN_VIEW_ANALYTICS)
+  @Get(":id/events/summary")
+  @ApiOperation({
+    summary: "User events summary",
+    description:
+      "Returns aggregated counters and top lists (e.g. FAIL_LOOKUP by normalized).",
+  })
+  @ApiOkResponse({
+    description:
+      "Summary object: counts by type + topFailLookups/topClicks arrays.",
+  })
+  async getUserEventsSummary(
+    @Param("id") id: string,
+    @Query() query: FetchUserEventsSummaryDto,
+  ) {
+    return this.adminUsersService.getUserEventsSummary(id, query);
   }
 
   @AdminPermission(PermissionCode.CAN_MANAGE_USERS)

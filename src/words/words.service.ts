@@ -24,7 +24,7 @@ export class WordsService {
         baseForm: info.baseForm ?? null,
       };
     }
-    const byWord = await this.wordLookupByWordService.lookup(info.normalized);
+    const byWord = await this.wordLookupByWordService.lookup(info.normalized, userId);
     const result = {
       translation: byWord.translation ?? null,
       grammar: byWord.grammar ?? null,

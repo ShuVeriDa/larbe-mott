@@ -6,6 +6,8 @@ import { AdminUserListItemDto } from "./dto/admin-user-list-item.dto";
 import { AdminUserStatusDto } from "./dto/admin-user-status.dto";
 import { AdminUsersListResponseDto } from "./dto/admin-users-list-response.dto";
 import { FetchAdminUsersDto } from "./dto/fetch-admin-users.dto";
+import { FetchUserEventsDto } from "./dto/fetch-user-events.dto";
+import { FetchUserEventsSummaryDto } from "./dto/fetch-user-events-summary.dto";
 import { UserAnalyticsService } from "./user-analytics.service";
 
 @Injectable()
@@ -161,6 +163,100 @@ export class AdminUsersService {
         hashedRefreshToken: null,
       },
     });
+  }
+
+  async getUserEvents(userId: string, query: FetchUserEventsDto) {
+    const page = Math.max(1, query.page ?? 1);
+    const limit = Math.min(200, Math.max(1, query.limit ?? 50));
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.UserEventWhereInput = {
+      userId,
+      ...(query.type ? { type: query.type } : {}),
+      ...(query.dateFrom || query.dateTo
+        ? {
+            createdAt: {
+              ...(query.dateFrom ? { gte: new Date(query.dateFrom) } : {}),
+              ...(query.dateTo ? { lte: new Date(query.dateTo) } : {}),
+            },
+          }
+        : {}),
+    };
+
+    const [items, total] = await Promise.all([
+      this.prisma.userEvent.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      this.prisma.userEvent.count({ where }),
+    ]);
+
+    return { items, total, page, limit, skip };
+  }
+
+  async getUserEventsSummary(userId: string, query: FetchUserEventsSummaryDto) {
+    const where: Prisma.UserEventWhereInput = {
+      userId,
+      ...(query.dateFrom || query.dateTo
+        ? {
+            createdAt: {
+              ...(query.dateFrom ? { gte: new Date(query.dateFrom) } : {}),
+              ...(query.dateTo ? { lte: new Date(query.dateTo) } : {}),
+            },
+          }
+        : {}),
+    };
+
+    const events = await this.prisma.userEvent.findMany({
+      where,
+      select: { type: true, metadata: true },
+    });
+
+    const counts: Record<string, number> = {};
+    const failByNormalized = new Map<string, number>();
+    const clicksByNormalized = new Map<string, number>();
+
+    for (const e of events) {
+      counts[e.type] = (counts[e.type] ?? 0) + 1;
+
+      const md = e.metadata as any;
+      const normalized = md?.normalized;
+
+      if (e.type === "FAIL_LOOKUP" && typeof normalized === "string") {
+        failByNormalized.set(
+          normalized,
+          (failByNormalized.get(normalized) ?? 0) + 1,
+        );
+      }
+
+      if (e.type === "CLICK_WORD" && typeof normalized === "string") {
+        clicksByNormalized.set(
+          normalized,
+          (clicksByNormalized.get(normalized) ?? 0) + 1,
+        );
+      }
+    }
+
+    const topFailLookups = Array.from(failByNormalized.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 20)
+      .map(([normalized, count]) => ({ normalized, count }));
+
+    const topClicks = Array.from(clicksByNormalized.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 20)
+      .map(([normalized, count]) => ({ normalized, count }));
+
+    return {
+      counts,
+      // Handy aliases for dashboard strings:
+      clickWordCount: counts["CLICK_WORD"] ?? 0,
+      dictionaryLookupFailedCount: counts["FAIL_LOOKUP"] ?? 0,
+      topFailLookups,
+      topClicks,
+    };
   }
 
   async getUserRoles(userId: string) {

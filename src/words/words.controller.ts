@@ -50,7 +50,10 @@ export class WordsController {
   @ApiOkResponse({
     description: "translation, grammar, baseForm",
   })
-  async lookupByWord(@Body() dto: WordLookupByWordDto) {
-    return this.wordLookupByWordService.lookup(dto.normalized);
+  async lookupByWord(
+    @Body() dto: WordLookupByWordDto,
+    @User("id") userId: string,
+  ) {
+    return this.wordLookupByWordService.lookup(dto.normalized, userId);
   }
 }
