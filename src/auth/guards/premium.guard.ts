@@ -4,8 +4,10 @@ import {
   ForbiddenException,
   Injectable,
 } from "@nestjs/common";
-import { PlanType, SubscriptionStatus, User as UserPrisma } from "@prisma/client";
+import { PlanType, RoleName, SubscriptionStatus, User as UserPrisma } from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
+
+const PRIVILEGED_ROLES = new Set([RoleName.ADMIN, RoleName.SUPERADMIN]);
 
 @Injectable()
 export class PremiumGuard implements CanActivate {
@@ -19,6 +21,14 @@ export class PremiumGuard implements CanActivate {
 
     if (!userId) {
       throw new ForbiddenException("Access denied");
+    }
+
+    const adminRole = await this.prisma.userRoleAssignment.findFirst({
+      where: { userId, role: { name: { in: [...PRIVILEGED_ROLES] } } },
+    });
+
+    if (adminRole) {
+      return true;
     }
 
     const activeSubscription = await this.prisma.subscription.findFirst({
