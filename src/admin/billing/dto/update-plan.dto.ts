@@ -5,11 +5,12 @@ import {
   IsBoolean,
   IsEnum,
   IsInt,
-  IsObject,
   IsOptional,
   IsString,
   Min,
+  ValidateNested,
 } from "class-validator";
+import { PlanLimits } from "src/billing/plan-limits";
 
 export class UpdatePlanDto {
   @ApiPropertyOptional({ description: "Plan name", example: "Pro" })
@@ -48,11 +49,12 @@ export class UpdatePlanDto {
   isActive?: boolean;
 
   @ApiPropertyOptional({
-    description: "Plan limits/features payload (stored as JSON)",
-    example: { texts: "unlimited", aiTranslation: true },
+    description: "Plan feature flags",
+    type: () => PlanLimits,
   })
   @IsOptional()
-  @IsObject()
-  limits?: Record<string, unknown>;
+  @ValidateNested()
+  @Type(() => PlanLimits)
+  limits?: PlanLimits;
 }
 

@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import {
   CouponType,
   PaymentStatus,
@@ -6,13 +10,13 @@ import {
   SubscriptionStatus,
 } from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
+import { CreateCouponDto } from "./dto/create-coupon.dto";
 import { CreatePlanDto } from "./dto/create-plan.dto";
-import { UpdatePlanDto } from "./dto/update-plan.dto";
 import { CreateSubscriptionDto } from "./dto/create-subscription.dto";
 import { ExtendSubscriptionDto } from "./dto/extend-subscription.dto";
 import { RefundPaymentDto } from "./dto/refund-payment.dto";
-import { CreateCouponDto } from "./dto/create-coupon.dto";
 import { UpdateCouponDto } from "./dto/update-coupon.dto";
+import { UpdatePlanDto } from "./dto/update-plan.dto";
 
 @Injectable()
 export class AdminBillingService {
@@ -33,7 +37,7 @@ export class AdminBillingService {
         currency: dto.currency ?? "USD",
         interval: dto.interval ?? null,
         isActive: dto.isActive ?? true,
-        limits: (dto.limits ?? null) as Prisma.InputJsonValue,
+        limits: (dto.limits ?? null) as unknown as Prisma.InputJsonValue,
       },
     });
   }
@@ -52,7 +56,7 @@ export class AdminBillingService {
         ...(dto.interval !== undefined && { interval: dto.interval }),
         ...(dto.isActive !== undefined && { isActive: dto.isActive }),
         ...(dto.limits !== undefined && {
-          limits: dto.limits as Prisma.InputJsonValue,
+          limits: dto.limits as unknown as Prisma.InputJsonValue,
         }),
       },
     });
@@ -106,7 +110,9 @@ export class AdminBillingService {
   }
 
   async cancelSubscription(id: string) {
-    const existing = await this.prisma.subscription.findUnique({ where: { id } });
+    const existing = await this.prisma.subscription.findUnique({
+      where: { id },
+    });
     if (!existing) throw new NotFoundException("Subscription not found");
 
     return this.prisma.subscription.update({
@@ -120,14 +126,18 @@ export class AdminBillingService {
   }
 
   async extendSubscription(id: string, dto: ExtendSubscriptionDto) {
-    const existing = await this.prisma.subscription.findUnique({ where: { id } });
+    const existing = await this.prisma.subscription.findUnique({
+      where: { id },
+    });
     if (!existing) throw new NotFoundException("Subscription not found");
     if (existing.isLifetime) {
       throw new BadRequestException("Lifetime subscription cannot be extended");
     }
 
     const base = existing.endDate ?? new Date();
-    const endDate = new Date(base.getTime() + dto.extendDays * 24 * 60 * 60 * 1000);
+    const endDate = new Date(
+      base.getTime() + dto.extendDays * 24 * 60 * 60 * 1000,
+    );
 
     return this.prisma.subscription.update({
       where: { id },
@@ -236,7 +246,10 @@ export class AdminBillingService {
       throw new BadRequestException("Coupon expired");
     }
 
-    if (coupon.maxRedemptions !== null && coupon.redeemedCount >= coupon.maxRedemptions) {
+    if (
+      coupon.maxRedemptions !== null &&
+      coupon.redeemedCount >= coupon.maxRedemptions
+    ) {
       throw new BadRequestException("Coupon redemption limit reached");
     }
 
@@ -257,4 +270,3 @@ export class AdminBillingService {
     });
   }
 }
-

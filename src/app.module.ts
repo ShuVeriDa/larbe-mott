@@ -9,6 +9,8 @@ import { ProgressModule } from "./progress/progress.module";
 import { WordsModule } from "./words/words.module";
 import { DictionaryModule } from './dictionary/dictionary.module';
 import { AdminModule } from './admin/admin.module';
+import { SubscriptionModule } from './subscription/subscription.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 
 @Module({
   imports: [
@@ -22,6 +24,8 @@ import { AdminModule } from './admin/admin.module';
     WordsModule,
     DictionaryModule,
     AdminModule,
+    SubscriptionModule,
+    AnalyticsModule,
   ],
   controllers: [],
   providers: [],

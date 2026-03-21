@@ -9,6 +9,7 @@ import {
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
 import { Auth } from "src/auth/decorators/auth.decorator";
+import { RequiresPremium } from "src/auth/decorators/premium.decorator";
 import { User } from "src/user/decorators/user.decorator";
 import { TextProgressService } from "./text-progress/text-progress.service";
 import { WordProgressService } from "./word-progress/word-progress.service";
@@ -41,11 +42,11 @@ export class ProgressController {
 
   // ─── review — статичный маршрут ВЫШЕ параметрического ────────────────────────
 
-  @Auth()
+  @RequiresPremium()
   @Get("review/due")
   @ApiOperation({
     summary: "Get words due for review",
-    description: "Returns words scheduled for spaced repetition review today.",
+    description: "Returns words scheduled for spaced repetition review today. Requires Premium.",
   })
   @ApiQuery({ name: "limit", required: false, description: "Max words to return (default 20)" })
   @ApiOkResponse({ description: "List of words due for review with lemma info." })
@@ -57,11 +58,11 @@ export class ProgressController {
     return this.wordProgress.getDueWords(userId, Number.isFinite(parsed) && parsed > 0 ? parsed : 20);
   }
 
-  @Auth()
+  @RequiresPremium()
   @Post("review/:lemmaId")
   @ApiOperation({
     summary: "Submit word review result",
-    description: "Processes SM-2 algorithm with quality score (0-5). 0-2 = fail, 3-5 = pass.",
+    description: "Processes SM-2 algorithm with quality score (0-5). 0-2 = fail, 3-5 = pass. Requires Premium.",
   })
   @ApiParam({ name: "lemmaId", description: "Lemma ID" })
   @ApiOkResponse({ description: "Updated word progress record." })
@@ -75,11 +76,11 @@ export class ProgressController {
 
   // ─── words ───────────────────────────────────────────────────────────────────
 
-  @Auth()
+  @RequiresPremium()
   @Get("words/:lemmaId/contexts")
   @ApiOperation({
     summary: "Get word contexts",
-    description: "Returns all text snippets where the user encountered this word.",
+    description: "Returns all text snippets where the user encountered this word. Requires Premium.",
   })
   @ApiParam({ name: "lemmaId", description: "Lemma ID" })
   @ApiOkResponse({ description: "List of context entries with snippet and source text." })

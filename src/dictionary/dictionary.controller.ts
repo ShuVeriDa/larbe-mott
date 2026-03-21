@@ -16,6 +16,7 @@ import {
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
 import { Auth } from "src/auth/decorators/auth.decorator";
+import { RequiresPremium } from "src/auth/decorators/premium.decorator";
 import { User } from "src/user/decorators/user.decorator";
 import { DictionaryService } from "./dictionary.service";
 import { CreateDictionaryEntryDto } from "./dto/create-dictionary-entry.dto";
@@ -57,10 +58,10 @@ export class DictionaryController {
   }
 
   @Get("folders")
-  @Auth()
+  @RequiresPremium()
   @ApiOperation({
     summary: "Get all dictionary folders",
-    description: "Get all dictionary folders for the authenticated user",
+    description: "Get all dictionary folders for the authenticated user. Requires Premium.",
   })
   @ApiOkResponse({ description: "All dictionary folders" })
   async getDictionaryFolders(@User("id") userId: string) {
@@ -68,10 +69,10 @@ export class DictionaryController {
   }
 
   @Get("folders/:id")
-  @Auth()
+  @RequiresPremium()
   @ApiOperation({
     summary: "Get a dictionary folder by ID",
-    description: "Get a dictionary folder by ID for the authenticated user",
+    description: "Get a dictionary folder by ID for the authenticated user. Requires Premium.",
   })
   @ApiOkResponse({ description: "Dictionary folder" })
   @ApiNotFoundResponse({ description: "Dictionary folder not found" })
@@ -131,10 +132,10 @@ export class DictionaryController {
   }
 
   @Patch("folders/:id")
-  @Auth()
+  @RequiresPremium()
   @ApiOperation({
     summary: "Update a dictionary folder",
-    description: "Update a dictionary folder for the authenticated user",
+    description: "Update a dictionary folder for the authenticated user. Requires Premium.",
   })
   @ApiOkResponse({ description: "Dictionary folder updated" })
   async updateDictionaryFolder(
@@ -150,10 +151,10 @@ export class DictionaryController {
   }
 
   @Post("folders")
-  @Auth()
+  @RequiresPremium()
   @ApiOperation({
     summary: "Create a new dictionary folder",
-    description: "Create a new dictionary folder for the authenticated user",
+    description: "Create a new dictionary folder for the authenticated user. Requires Premium.",
   })
   @ApiOkResponse({ description: "Dictionary folder created" })
   async createDictionaryFolder(
@@ -192,10 +193,10 @@ export class DictionaryController {
   }
 
   @Delete("folders/:id")
-  @Auth()
+  @RequiresPremium()
   @ApiOperation({
     summary: "Delete a dictionary folder",
-    description: "Delete a dictionary folder for the authenticated user",
+    description: "Delete a dictionary folder for the authenticated user. Requires Premium.",
   })
   @ApiOkResponse({ description: "Dictionary folder deleted" })
   async deleteDictionaryFolder(

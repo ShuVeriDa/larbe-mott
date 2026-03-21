@@ -3,7 +3,8 @@
     "allow": [
       "Bash(xargs grep:*)",
       "Bash(npx prisma:*)",
-      "Bash(find f:/programming/mott-larbe/mott-larbe-backend/src/admin -type f -name *.service.ts)"
+      "Bash(find f:/programming/mott-larbe/mott-larbe-backend/src/admin -type f -name *.service.ts)",
+      "Bash(find /f/programming/mott-larbe/mott-larbe-backend/src -name *guard* -o -name *permission*)"
     ]
   }
 }

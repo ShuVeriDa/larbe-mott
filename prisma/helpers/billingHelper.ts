@@ -1,6 +1,7 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PlanType, PrismaClient } from "@prisma/client";
 import "dotenv/config";
+import type { PlanLimits } from "../../src/billing/plan-limits";
 
 const connectionString = process.env["DATABASE_URL"];
 if (!connectionString) {
@@ -20,78 +21,44 @@ export async function seedPlans() {
       interval: null,
       isActive: true,
       limits: {
-        texts: 5,
-        dictionary: "limited",
-        offline: false,
-        importTexts: false,
-        aiTranslation: false,
-      },
-    },
-    {
-      code: "BASIC_MONTHLY",
-      name: "Basic",
-      type: PlanType.BASIC,
-      priceCents: 999,
-      currency: "USD",
-      interval: "month",
-      isActive: true,
-      limits: {
-        texts: 50,
-        dictionary: "full",
-        offline: false,
-        importTexts: true,
-        aiTranslation: false,
-      },
-    },
-    {
-      code: "PRO_MONTHLY",
-      name: "Pro",
-      type: PlanType.PRO,
-      priceCents: 1999,
-      currency: "USD",
-      interval: "month",
-      isActive: true,
-      limits: {
-        texts: "unlimited",
-        dictionary: "full",
-        offline: true,
-        importTexts: true,
-        aiTranslation: true,
-      },
+        // Чтение
+        readTexts: true,         // Чтение текстов
+        wordTranslation: true,   // Перевод слов по клику
+        tokenAnalysis: true,     // Грамматика / базовая форма слова
+        // Словарь
+        personalDictionary: true,   // Личный словарь (добавление слов)
+        dictionaryFolders: false,   // Папки в словаре
+        // Прогресс
+        textProgress: true,         // Прогресс чтения текстов (%)
+        spaceRepetition: false,     // Интервальные повторения (SM-2)
+        wordContexts: false,        // Контексты слов (фрагменты из текстов)
+        // Аналитика
+        analytics: false,           // Личная аналитика и статистика
+      } satisfies PlanLimits,
     },
     {
       code: "PREMIUM_MONTHLY",
       name: "Premium",
       type: PlanType.PREMIUM,
-      priceCents: 2999,
+      priceCents: 999,
       currency: "USD",
       interval: "month",
       isActive: true,
       limits: {
-        texts: "unlimited",
-        dictionary: "full",
-        offline: true,
-        importTexts: true,
-        aiTranslation: true,
-        advancedStatistics: true,
-      },
-    },
-    {
-      code: "LIFETIME",
-      name: "Lifetime",
-      type: PlanType.LIFETIME,
-      priceCents: 19900,
-      currency: "USD",
-      interval: null,
-      isActive: true,
-      limits: {
-        texts: "unlimited",
-        dictionary: "full",
-        offline: true,
-        importTexts: true,
-        aiTranslation: true,
-        advancedStatistics: true,
-      },
+        // Чтение
+        readTexts: true,         // Чтение текстов
+        wordTranslation: true,   // Перевод слов по клику
+        tokenAnalysis: true,     // Грамматика / базовая форма слова
+        // Словарь
+        personalDictionary: true,   // Личный словарь (добавление слов)
+        dictionaryFolders: true,    // Папки в словаре
+        // Прогресс
+        textProgress: true,         // Прогресс чтения текстов (%)
+        spaceRepetition: true,      // Интервальные повторения (SM-2)
+        wordContexts: true,         // Контексты слов (фрагменты из текстов)
+        // Аналитика
+        analytics: true,            // Личная аналитика и статистика
+      } satisfies PlanLimits,
     },
   ] as const;
 
