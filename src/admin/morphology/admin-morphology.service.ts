@@ -5,20 +5,24 @@ import {
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { normalizeToken } from "src/markup-engine/tokenizer/tokenizer.utils";
+import { MorphologyRuleEngine } from "src/markup-engine/morphology/rule-engine.service";
 import { MorphologyService } from "src/markup-engine/morphology/morphology.service";
 import { PrismaService } from "src/prisma.service";
 import { AnalyzeWordDto } from "./dto/analyze-word.dto";
 import { CreateLemmaDto } from "./dto/create-lemma.dto";
 import { CreateMorphFormDto } from "./dto/create-morph-form.dto";
+import { CreateMorphologyRuleDto } from "./dto/create-morphology-rule.dto";
 import { FetchLemmasDto } from "./dto/fetch-lemmas.dto";
 import { UpdateLemmaDto } from "./dto/update-lemma.dto";
 import { UpdateMorphFormDto } from "./dto/update-morph-form.dto";
+import { UpdateMorphologyRuleDto } from "./dto/update-morphology-rule.dto";
 
 @Injectable()
 export class AdminMorphologyService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly morphology: MorphologyService,
+    private readonly ruleEngine: MorphologyRuleEngine,
   ) {}
 
   async getLemmas(query: FetchLemmasDto) {
@@ -143,5 +147,47 @@ export class AdminMorphologyService {
   async analyzeWord(dto: AnalyzeWordDto) {
     const result = await this.morphology.analyze(dto.word);
     return { word: dto.word, result };
+  }
+
+  // ─── Morphology Rules ──────────────────────────────────────────────────────
+
+  getRules() {
+    return this.prisma.morphologyRule.findMany({
+      orderBy: [{ type: "asc" }, { priority: "desc" }, { suffix: "asc" }],
+    });
+  }
+
+  async createRule(dto: CreateMorphologyRuleDto) {
+    const existing = await this.prisma.morphologyRule.findUnique({
+      where: { suffix_type: { suffix: dto.suffix, type: dto.type } },
+    });
+    if (existing) {
+      throw new ConflictException(`Rule "${dto.suffix}" (${dto.type}) already exists`);
+    }
+    const rule = await this.prisma.morphologyRule.create({
+      data: {
+        suffix: dto.suffix,
+        type: dto.type,
+        priority: dto.priority ?? 0,
+        isActive: dto.isActive ?? true,
+      },
+    });
+    await this.ruleEngine.reloadRules();
+    return rule;
+  }
+
+  async updateRule(id: string, dto: UpdateMorphologyRuleDto) {
+    const rule = await this.prisma.morphologyRule.findUnique({ where: { id } });
+    if (!rule) throw new NotFoundException("Rule not found");
+    const updated = await this.prisma.morphologyRule.update({ where: { id }, data: dto });
+    await this.ruleEngine.reloadRules();
+    return updated;
+  }
+
+  async deleteRule(id: string) {
+    const rule = await this.prisma.morphologyRule.findUnique({ where: { id } });
+    if (!rule) throw new NotFoundException("Rule not found");
+    await this.prisma.morphologyRule.delete({ where: { id } });
+    await this.ruleEngine.reloadRules();
   }
 }

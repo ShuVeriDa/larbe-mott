@@ -5,6 +5,6 @@ import { MorphologyService } from "./morphology.service";
 
 @Module({
   providers: [MorphologyService, MorphologyRuleEngine, PrismaService],
-  exports: [MorphologyService],
+  exports: [MorphologyService, MorphologyRuleEngine],
 })
 export class MorphologyModule {}

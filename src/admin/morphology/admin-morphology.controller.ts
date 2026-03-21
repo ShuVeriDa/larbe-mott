@@ -28,9 +28,11 @@ import { AdminMorphologyService } from "./admin-morphology.service";
 import { AnalyzeWordDto } from "./dto/analyze-word.dto";
 import { CreateLemmaDto } from "./dto/create-lemma.dto";
 import { CreateMorphFormDto } from "./dto/create-morph-form.dto";
+import { CreateMorphologyRuleDto } from "./dto/create-morphology-rule.dto";
 import { FetchLemmasDto } from "./dto/fetch-lemmas.dto";
 import { UpdateLemmaDto } from "./dto/update-lemma.dto";
 import { UpdateMorphFormDto } from "./dto/update-morph-form.dto";
+import { UpdateMorphologyRuleDto } from "./dto/update-morphology-rule.dto";
 
 @ApiTags("admin/morphology")
 @ApiBearerAuth()
@@ -129,6 +131,50 @@ export class AdminMorphologyController {
   @ApiForbiddenResponse({ description: "Forbidden" })
   async deleteMorphForm(@Param("id") id: string) {
     await this.service.deleteMorphForm(id);
+  }
+
+  // ─── Morphology Rules ──────────────────────────────────────────────────────
+
+  @AdminPermission(PermissionCode.CAN_EDIT_MORPHOLOGY)
+  @Get("rules")
+  @ApiOperation({ summary: "List all morphology rules" })
+  @ApiOkResponse({ description: "Array of MorphologyRule" })
+  @ApiForbiddenResponse({ description: "Forbidden" })
+  getRules() {
+    return this.service.getRules();
+  }
+
+  @AdminPermission(PermissionCode.CAN_EDIT_MORPHOLOGY)
+  @Post("rules")
+  @ApiOperation({ summary: "Create morphology rule" })
+  @ApiOkResponse({ description: "Created rule" })
+  @ApiConflictResponse({ description: "Rule with this suffix+type already exists" })
+  @ApiForbiddenResponse({ description: "Forbidden" })
+  createRule(@Body() dto: CreateMorphologyRuleDto) {
+    return this.service.createRule(dto);
+  }
+
+  @AdminPermission(PermissionCode.CAN_EDIT_MORPHOLOGY)
+  @Patch("rules/:id")
+  @ApiOperation({ summary: "Update morphology rule" })
+  @ApiParam({ name: "id", description: "Rule UUID" })
+  @ApiOkResponse({ description: "Updated rule" })
+  @ApiNotFoundResponse({ description: "Rule not found" })
+  @ApiForbiddenResponse({ description: "Forbidden" })
+  updateRule(@Param("id") id: string, @Body() dto: UpdateMorphologyRuleDto) {
+    return this.service.updateRule(id, dto);
+  }
+
+  @AdminPermission(PermissionCode.CAN_EDIT_MORPHOLOGY)
+  @Delete("rules/:id")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: "Delete morphology rule" })
+  @ApiParam({ name: "id", description: "Rule UUID" })
+  @ApiNoContentResponse({ description: "Deleted" })
+  @ApiNotFoundResponse({ description: "Rule not found" })
+  @ApiForbiddenResponse({ description: "Forbidden" })
+  async deleteRule(@Param("id") id: string) {
+    await this.service.deleteRule(id);
   }
 
   // ─── Analysis ──────────────────────────────────────────────────────────────

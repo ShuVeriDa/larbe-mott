@@ -119,6 +119,12 @@ enum AnalysisSource {
   MORPHOLOGY
 }
 
+enum MorphRuleType {
+  NOUN_CASE
+  PLURAL
+  VERB_PAST
+}
+
 enum UserStatus {
   ACTIVE
   BLOCKED
@@ -534,6 +540,26 @@ model Lemma {
   @@index([normalized])
   @@index([language, normalized])   // ← добавить
   @@map("lemma")
+}
+
+//////////////////////////////////////////////////////
+// MORPHOLOGY RULES
+//////////////////////////////////////////////////////
+
+model MorphologyRule {
+  id        String       @id @default(uuid())
+
+  suffix    String
+  type      MorphRuleType
+  priority  Int          @default(0)
+  isActive  Boolean      @default(true)
+
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@unique([suffix, type])
+  @@index([type, isActive])
+  @@map("morphology_rule")
 }
 
 //////////////////////////////////////////////////////
