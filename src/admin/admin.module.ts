@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { AuthModule } from "src/auth/auth.module";
 import { DictionaryModule } from "src/markup-engine/dictionary/dictionary.module";
+import { MorphologyModule } from "src/markup-engine/morphology/morphology.module";
 import { TokenizerModule } from "src/markup-engine/tokenizer/tokenizer.module";
 import { PrismaService } from "src/prisma.service";
 import { ProgressModule } from "src/progress/progress.module";
@@ -9,6 +10,8 @@ import { TokenModule } from "src/token/token.module";
 import { AdminController } from "./admin.controller";
 import { AdminService } from "./admin.service";
 import { AdminDictionaryController } from "./dictionary/admin-dictionary.controller";
+import { AdminMorphologyController } from "./morphology/admin-morphology.controller";
+import { AdminMorphologyService } from "./morphology/admin-morphology.service";
 import { AdminTextService } from "./text/admin-text.service";
 import { AdminTextsController } from "./text/admin-texts.controller";
 import { AdminTokensController } from "./token/admin-tokens.controller";
@@ -33,6 +36,7 @@ import { AdminFeatureFlagsService } from "./feature-flags/admin-feature-flags.se
     TokenizerModule,
     ProgressModule,
     DictionaryModule,
+    MorphologyModule,
   ],
   controllers: [
     AdminController,
@@ -44,6 +48,7 @@ import { AdminFeatureFlagsService } from "./feature-flags/admin-feature-flags.se
     AdminBillingController,
     AdminAnalyticsController,
     AdminFeatureFlagsController,
+    AdminMorphologyController,
   ],
   providers: [
     AdminService,
@@ -55,6 +60,7 @@ import { AdminFeatureFlagsService } from "./feature-flags/admin-feature-flags.se
     AdminBillingService,
     AdminAnalyticsService,
     AdminFeatureFlagsService,
+    AdminMorphologyService,
     PrismaService,
   ],
 })
