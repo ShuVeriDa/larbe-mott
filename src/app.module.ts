@@ -12,6 +12,7 @@ import { AdminModule } from './admin/admin.module';
 import { SubscriptionModule } from './subscription/subscription.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { DeckModule } from './deck/deck.module';
+import { FeedbackModule } from './feedback/feedback.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { DeckModule } from './deck/deck.module';
     SubscriptionModule,
     AnalyticsModule,
     DeckModule,
+    FeedbackModule,
   ],
   controllers: [],
   providers: [],

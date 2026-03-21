@@ -27,6 +27,8 @@ import { AdminAnalyticsController } from "./analytics/admin-analytics.controller
 import { AdminAnalyticsService } from "./analytics/admin-analytics.service";
 import { AdminFeatureFlagsController } from "./feature-flags/admin-feature-flags.controller";
 import { AdminFeatureFlagsService } from "./feature-flags/admin-feature-flags.service";
+import { AdminFeedbackController } from "./feedback/admin-feedback.controller";
+import { AdminFeedbackService } from "./feedback/admin-feedback.service";
 
 @Module({
   imports: [
@@ -49,6 +51,7 @@ import { AdminFeatureFlagsService } from "./feature-flags/admin-feature-flags.se
     AdminAnalyticsController,
     AdminFeatureFlagsController,
     AdminMorphologyController,
+    AdminFeedbackController,
   ],
   providers: [
     AdminService,
@@ -61,6 +64,7 @@ import { AdminFeatureFlagsService } from "./feature-flags/admin-feature-flags.se
     AdminAnalyticsService,
     AdminFeatureFlagsService,
     AdminMorphologyService,
+    AdminFeedbackService,
     PrismaService,
   ],
 })

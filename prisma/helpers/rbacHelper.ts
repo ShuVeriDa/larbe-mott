@@ -18,6 +18,7 @@ const ROLE_MATRIX: Record<RoleName, PermissionCode[]> = {
   SUPPORT: [
     PermissionCode.CAN_VIEW_ANALYTICS,
     PermissionCode.CAN_VIEW_LOGS,
+    PermissionCode.CAN_MANAGE_FEEDBACK,
   ],
   CONTENT: [PermissionCode.CAN_EDIT_TEXTS],
   LINGUIST: [PermissionCode.CAN_EDIT_DICTIONARY, PermissionCode.CAN_EDIT_MORPHOLOGY],
@@ -27,6 +28,7 @@ const ROLE_MATRIX: Record<RoleName, PermissionCode[]> = {
     PermissionCode.CAN_MANAGE_USERS,
     PermissionCode.CAN_VIEW_ANALYTICS,
     PermissionCode.CAN_VIEW_LOGS,
+    PermissionCode.CAN_MANAGE_FEEDBACK,
   ],
   SUPERADMIN: [
     PermissionCode.CAN_EDIT_TEXTS,
@@ -37,6 +39,7 @@ const ROLE_MATRIX: Record<RoleName, PermissionCode[]> = {
     PermissionCode.CAN_VIEW_ANALYTICS,
     PermissionCode.CAN_VIEW_LOGS,
     PermissionCode.CAN_MANAGE_FEATURE_FLAGS,
+    PermissionCode.CAN_MANAGE_FEEDBACK,
   ],
 };
 

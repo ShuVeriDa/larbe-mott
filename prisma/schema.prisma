@@ -45,6 +45,7 @@ enum PermissionCode {
   CAN_VIEW_ANALYTICS
   CAN_VIEW_LOGS
   CAN_MANAGE_FEATURE_FLAGS
+  CAN_MANAGE_FEEDBACK
 }
 
 //////////////////////////////////////////////////////
@@ -198,7 +199,10 @@ model User {
   sessions UserSession[]
   featureFlags UserFeatureFlag[]
 
-  @@index([status]) 
+  feedbackThreads   FeedbackThread[]   @relation("UserFeedbackThreads")
+  feedbackReactions FeedbackReaction[] @relation("UserFeedbackReactions")
+
+  @@index([status])
   @@index([language])
   @@index([level])
   @@map("users")
@@ -548,6 +552,9 @@ model Lemma {
   wordContexts  WordContext[]
   deckCards     UserDeckCard[] @relation("LemmaDeckCards")
 
+  feedbackThreads   FeedbackThread[]   @relation("LemmaFeedbackThreads")
+  feedbackReactions FeedbackReaction[] @relation("LemmaFeedbackReactions")
+
   @@unique([normalized, language])
   @@index([normalized])
   @@index([language, normalized])   // ← добавить
@@ -691,6 +698,9 @@ model Text {
   processingVersions TextProcessingVersion[]
   progress           UserTextProgress[]
   wordContexts       WordContext[]
+
+  feedbackThreads   FeedbackThread[]   @relation("TextFeedbackThreads")
+  feedbackReactions FeedbackReaction[] @relation("TextFeedbackReactions")
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -933,4 +943,103 @@ model UserDeckState {
   user                User @relation("UserDeckState", fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_deck_state")
+}
+
+//////////////////////////////////////////////////////
+// FEEDBACK
+//////////////////////////////////////////////////////
+
+enum FeedbackType {
+  QUESTION
+  BUG
+  IDEA
+  COMPLAINT
+}
+
+enum FeedbackStatus {
+  NEW
+  IN_PROGRESS
+  RESOLVED
+}
+
+enum FeedbackContextType {
+  WORD
+  SENTENCE
+  TEXT
+}
+
+enum ReactionType {
+  HELPFUL
+  NOT_HELPFUL
+  DIFFICULT
+}
+
+enum FeedbackAuthorType {
+  USER
+  ADMIN
+}
+
+model FeedbackThread {
+  id     String         @id @default(uuid())
+  userId String
+  type   FeedbackType
+  status FeedbackStatus @default(NEW)
+
+  // Context snapshot — what the user was looking at
+  contextType     FeedbackContextType?
+  contextWord     String?
+  contextSentence String?
+  contextLemmaId  String?
+  contextTextId   String?
+  contextPosition Int?
+  contextAction   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User   @relation("UserFeedbackThreads", fields: [userId], references: [id], onDelete: Cascade)
+  lemma    Lemma? @relation("LemmaFeedbackThreads", fields: [contextLemmaId], references: [id], onDelete: SetNull)
+  text     Text?  @relation("TextFeedbackThreads", fields: [contextTextId], references: [id], onDelete: SetNull)
+  messages FeedbackMessage[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+  @@map("feedback_thread")
+}
+
+model FeedbackMessage {
+  id         String             @id @default(uuid())
+  threadId   String
+  authorType FeedbackAuthorType
+  authorId   String
+  body       String             @db.Text
+
+  createdAt DateTime @default(now())
+
+  thread FeedbackThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId])
+  @@map("feedback_message")
+}
+
+model FeedbackReaction {
+  id     String       @id @default(uuid())
+  userId String
+  type   ReactionType
+
+  lemmaId String?
+  textId  String?
+
+  createdAt DateTime @default(now())
+
+  user  User   @relation("UserFeedbackReactions", fields: [userId], references: [id], onDelete: Cascade)
+  lemma Lemma? @relation("LemmaFeedbackReactions", fields: [lemmaId], references: [id], onDelete: Cascade)
+  text  Text?  @relation("TextFeedbackReactions", fields: [textId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([lemmaId])
+  @@index([textId])
+  @@map("feedback_reaction")
 }

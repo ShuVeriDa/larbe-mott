@@ -5,6 +5,7 @@ import { seedPlans } from "./helpers/billingHelper";
 import { createText } from "./helpers/textHelper";
 import { seedRolesAndPermissions } from "./helpers/rbacHelper";
 import { createFakeUsers, createTallarUser } from "./helpers/userHelper";
+import { seedFeedback } from "./helpers/feedbackHelper";
 
 dotenv.config();
 
@@ -21,12 +22,16 @@ async function up() {
   await createTallarUser();
   await createFakeUsers();
   await createText();
+  await seedFeedback();
 }
 
 async function down() {
   try {
     await prisma.$executeRaw`
       TRUNCATE TABLE
+        "feedback_reaction",
+        "feedback_message",
+        "feedback_thread",
         "coupon_redemption",
         "coupon",
         "payment",
