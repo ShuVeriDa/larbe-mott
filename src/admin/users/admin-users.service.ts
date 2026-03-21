@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma, RoleName, UserStatus } from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
 import { AdminUserDetailsDto } from "./dto/admin-user-details.dto";
@@ -130,38 +130,37 @@ export class AdminUsersService {
     id: string,
     dto: AdminUserStatusDto,
   ): Promise<AdminUserListItemDto> {
-    const user = await this.prisma.user.update({
+    const existing = await this.prisma.user.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("User not found");
+
+    await this.prisma.user.update({
       where: { id },
-      data: {
-        status: dto.status,
-        lastActiveAt: new Date(),
-        updatedAt: new Date(),
-      },
+      data: { status: dto.status, lastActiveAt: new Date(), updatedAt: new Date() },
     });
-    return this.getUserById(user.id);
+    return this.getUserById(id);
   }
 
   async deleteUser(
     id: string,
     dto: AdminUserStatusDto,
   ): Promise<AdminUserListItemDto> {
-    const user = await this.prisma.user.update({
+    const existing = await this.prisma.user.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("User not found");
+
+    await this.prisma.user.update({
       where: { id },
-      data: {
-        status: dto.status,
-        deletedAt: new Date(),
-        updatedAt: new Date(),
-      },
+      data: { status: dto.status, deletedAt: new Date(), updatedAt: new Date() },
     });
-    return this.getUserById(user.id);
+    return this.getUserById(id);
   }
 
   async logoutAllSessions(id: string): Promise<void> {
+    const existing = await this.prisma.user.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException("User not found");
+
     await this.prisma.user.update({
       where: { id },
-      data: {
-        hashedRefreshToken: null,
-      },
+      data: { hashedRefreshToken: null },
     });
   }
 
@@ -275,33 +274,35 @@ export class AdminUsersService {
   }
 
   async assignRole(userId: string, role: RoleName, assignedBy?: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException("User not found");
+
     const roleRow = await this.prisma.role.findUnique({
       where: { name: role },
       select: { id: true },
     });
-    if (!roleRow) {
-      throw new NotFoundException("Role not found");
-    }
+    if (!roleRow) throw new NotFoundException("Role not found");
+
+    const existing = await this.prisma.userRoleAssignment.findUnique({
+      where: { userId_roleId: { userId, roleId: roleRow.id } },
+    });
+    if (existing) throw new ConflictException("User already has this role");
 
     await this.prisma.userRoleAssignment.create({
-      data: {
-        userId,
-        roleId: roleRow.id,
-        assignedBy: assignedBy ?? null,
-      },
+      data: { userId, roleId: roleRow.id, assignedBy: assignedBy ?? null },
     });
 
     return this.getUserRoles(userId);
   }
 
   async revokeRole(userId: string, roleId: string) {
+    const existing = await this.prisma.userRoleAssignment.findUnique({
+      where: { userId_roleId: { userId, roleId } },
+    });
+    if (!existing) throw new NotFoundException("Role assignment not found");
+
     await this.prisma.userRoleAssignment.delete({
-      where: {
-        userId_roleId: {
-          userId,
-          roleId,
-        },
-      },
+      where: { userId_roleId: { userId, roleId } },
     });
     return this.getUserRoles(userId);
   }

@@ -39,6 +39,9 @@ export class AdminBillingService {
   }
 
   async updatePlan(id: string, dto: UpdatePlanDto) {
+    const plan = await this.prisma.plan.findUnique({ where: { id } });
+    if (!plan) throw new NotFoundException("Plan not found");
+
     return this.prisma.plan.update({
       where: { id },
       data: {
@@ -191,6 +194,9 @@ export class AdminBillingService {
   }
 
   async updateCoupon(id: string, dto: UpdateCouponDto) {
+    const coupon = await this.prisma.coupon.findUnique({ where: { id } });
+    if (!coupon) throw new NotFoundException("Coupon not found");
+
     if (dto.type === CouponType.PERCENT && dto.amount && dto.amount > 100) {
       throw new BadRequestException("Percent coupon amount must be <= 100");
     }

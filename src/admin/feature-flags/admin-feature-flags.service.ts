@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
 import { CreateFeatureFlagDto } from "./dto/create-feature-flag.dto";
@@ -29,7 +29,10 @@ export class AdminFeatureFlagsService {
     });
   }
 
-  updateFlag(id: string, dto: UpdateFeatureFlagDto) {
+  async updateFlag(id: string, dto: UpdateFeatureFlagDto) {
+    const flag = await this.prisma.featureFlag.findUnique({ where: { id } });
+    if (!flag) throw new NotFoundException("Feature flag not found");
+
     return this.prisma.featureFlag.update({
       where: { id },
       data: {
@@ -85,7 +88,7 @@ export class AdminFeatureFlagsService {
         e instanceof Prisma.PrismaClientKnownRequestError &&
         e.code === "P2025"
       ) {
-        throw new BadRequestException("Override does not exist");
+        throw new NotFoundException("Override does not exist");
       }
       throw e;
     }
