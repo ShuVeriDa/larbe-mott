@@ -11,6 +11,7 @@ import { DictionaryModule } from './dictionary/dictionary.module';
 import { AdminModule } from './admin/admin.module';
 import { SubscriptionModule } from './subscription/subscription.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { DeckModule } from './deck/deck.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
     AdminModule,
     SubscriptionModule,
     AnalyticsModule,
+    DeckModule,
   ],
   controllers: [],
   providers: [],

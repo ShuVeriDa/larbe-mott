@@ -133,7 +133,15 @@ export class AdminMorphologyService {
       data.normalized = normalizeToken(dto.form);
     }
     if (dto.grammarTag !== undefined) data.grammarTag = dto.grammarTag;
-    return this.prisma.morphForm.update({ where: { id: formId }, data });
+
+    try {
+      return await this.prisma.morphForm.update({ where: { id: formId }, data });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+        throw new ConflictException("A form with this normalized value already exists for this lemma");
+      }
+      throw e;
+    }
   }
 
   async deleteMorphForm(formId: string) {

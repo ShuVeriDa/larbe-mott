@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { hash } from "argon2";
 import { PrismaService } from "../prisma.service";
@@ -42,9 +42,14 @@ export class UserService {
   async create(dto: CreateUserDto) {
     const user = await this.userObj(dto);
 
-    return this.prisma.user.create({
-      data: user,
-    });
+    try {
+      return await this.prisma.user.create({ data: user });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+        throw new ConflictException("User with this email or username already exists");
+      }
+      throw e;
+    }
   }
 
   async deleteUser(userId: string) {
@@ -72,17 +77,25 @@ export class UserService {
 
     const password = dto.password ? await hash(dto.password) : undefined;
 
-    const createdUser = await this.prisma.user.update({
-      where: { id: user.id },
-      data: {
-        email: dto.email,
-        password: password,
-        name: dto.name,
-        surname: dto.surname,
-        username: dto.username,
-        phone: dto.phone,
-      },
-    });
+    let createdUser: Awaited<ReturnType<typeof this.prisma.user.update>>;
+    try {
+      createdUser = await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          email: dto.email,
+          password: password,
+          name: dto.name,
+          surname: dto.surname,
+          username: dto.username,
+          phone: dto.phone,
+        },
+      });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+        throw new ConflictException("Email or username is already taken");
+      }
+      throw e;
+    }
 
     const {
       password: _,

@@ -1,5 +1,5 @@
 import {
-  BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -44,7 +44,7 @@ export class FoldersService {
         },
       });
     if (existingFolder) {
-      throw new BadRequestException("Dictionary folder already exists");
+      throw new ConflictException("Dictionary folder already exists");
     }
 
     return await this.prismaService.userDictionaryFolder.create({
@@ -61,9 +61,6 @@ export class FoldersService {
     userId: string,
   ) {
     const folder = await this.getUserDictionaryFolder(id, userId);
-    if (!folder) {
-      throw new NotFoundException("Dictionary folder not found");
-    }
     const data: { name?: string; sortOrder?: number } = {};
     if (dto.name !== undefined) data.name = dto.name;
     if (dto.sortOrder !== undefined) data.sortOrder = dto.sortOrder;

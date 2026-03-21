@@ -106,6 +106,13 @@ enum WordStatus {
   KNOWN
 }
 
+enum DeckType {
+  NEW
+  OLD
+  RETIRED
+  NUMBERED
+}
+
 enum TokenStatus {
   ANALYZED
   AMBIGUOUS
@@ -160,6 +167,8 @@ model User {
 
   wordProgress  UserWordProgress[]
   textProgress  UserTextProgress[]
+  deckCards     UserDeckCard[]     @relation("UserDeckCards")
+  deckState     UserDeckState?     @relation("UserDeckState")
   dictionaryEntries DictionaryEntry[] @relation("DictionaryEntryCreator")
   userDictionaryEntries UserDictionaryEntry[] @relation("UserDictionaryEntryUser")
   userDictionaryFolders UserDictionaryFolder[] @relation("UserDictionaryFolderUser")
@@ -537,6 +546,7 @@ model Lemma {
   vocabulary TextVocabulary[]
   wordProgress  UserWordProgress[]
   wordContexts  WordContext[]
+  deckCards     UserDeckCard[] @relation("LemmaDeckCards")
 
   @@unique([normalized, language])
   @@index([normalized])
@@ -889,4 +899,38 @@ model UserTextProgress {
   @@index([userId])
   @@index([textId])
   @@map("user_text_progress")
+}
+
+//////////////////////////////////////////////////////
+// DECK METHOD (авторский метод заучивания слов)
+//////////////////////////////////////////////////////
+
+model UserDeckCard {
+  id         String   @id @default(cuid())
+
+  userId     String
+  lemmaId    String
+  deckType   DeckType
+  deckNumber Int?     // только для deckType = NUMBERED
+
+  movedAt    DateTime @default(now()) // когда перемещено в текущую колоду
+
+  user       User  @relation("UserDeckCards", fields: [userId], references: [id], onDelete: Cascade)
+  lemma      Lemma @relation("LemmaDeckCards", fields: [lemmaId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lemmaId])
+  @@index([userId, deckType])
+  @@index([userId, deckType, movedAt])
+  @@map("user_deck_card")
+}
+
+model UserDeckState {
+  userId              String    @id
+
+  currentNumberedDeck Int       @default(1)
+  lastRotatedAt       DateTime?
+
+  user                User @relation("UserDeckState", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_deck_state")
 }

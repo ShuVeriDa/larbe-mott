@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
 import { CreateFeatureFlagDto } from "./dto/create-feature-flag.dto";
@@ -19,7 +19,10 @@ export class AdminFeatureFlagsService {
     });
   }
 
-  createFlag(dto: CreateFeatureFlagDto) {
+  async createFlag(dto: CreateFeatureFlagDto) {
+    const existing = await this.prisma.featureFlag.findUnique({ where: { key: dto.key } });
+    if (existing) throw new ConflictException(`Feature flag "${dto.key}" already exists`);
+
     return this.prisma.featureFlag.create({
       data: {
         key: dto.key,
