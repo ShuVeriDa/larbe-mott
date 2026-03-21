@@ -167,6 +167,7 @@ model User {
   texts Text[] @relation("text")
 
   events UserEvent[] @relation("UserEventUser")
+  wordContexts WordContext[]
 
   status        UserStatus @default(ACTIVE)
   language      Language? @default(CHE)
@@ -535,6 +536,7 @@ model Lemma {
   tokenAnalyses TokenAnalysis[] @relation("TokenLemma")
   vocabulary TextVocabulary[]
   wordProgress  UserWordProgress[]
+  wordContexts  WordContext[]
 
   @@unique([normalized, language])
   @@index([normalized])
@@ -678,6 +680,7 @@ model Text {
 
   processingVersions TextProcessingVersion[]
   progress           UserTextProgress[]
+  wordContexts       WordContext[]
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -828,16 +831,42 @@ model UserWordProgress {
   lastSeen    DateTime?
   nextReview  DateTime?
 
-  easeFactor  Float?
-  interval    Int?
+  easeFactor  Float      @default(2.5)
+  interval    Int        @default(0)
 
   user        User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   lemma       Lemma @relation(fields: [lemmaId], references: [id], onDelete: Cascade)
 
   @@unique([userId, lemmaId])
   @@index([userId])
+  @@index([userId, nextReview])
   @@index([lemmaId])
   @@map("user_word_progress")
+}
+
+//////////////////////////////////////////////////////
+// WORD CONTEXTS
+//////////////////////////////////////////////////////
+
+model WordContext {
+  id      String   @id @default(cuid())
+
+  userId  String
+  lemmaId String
+  textId  String
+
+  word    String
+  snippet String?
+
+  seenAt  DateTime @default(now())
+
+  user    User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lemma   Lemma @relation(fields: [lemmaId], references: [id], onDelete: Cascade)
+  text    Text  @relation(fields: [textId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lemmaId, textId])
+  @@index([userId, lemmaId])
+  @@map("word_context")
 }
 
 //////////////////////////////////////////////////////

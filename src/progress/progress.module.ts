@@ -11,3 +11,4 @@ import { WordProgressModule } from "./word-progress/word-progress.module";
   exports: [ProgressService, WordProgressModule, TextProgressModule],
 })
 export class ProgressModule {}
+

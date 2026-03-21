@@ -1,9 +1,10 @@
-import { Body, Controller, Post } from "@nestjs/common";
+import { Body, Controller, Get, Param, Post } from "@nestjs/common";
 import {
   ApiBearerAuth,
   ApiBody,
   ApiOkResponse,
   ApiOperation,
+  ApiParam,
   ApiTags,
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
@@ -11,6 +12,7 @@ import { Auth } from "src/auth/decorators/auth.decorator";
 import { User } from "src/user/decorators/user.decorator";
 import { WordLookupByWordDto } from "./dto/lookup-by-word.dto";
 import { WordLookupDto } from "./dto/lookup.dto";
+import { WordExamplesService } from "./word-examples.service";
 import { WordLookupByWordService } from "./word-lookup-by-word.service";
 import { WordsService } from "./words.service";
 
@@ -22,6 +24,7 @@ export class WordsController {
   constructor(
     private readonly wordsService: WordsService,
     private readonly wordLookupByWordService: WordLookupByWordService,
+    private readonly wordExamplesService: WordExamplesService,
   ) {}
 
   @Post("lookup")
@@ -37,6 +40,19 @@ export class WordsController {
   })
   async lookup(@Body() dto: WordLookupDto, @User("id") userId: string) {
     return this.wordsService.lookup(dto.tokenId, userId);
+  }
+
+  @Auth()
+  @Get(":lemmaId/examples")
+  @ApiOperation({
+    summary: "Корпусные примеры употребления слова",
+    description:
+      "Возвращает до 10 сниппетов из разных текстов базы, где встречается данная лемма. Не зависит от истории пользователя.",
+  })
+  @ApiParam({ name: "lemmaId", description: "Lemma ID" })
+  @ApiOkResponse({ description: "Список сниппетов с указанием источника." })
+  async getExamples(@Param("lemmaId") lemmaId: string) {
+    return this.wordExamplesService.getExamples(lemmaId);
   }
 
   @Post("lookup-by-word")

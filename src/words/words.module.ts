@@ -6,6 +6,7 @@ import { OnlineDictionaryModule } from "src/markup-engine/online-dictionary/onli
 import { UnknownWordModule } from "src/markup-engine/unknown-word/unknown-word.module";
 import { PrismaService } from "src/prisma.service";
 import { TokenModule } from "src/token/token.module";
+import { WordExamplesService } from "./word-examples.service";
 import { WordLookupByWordService } from "./word-lookup-by-word.service";
 import { WordsController } from "./words.controller";
 import { WordsService } from "./words.service";
@@ -20,6 +21,6 @@ import { WordsService } from "./words.service";
     UnknownWordModule,
   ],
   controllers: [WordsController],
-  providers: [WordsService, WordLookupByWordService, PrismaService],
+  providers: [WordsService, WordLookupByWordService, WordExamplesService, PrismaService],
 })
 export class WordsModule {}

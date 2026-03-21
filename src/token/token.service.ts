@@ -32,6 +32,9 @@ export class TokenService {
             },
           },
         });
+        if (cached.textId) {
+          void this.wordProgress.saveContext(userId, cached.lemmaId, cached.textId, cached.word, tokenId);
+        }
       }
       return cached;
     }
@@ -93,6 +96,7 @@ export class TokenService {
             },
           },
         });
+        void this.wordProgress.saveContext(userId, result.lemmaId, token.version.textId, token.original, token.id);
       }
       this.cache.set(token.id, token.versionId, token.normalized, result);
       return result;
@@ -117,6 +121,7 @@ export class TokenService {
           },
         },
       });
+      void this.wordProgress.saveContext(userId, lemmaId, token.version.textId, token.original, token.id);
     }
 
     const headword = primary?.lemma?.headwords?.[0];
