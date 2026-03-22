@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { UserEventType } from "@prisma/client";
 import { DictionaryCacheService } from "src/markup-engine/dictionary-cache/dictionary-cache.service";
 import { DictionaryService } from "src/markup-engine/dictionary/dictionary.service";
 import { MorphologyService } from "src/markup-engine/morphology/morphology.service";
@@ -6,7 +7,6 @@ import { OnlineDictionaryService } from "src/markup-engine/online-dictionary/onl
 import { normalizeToken } from "src/markup-engine/tokenizer/tokenizer.utils";
 import { UnknownWordProcessor } from "src/markup-engine/unknown-word/unknown-word.processor";
 import { PrismaService } from "src/prisma.service";
-import { UserEventType } from "@prisma/client";
 
 export type WordLookupResult = {
   translation: string | null;

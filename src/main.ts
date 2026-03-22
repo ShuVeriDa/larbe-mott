@@ -5,12 +5,17 @@ import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import cookieParser from "cookie-parser";
 import * as dotenv from "dotenv";
 import type { Application, Request, Response } from "express";
+import { WINSTON_MODULE_NEST_PROVIDER } from "nest-winston";
 import { AppModule } from "./app.module";
 
 async function bootstrap() {
   dotenv.config();
 
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { logger: false });
+
+  // After full initialization switch to Winston for runtime logs
+  app.useLogger(app.get(WINSTON_MODULE_NEST_PROVIDER));
+
   const configService = app.get(ConfigService);
 
   const port = configService.get<number>("PORT") ?? 9555;
@@ -18,11 +23,11 @@ async function bootstrap() {
     configService.get<string>("FRONTEND_URL") ?? "http://localhost:3000";
   const nodeEnv = configService.get<string>("NODE_ENV") ?? "development";
 
-  app.setGlobalPrefix("api"); // Установка префикса 'api' для всех маршрутов в приложении
-  app.use(cookieParser()); // Подключение middleware для парсинга cookie
+  app.setGlobalPrefix("api");
+  app.use(cookieParser());
   app.enableCors({
-    origin: [frontendUrl], // Установка разрешенного источника для CORS (доступ с этого домена)
-    credentials: true, // Включение поддержки отправки cookie через CORS
+    origin: [frontendUrl],
+    credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: [
       "Content-Type",
@@ -33,7 +38,7 @@ async function bootstrap() {
       "Access-Control-Request-Method",
       "Access-Control-Request-Headers",
     ],
-    exposedHeaders: ["set-cookie"], // Разрешение клиенту доступа к заголовку 'set-cookie' в ответе сервера
+    exposedHeaders: ["set-cookie"],
     preflightContinue: false,
     optionsSuccessStatus: 204,
   });
@@ -43,10 +48,9 @@ async function bootstrap() {
       whitelist: true,
       stopAtFirstError: true,
       transform: true,
-    }), // Включение глобальной валидации данных: удаление невалидных полей (whitelist) и остановка на первой ошибке
+    }),
   );
 
-  // Swagger only in development
   if (nodeEnv !== "production") {
     const swaggerConfig = new DocumentBuilder()
       .setTitle("MottLarbe API")
@@ -65,14 +69,11 @@ async function bootstrap() {
 
     const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
     SwaggerModule.setup("api/docs", app, swaggerDocument, {
-      swaggerOptions: {
-        persistAuthorization: true,
-      },
+      swaggerOptions: { persistAuthorization: true },
       customSiteTitle: "MottLarbe API Docs",
     });
 
     const httpAdapter = app.getHttpAdapter().getInstance() as Application;
-
     if (typeof httpAdapter.get === "function") {
       httpAdapter.get("/api", (_req: Request, res: Response) => {
         res.redirect("/api/docs");
@@ -81,6 +82,11 @@ async function bootstrap() {
   }
 
   await app.listen(port);
-  console.log(`🚀 Application is running on: http://localhost:${port}`);
+
+  const logger = app.get(WINSTON_MODULE_NEST_PROVIDER);
+  logger.log(
+    `Application is running on http://localhost:${port}`,
+    "Bootstrap",
+  );
 }
 bootstrap();

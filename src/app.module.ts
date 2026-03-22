@@ -1,14 +1,18 @@
 import { Module } from "@nestjs/common";
-import { ConfigModule } from "@nestjs/config";
-import { APP_GUARD } from "@nestjs/core";
+import { ConfigModule, ConfigService } from "@nestjs/config";
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { ThrottlerStorageRedisService } from "@nest-lab/throttler-storage-redis";
+import { WinstonModule } from "nest-winston";
 import { AdminModule } from "./admin/admin.module";
 import { AnalyticsModule } from "./analytics/analytics.module";
 import { AuthModule } from "./auth/auth.module";
+import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
+import { LoggingInterceptor } from "./common/interceptors/logging.interceptor";
 import { DeckModule } from "./deck/deck.module";
 import { DictionaryModule } from "./dictionary/dictionary.module";
 import { FeedbackModule } from "./feedback/feedback.module";
+import { createWinstonOptions } from "./logger/logger.config";
 import { TokenizerModule } from "./markup-engine/tokenizer/tokenizer.module";
 import { ProgressModule } from "./progress/progress.module";
 import { RedisModule } from "./redis/redis.module";
@@ -22,6 +26,12 @@ import { WordsModule } from "./words/words.module";
 @Module({
   imports: [
     ConfigModule.forRoot(),
+    WinstonModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) =>
+        createWinstonOptions(config.get("NODE_ENV")),
+    }),
     RedisModule,
     ThrottlerModule.forRootAsync({
       imports: [RedisModule],
@@ -47,10 +57,9 @@ import { WordsModule } from "./words/words.module";
   ],
   controllers: [],
   providers: [
-    {
-      provide: APP_GUARD,
-      useClass: ThrottlerGuard,
-    },
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_INTERCEPTOR, useClass: LoggingInterceptor },
+    { provide: APP_FILTER, useClass: AllExceptionsFilter },
   ],
 })
 export class AppModule {}
