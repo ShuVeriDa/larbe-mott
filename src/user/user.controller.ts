@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   HttpCode,
   Param,
@@ -17,7 +18,9 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
+import { PermissionCode } from "@prisma/client";
 import { Auth } from "src/auth/decorators/auth.decorator";
+import { PermissionsService } from "src/auth/permissions/permissions.service";
 import { User } from "./decorators/user.decorator";
 import { UpdateUserDto } from "./dto/update-user.dto";
 import { UserService } from "./user.service";
@@ -27,7 +30,10 @@ import { UserService } from "./user.service";
 @Controller("users")
 @ApiUnauthorizedResponse({ description: "Missing or invalid bearer token" })
 export class UserController {
-  constructor(private readonly userService: UserService) {}
+  constructor(
+    private readonly userService: UserService,
+    private readonly permissionsService: PermissionsService,
+  ) {}
 
   @Get(":id")
   @Auth()
@@ -37,7 +43,17 @@ export class UserController {
     description: "The user not found",
   })
   @ApiOkResponse({ description: "Returns user profile data" })
-  async getUserById(@Param("id") userId: string) {
+  async getUserById(
+    @Param("id") userId: string,
+    @User("id") currentUserId: string,
+  ) {
+    const isAdmin = await this.permissionsService.hasPermission(
+      currentUserId,
+      PermissionCode.CAN_MANAGE_USERS,
+    );
+    if (!isAdmin && userId !== currentUserId) {
+      throw new ForbiddenException("Access denied");
+    }
     return this.userService.getUserById(userId);
   }
 

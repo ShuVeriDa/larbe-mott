@@ -7,6 +7,7 @@ import {
   Res,
   UnauthorizedException,
 } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 import { ConfigService } from "@nestjs/config";
 import {
   ApiBearerAuth,
@@ -35,6 +36,7 @@ export class AuthController {
     private readonly configService: ConfigService,
   ) {}
 
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @HttpCode(200)
   @Post("login")
   @ApiOperation({ summary: "Authenticate user with credentials" })
@@ -59,6 +61,7 @@ export class AuthController {
     return response;
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @HttpCode(200)
   @Post("register")
   @ApiConflictResponse({

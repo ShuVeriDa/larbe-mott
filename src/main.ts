@@ -5,6 +5,7 @@ import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import cookieParser from "cookie-parser";
 import * as dotenv from "dotenv";
 import type { Application, Request, Response } from "express";
+import helmet from "helmet";
 import { WINSTON_MODULE_NEST_PROVIDER } from "nest-winston";
 import { AppModule } from "./app.module";
 
@@ -23,6 +24,7 @@ async function bootstrap() {
     configService.get<string>("FRONTEND_URL") ?? "http://localhost:3000";
   const nodeEnv = configService.get<string>("NODE_ENV") ?? "development";
 
+  app.use(helmet());
   app.setGlobalPrefix("api");
   app.use(cookieParser());
   app.enableCors({

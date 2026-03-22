@@ -9,7 +9,15 @@
       "Bash(find f:/programming/mott-larbe/mott-larbe-backend -maxdepth 2 -type f -name .env* -o -name *.config.*)",
       "Bash(npm install:*)",
       "Bash(npx tsc:*)",
-      "Bash(npm show:*)"
+      "Bash(npm show:*)",
+      "Bash(grep -n \"$executeRaw\" /f/programming/mott-larbe/mott-larbe-backend/src/markup-engine/tokenizer/tokenizer.processor.ts /f/programming/mott-larbe/mott-larbe-backend/src/markup-engine/unknown-word/unknown-word.processor.ts)",
+      "Bash(npm audit:*)",
+      "Bash(node -e \"const p = require\\(''./node_modules/prisma/package.json''\\); console.log\\(''prisma:'', p.version\\)\")",
+      "Bash(node -e \"const p = require\\(''./node_modules/@nestjs/cli/package.json''\\); console.log\\(''@nestjs/cli:'', p.version\\)\")",
+      "Bash(node -e \"try{console.log\\(''hono:'', require\\(''./node_modules/hono/package.json''\\).version\\)}catch\\(e\\){console.log\\(''not found''\\)}\")",
+      "Bash(node -e \"const p=require\\(''''./package.json''''\\); console.log\\(''''deps:'''', JSON.stringify\\(p.dependencies,null,2\\)\\); console.log\\(''''devDeps:'''', JSON.stringify\\(p.devDependencies,null,2\\)\\)\")",
+      "Bash(node -e \"const d=require\\(''''fs''''\\).readFileSync\\(''''/dev/stdin'''',''''utf8''''\\);const j=JSON.parse\\(d\\);console.log\\(''''total:'''',j.metadata?.vulnerabilities?.total,''''high:'''',j.metadata?.vulnerabilities?.high,''''critical:'''',j.metadata?.vulnerabilities?.critical\\)\")",
+      "Bash(npm ls:*)"
     ]
   }
 }
