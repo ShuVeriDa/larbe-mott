@@ -166,10 +166,10 @@ export class AdminTokenService {
       data,
     });
 
-    this.cache.deleteByTokenId(tokenId);
-    this.cache.deleteByVersionNormalized(token.versionId, token.normalized);
+    await this.cache.deleteByTokenId(tokenId);
+    await this.cache.deleteByVersionNormalized(token.versionId, token.normalized);
     if (updated.normalized !== token.normalized) {
-      this.cache.deleteByVersionNormalized(token.versionId, updated.normalized);
+      await this.cache.deleteByVersionNormalized(token.versionId, updated.normalized);
     }
 
     return this.getTokenForAdmin(updated.id);
@@ -259,8 +259,8 @@ export class AdminTokenService {
           endOffset: nt.endOffset,
         },
       });
-      this.cache.deleteByTokenId(t.id);
-      this.cache.deleteByVersionNormalized(token.versionId, t.normalized);
+      await this.cache.deleteByTokenId(t.id);
+      await this.cache.deleteByVersionNormalized(token.versionId, t.normalized);
     }
   }
 }

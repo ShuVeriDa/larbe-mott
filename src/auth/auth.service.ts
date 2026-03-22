@@ -13,6 +13,7 @@ import { UserEventType } from "@prisma/client";
 import { CreateUserDto } from "src/user/dto/create-user.dto";
 import { LoginDto } from "src/user/dto/login.dto";
 import { UserService } from "src/user/user.service";
+import { RedisService } from "src/redis/redis.service";
 
 @Injectable()
 export class AuthService {
@@ -21,6 +22,7 @@ export class AuthService {
     private jwt: JwtService,
     private userService: UserService,
     private readonly configService: ConfigService,
+    private readonly redis: RedisService,
   ) {}
 
   async login(dto: LoginDto) {
@@ -176,6 +178,26 @@ export class AuthService {
 
   async logout(userId: string) {
     await this.clearRefreshTokenHash(userId);
+    // Blacklist all access tokens issued before now for this user.
+    // JwtStrategy checks iat against this timestamp and rejects older tokens.
+    const accessTtl = this.parseExpirySeconds(
+      this.configService.get("ACCESS_TOKEN_EXPIRES_IN") ?? "1h",
+    );
+    await this.redis.set(
+      `session:blacklist:${userId}`,
+      Date.now().toString(),
+      "EX",
+      accessTtl,
+    );
+  }
+
+  private parseExpirySeconds(value: string): number {
+    const match = value.match(/^(\d+)([smhd]?)$/);
+    if (!match) return 3600;
+    const num = parseInt(match[1]);
+    const unit = match[2] || "s";
+    const multipliers: Record<string, number> = { s: 1, m: 60, h: 3600, d: 86400 };
+    return num * (multipliers[unit] ?? 1);
   }
 
   private async validateUser(dto: LoginDto) {

@@ -6,7 +6,10 @@
       "Bash(find f:/programming/mott-larbe/mott-larbe-backend/src/admin -type f -name *.service.ts)",
       "Bash(find /f/programming/mott-larbe/mott-larbe-backend/src -name *guard* -o -name *permission*)",
       "Bash(find f:/programming/mott-larbe/mott-larbe-backend/src -type f \\\\\\(-name *.ts -o -name *.js \\\\\\))",
-      "Bash(find f:/programming/mott-larbe/mott-larbe-backend -maxdepth 2 -type f -name .env* -o -name *.config.*)"
+      "Bash(find f:/programming/mott-larbe/mott-larbe-backend -maxdepth 2 -type f -name .env* -o -name *.config.*)",
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npm show:*)"
     ]
   }
 }

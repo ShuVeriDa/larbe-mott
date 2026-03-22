@@ -16,7 +16,7 @@ export class TokenService {
 
   async getTokenInfo(tokenId: string, userId: string) {
     // 1️⃣ кэш по tokenId
-    const cached = this.cache.get(tokenId);
+    const cached = await this.cache.get(tokenId);
     if (cached) {
       if (cached.lemmaId) {
         await this.wordProgress.registerClick(userId, cached.lemmaId);
@@ -67,7 +67,7 @@ export class TokenService {
     }
 
     // 3️⃣ кэш по (versionId, normalized): то же слово на другой странице — без повторного разбора
-    const cachedByWord = this.cache.getByVersionNormalized(
+    const cachedByWord = await this.cache.getByVersionNormalized(
       token.versionId,
       token.normalized,
     );
@@ -98,7 +98,7 @@ export class TokenService {
         });
         void this.wordProgress.saveContext(userId, result.lemmaId, token.version.textId, token.original, token.id);
       }
-      this.cache.set(token.id, token.versionId, token.normalized, result);
+      await this.cache.set(token.id, token.versionId, token.normalized, result);
       return result;
     }
 
@@ -142,7 +142,7 @@ export class TokenService {
       baseForm: primary?.lemma?.baseForm ?? headword?.text ?? null,
     };
 
-    this.cache.set(token.id, token.versionId, token.normalized, result);
+    await this.cache.set(token.id, token.versionId, token.normalized, result);
     return result;
   }
 }
