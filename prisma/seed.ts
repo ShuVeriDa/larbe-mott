@@ -2,10 +2,17 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { Prisma, PrismaClient } from "@prisma/client";
 import * as dotenv from "dotenv";
 import { seedPlans } from "./helpers/billingHelper";
-import { createText } from "./helpers/textHelper";
-import { seedRolesAndPermissions } from "./helpers/rbacHelper";
-import { createFakeUsers, createTallarUser } from "./helpers/userHelper";
+import { seedCoupons } from "./helpers/couponHelper";
+import { seedDeck } from "./helpers/deckHelper";
+import { seedFeatureFlags } from "./helpers/featureFlagsHelper";
 import { seedFeedback } from "./helpers/feedbackHelper";
+import { seedMorphologyRules } from "./helpers/morphologyHelper";
+import { seedRolesAndPermissions } from "./helpers/rbacHelper";
+import { seedSubscriptions } from "./helpers/subscriptionHelper";
+import { createText } from "./helpers/textHelper";
+import { seedUserDictionary } from "./helpers/userDictionaryHelper";
+import { createFakeUsers, createTallarUser } from "./helpers/userHelper";
+import { seedUserProgress } from "./helpers/userProgressHelper";
 
 dotenv.config();
 
@@ -17,11 +24,29 @@ const adapter = new PrismaPg({ connectionString });
 const prisma = new PrismaClient({ adapter });
 
 async function up() {
+  // 1. Базовые справочники
   await seedRolesAndPermissions();
   await seedPlans();
+  await seedMorphologyRules();
+
+  // 2. Пользователи
   await createTallarUser();
   await createFakeUsers();
+
+  // 3. Контент (создаёт леммы — нужно до всего, что на них ссылается)
   await createText();
+
+  // 4. Биллинг и флаги
+  await seedCoupons();
+  await seedSubscriptions();
+  await seedFeatureFlags();
+
+  // 5. Пользовательские данные (зависят от лемм и текстов)
+  await seedUserDictionary();
+  await seedUserProgress();
+  await seedDeck();
+
+  // 6. Фидбек
   await seedFeedback();
 }
 
@@ -37,6 +62,9 @@ async function down() {
         "payment",
         "subscription",
         "plan",
+        "user_feature_flag",
+        "feature_flag",
+        "morphology_rule",
         "example",
         "dictionary_cache",
         "token_analysis",
@@ -47,6 +75,9 @@ async function down() {
         "role",
         "user_word_progress",
         "user_text_progress",
+        "user_deck_card",
+        "user_deck_state",
+        "word_context",
         "text_token",
         "headword",
         "morph_form",
@@ -60,6 +91,7 @@ async function down() {
         "unknown_word",
         "text_vocabulary",
         "text",
+        "user_session",
         "users"
       RESTART IDENTITY CASCADE
     `;
