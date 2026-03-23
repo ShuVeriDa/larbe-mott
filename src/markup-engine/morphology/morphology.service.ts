@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { Language } from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
 import { normalizeToken } from "../tokenizer/tokenizer.utils";
 import { MorphologyRuleEngine } from "./rule-engine.service";
@@ -10,45 +11,45 @@ export class MorphologyService {
     private rules: MorphologyRuleEngine,
   ) {}
 
-  async analyze(word: string) {
+  async analyze(word: string, language: Language = Language.CHE) {
     const normalized = normalizeToken(word);
 
     // 1️⃣ direct MorphForm lookup
     const form = await this.prisma.morphForm.findFirst({
-      where: { normalized },
+      where: { normalized, lemma: { language } },
       include: { lemma: true },
     });
 
     if (form) return form;
 
     // 2️⃣ noun suffix stripping
-    const stem = this.rules.stripSuffix(normalized);
+    const stem = this.rules.stripSuffix(normalized, language);
 
     if (stem !== normalized) {
       const lemma = await this.prisma.lemma.findFirst({
-        where: { normalized: stem },
+        where: { normalized: stem, language },
       });
 
       if (lemma) return lemma;
     }
 
     // 3️⃣ plural detection
-    const pluralStem = this.rules.detectPlural(normalized);
+    const pluralStem = this.rules.detectPlural(normalized, language);
 
     if (pluralStem) {
       const lemma = await this.prisma.lemma.findFirst({
-        where: { normalized: pluralStem },
+        where: { normalized: pluralStem, language },
       });
 
       if (lemma) return lemma;
     }
 
     // 4️⃣ verb detection
-    const verbStem = this.rules.detectVerb(normalized);
+    const verbStem = this.rules.detectVerb(normalized, language);
 
     if (verbStem) {
       const lemma = await this.prisma.lemma.findFirst({
-        where: { normalized: verbStem },
+        where: { normalized: verbStem, language },
       });
 
       if (lemma) return lemma;

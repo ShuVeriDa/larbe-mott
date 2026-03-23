@@ -167,15 +167,16 @@ export class AdminMorphologyService {
 
   async createRule(dto: CreateMorphologyRuleDto) {
     const existing = await this.prisma.morphologyRule.findUnique({
-      where: { suffix_type: { suffix: dto.suffix, type: dto.type } },
+      where: { suffix_type_language: { suffix: dto.suffix, type: dto.type, language: dto.language } },
     });
     if (existing) {
-      throw new ConflictException(`Rule "${dto.suffix}" (${dto.type}) already exists`);
+      throw new ConflictException(`Rule "${dto.suffix}" (${dto.type}/${dto.language}) already exists`);
     }
     const rule = await this.prisma.morphologyRule.create({
       data: {
         suffix: dto.suffix,
         type: dto.type,
+        language: dto.language,
         priority: dto.priority ?? 0,
         isActive: dto.isActive ?? true,
       },

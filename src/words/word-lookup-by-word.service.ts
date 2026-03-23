@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { UserEventType } from "@prisma/client";
+import { Language, UserEventType } from "@prisma/client";
 import { DictionaryCacheService } from "src/markup-engine/dictionary-cache/dictionary-cache.service";
 import { DictionaryService } from "src/markup-engine/dictionary/dictionary.service";
 import { MorphologyService } from "src/markup-engine/morphology/morphology.service";
@@ -34,9 +34,10 @@ export class WordLookupByWordService {
     userId?: string,
   ): Promise<WordLookupResult> {
     const normalized = normalizeToken(normalizedOrRaw);
+    const language = await this.resolveUserLanguage(userId);
 
     // 1️⃣ Админский словарь
-    const fromAdmin = await this.fromAdmin(normalized);
+    const fromAdmin = await this.fromAdmin(normalized, language);
     if (fromAdmin) return fromAdmin;
 
     // 2️⃣ Кэш (DictionaryCache)
@@ -44,11 +45,11 @@ export class WordLookupByWordService {
     if (fromCache) return fromCache;
 
     // 3️⃣ Онлайн словарь
-    const fromOnline = await this.fromOnline(normalized);
+    const fromOnline = await this.fromOnline(normalized, language);
     if (fromOnline) return fromOnline;
 
     // 4️⃣ Морфология
-    const fromMorphology = await this.fromMorphology(normalized);
+    const fromMorphology = await this.fromMorphology(normalized, language);
     if (fromMorphology) return fromMorphology;
 
     // Не найдено — тихо записываем в неизвестные (без задержки ответа)
@@ -71,10 +72,20 @@ export class WordLookupByWordService {
     return { translation: null, grammar: null, baseForm: null };
   }
 
+  private async resolveUserLanguage(userId?: string): Promise<Language> {
+    if (!userId) return Language.CHE;
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { language: true },
+    });
+    return user?.language ?? Language.CHE;
+  }
+
   private async fromAdmin(
     normalized: string,
+    language: Language,
   ): Promise<WordLookupResult | null> {
-    const map = await this.adminDictionary.findWords([normalized]);
+    const map = await this.adminDictionary.findWords([normalized], language);
     const item = map.get(normalized);
     if (!item?.lemmaId) return null;
     return this.lemmaToResult(item.lemmaId);
@@ -103,8 +114,9 @@ export class WordLookupByWordService {
 
   private async fromOnline(
     normalized: string,
+    language: Language,
   ): Promise<WordLookupResult | null> {
-    const result = await this.onlineDictionary.lookupWord(normalized);
+    const result = await this.onlineDictionary.lookupWord(normalized, language);
     if (!result?.translation) return null;
     return {
       translation: result.translation,
@@ -115,8 +127,9 @@ export class WordLookupByWordService {
 
   private async fromMorphology(
     normalized: string,
+    language: Language,
   ): Promise<WordLookupResult | null> {
-    const analyzed = await this.morphology.analyze(normalized);
+    const analyzed = await this.morphology.analyze(normalized, language);
     if (!analyzed) return null;
     const lemma =
       "lemma" in analyzed

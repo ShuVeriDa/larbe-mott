@@ -1,36 +1,48 @@
 import { Injectable } from "@nestjs/common";
 import axios from "axios";
+import { Language } from "@prisma/client";
 import { DikResponse, LookupResult } from "./online-dictionary.type";
+
+/** Конфигурация внешних словарей по языку */
+const ONLINE_DICT_CONFIG: Partial<Record<Language, { url: string; lang: string }>> = {
+  [Language.CHE]: {
+    url: "https://dikdosham.ru/backend/get_translate.php",
+    lang: "che",
+  },
+  // Для AR и EN внешние словари пока не настроены — добавить при необходимости
+};
 
 @Injectable()
 export class OnlineDictionaryService {
-  private readonly url = "https://dikdosham.ru/backend/get_translate.php";
-
-  // 🔥 in-memory cache
+  // 🔥 in-memory cache: ключ = "${language}:${normalized}"
   private readonly cache = new Map<string, Promise<LookupResult>>();
 
-  async lookupWord(word: string): Promise<LookupResult> {
-    const normalized = word.toLowerCase();
+  async lookupWord(word: string, language: Language): Promise<LookupResult> {
+    const config = ONLINE_DICT_CONFIG[language];
+    if (!config) return null;
 
-    // если уже запрашивали — вернуть из кеша
-    if (this.cache.has(normalized)) {
-      return this.cache.get(normalized)!;
+    const normalized = word.toLowerCase();
+    const cacheKey = `${language}:${normalized}`;
+
+    if (this.cache.has(cacheKey)) {
+      return this.cache.get(cacheKey)!;
     }
 
-    const request = this.fetchWord(normalized);
-
-    this.cache.set(normalized, request);
-
+    const request = this.fetchWord(normalized, config);
+    this.cache.set(cacheKey, request);
     return request;
   }
 
-  private async fetchWord(word: string): Promise<LookupResult> {
+  private async fetchWord(
+    word: string,
+    config: { url: string; lang: string },
+  ): Promise<LookupResult> {
     try {
       const response = await axios.post<DikResponse>(
-        this.url,
+        config.url,
         new URLSearchParams({
           word,
-          lang: "ce",
+          lang: config.lang,
         }),
         {
           headers: {

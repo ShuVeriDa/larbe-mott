@@ -76,7 +76,7 @@ export class DictionaryService {
    * Ищет слова в админском словаре (DictionaryEntry с source=ADMIN).
    * Возвращает карту: normalized -> { lemmaId } для использования в пайплайне.
    */
-  async findWords(words: string[]): Promise<Map<string, { lemmaId: string }>> {
+  async findWords(words: string[], language?: Language): Promise<Map<string, { lemmaId: string }>> {
     if (!words.length) return new Map();
 
     const unique = [...new Set(words)];
@@ -87,16 +87,21 @@ export class DictionaryService {
         headwords: {
           some: {
             normalized: { in: unique },
+            ...(language ? { lemma: { language } } : {}),
           },
         },
       },
-      include: { headwords: true },
+      include: {
+        headwords: {
+          include: { lemma: { select: { language: true } } },
+        },
+      },
     });
 
     const map = new Map<string, { lemmaId: string }>();
     for (const entry of entries) {
       for (const h of entry.headwords) {
-        if (h.lemmaId) {
+        if (h.lemmaId && (!language || h.lemma?.language === language)) {
           map.set(h.normalized, { lemmaId: h.lemmaId });
         }
       }

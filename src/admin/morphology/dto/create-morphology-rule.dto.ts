@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { MorphRuleType } from "@prisma/client";
+import { Language, MorphRuleType } from "@prisma/client";
 import { IsBoolean, IsEnum, IsInt, IsOptional, IsString } from "class-validator";
 
 export class CreateMorphologyRuleDto {
@@ -10,6 +10,10 @@ export class CreateMorphologyRuleDto {
   @ApiProperty({ enum: MorphRuleType, description: "Rule type: NOUN_CASE | PLURAL | VERB_PAST" })
   @IsEnum(MorphRuleType)
   type: MorphRuleType;
+
+  @ApiProperty({ enum: Language, description: "Language this rule applies to" })
+  @IsEnum(Language)
+  language: Language;
 
   @ApiPropertyOptional({ description: "Higher priority rules are tried first", default: 0 })
   @IsOptional()

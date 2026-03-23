@@ -90,6 +90,8 @@ enum CouponType {
 enum Language {
   CHE
   RU
+  AR
+  EN
 }
 
 enum Level {
@@ -570,14 +572,15 @@ model MorphologyRule {
 
   suffix    String
   type      MorphRuleType
+  language  Language     @default(CHE)
   priority  Int          @default(0)
   isActive  Boolean      @default(true)
 
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 
-  @@unique([suffix, type])
-  @@index([type, isActive])
+  @@unique([suffix, type, language])
+  @@index([type, isActive, language])
   @@map("morphology_rule")
 }
 

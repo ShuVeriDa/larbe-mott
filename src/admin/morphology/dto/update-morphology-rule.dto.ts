@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { MorphRuleType } from "@prisma/client";
+import { Language, MorphRuleType } from "@prisma/client";
 import { IsBoolean, IsEnum, IsInt, IsOptional, IsString } from "class-validator";
 
 export class UpdateMorphologyRuleDto {
@@ -12,6 +12,11 @@ export class UpdateMorphologyRuleDto {
   @IsOptional()
   @IsEnum(MorphRuleType)
   type?: MorphRuleType;
+
+  @ApiPropertyOptional({ enum: Language })
+  @IsOptional()
+  @IsEnum(Language)
+  language?: Language;
 
   @ApiPropertyOptional()
   @IsOptional()
