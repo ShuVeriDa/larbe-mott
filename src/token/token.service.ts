@@ -14,11 +14,11 @@ export class TokenService {
     private tokenizerService: TokenizerService,
   ) {}
 
-  async getTokenInfo(tokenId: string, userId: string) {
+  async getTokenInfo(tokenId: string, userId: string | undefined) {
     // 1️⃣ кэш по tokenId
     const cached = await this.cache.get(tokenId);
     if (cached) {
-      if (cached.lemmaId) {
+      if (userId && cached.lemmaId) {
         await this.wordProgress.registerClick(userId, cached.lemmaId);
         await this.prisma.userEvent.create({
           data: {
@@ -81,7 +81,7 @@ export class TokenService {
         grammar: cachedByWord.grammar ?? null,
         baseForm: cachedByWord.baseForm ?? null,
       };
-      if (result.lemmaId) {
+      if (userId && result.lemmaId) {
         await this.wordProgress.registerClick(userId, result.lemmaId);
         await this.prisma.userEvent.create({
           data: {
@@ -106,7 +106,7 @@ export class TokenService {
       token.analyses.find((a) => a.isPrimary) ?? token.analyses[0];
     const lemmaId = primary?.lemmaId;
 
-    if (lemmaId) {
+    if (userId && lemmaId) {
       await this.wordProgress.registerClick(userId, lemmaId);
       await this.prisma.userEvent.create({
         data: {

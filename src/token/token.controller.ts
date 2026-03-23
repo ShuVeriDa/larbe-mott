@@ -8,7 +8,7 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
-import { Auth } from "src/auth/decorators/auth.decorator";
+import { OptionalAuth } from "src/auth/decorators/optional-auth.decorator";
 import { User } from "src/user/decorators/user.decorator";
 import { TokenService } from "./token.service";
 
@@ -19,7 +19,7 @@ import { TokenService } from "./token.service";
 export class TokenController {
   constructor(private readonly tokenService: TokenService) {}
 
-  @Auth()
+  @OptionalAuth()
   @Get(":id")
   @ApiOperation({
     summary: "Get token info by ID",
@@ -31,7 +31,7 @@ export class TokenController {
     description: "Token info: translation, grammar, baseForm.",
   })
   @ApiNotFoundResponse({ description: "Token not found or not accessible." })
-  async getToken(@Param("id") tokenId: string, @User("id") userId: string) {
+  async getToken(@Param("id") tokenId: string, @User("id") userId: string | undefined) {
     return this.tokenService.getTokenInfo(tokenId, userId);
   }
 }

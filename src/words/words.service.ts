@@ -11,7 +11,7 @@ export class WordsService {
     private readonly unknownWordProcessor: UnknownWordProcessor,
   ) {}
 
-  async lookup(tokenId: string, userId: string) {
+  async lookup(tokenId: string, userId: string | undefined) {
     const info = await this.tokenService.getTokenInfo(tokenId, userId);
     const hasData =
       info.translation != null ||

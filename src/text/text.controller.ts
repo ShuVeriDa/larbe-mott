@@ -8,7 +8,7 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
-import { Auth } from "src/auth/decorators/auth.decorator";
+import { OptionalAuth } from "src/auth/decorators/optional-auth.decorator";
 import { User } from "src/user/decorators/user.decorator";
 import { TextService } from "./text.service";
 
@@ -34,7 +34,7 @@ export class TextController {
   }
 
   @Get(":id/pages/:pageNumber")
-  @Auth()
+  @OptionalAuth()
   @ApiOperation({
     summary: "Get one page of a text (optimized)",
     description:
@@ -49,7 +49,7 @@ export class TextController {
   async getPage(
     @Param("id") textId: string,
     @Param("pageNumber") pageNumber: string,
-    @User("id") userId: string,
+    @User("id") userId: string | undefined,
   ) {
     return await this.textService.getPage(
       textId,
@@ -59,7 +59,7 @@ export class TextController {
   }
 
   @Get(":id")
-  @Auth()
+  @OptionalAuth()
   @ApiOperation({
     summary: "Get a text by ID (all pages)",
     description: "Returns a single text with full details including all pages.",
@@ -73,7 +73,7 @@ export class TextController {
     description: "Text with metadata and pages (TipTap content).",
   })
   @ApiNotFoundResponse({ description: "Text with the given ID was not found." })
-  async getTextById(@Param("id") textId: string, @User("id") userId: string) {
+  async getTextById(@Param("id") textId: string, @User("id") userId: string | undefined) {
     return await this.textService.getTextById(textId, userId);
   }
 }

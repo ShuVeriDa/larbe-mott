@@ -9,6 +9,7 @@ import {
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
 import { Auth } from "src/auth/decorators/auth.decorator";
+import { OptionalAuth } from "src/auth/decorators/optional-auth.decorator";
 import { User } from "src/user/decorators/user.decorator";
 import { WordLookupByWordDto } from "./dto/lookup-by-word.dto";
 import { WordLookupDto } from "./dto/lookup.dto";
@@ -28,7 +29,7 @@ export class WordsController {
   ) {}
 
   @Post("lookup")
-  @Auth()
+  @OptionalAuth()
   @ApiOperation({
     summary: "Получить перевод слова по tokenId (основной API для клика)",
     description:
@@ -38,7 +39,7 @@ export class WordsController {
   @ApiOkResponse({
     description: "translation, grammar, baseForm",
   })
-  async lookup(@Body() dto: WordLookupDto, @User("id") userId: string) {
+  async lookup(@Body() dto: WordLookupDto, @User("id") userId: string | undefined) {
     return this.wordsService.lookup(dto.tokenId, userId);
   }
 

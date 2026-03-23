@@ -53,7 +53,7 @@ export class TextService {
   /**
    * Возвращает одну страницу текста с токенами (оптимизация: 1 страница = 1 запрос).
    */
-  async getPage(textId: string, pageNumber: number, userId: string) {
+  async getPage(textId: string, pageNumber: number, userId: string | undefined) {
     const text = await this.prisma.text.findUnique({
       where: { id: textId },
       select: {
@@ -118,22 +118,26 @@ export class TextService {
           rows.map((r) => r.lemmaId).filter((id): id is string => id !== null),
         ),
       ]);
-    if (lemmaIds.length) {
+    if (userId && lemmaIds.length) {
       await this.wordProgress.registerSeenWords(userId, lemmaIds);
     }
 
-    await this.prisma.userEvent.create({
-      data: {
-        userId,
-        type: UserEventType.OPEN_TEXT,
-        metadata: {
-          textId,
-          pageNumber,
+    if (userId) {
+      await this.prisma.userEvent.create({
+        data: {
+          userId,
+          type: UserEventType.OPEN_TEXT,
+          metadata: {
+            textId,
+            pageNumber,
+          },
         },
-      },
-    });
+      });
+    }
 
-    const progress = await this.textProgress.calculateProgress(userId, textId);
+    const progress = userId
+      ? await this.textProgress.calculateProgress(userId, textId)
+      : 0;
 
     // ЭТАП 15: ответ «страница текста» — tokens[], contentRich (и дублируем в page для совместимости)
     return {
@@ -150,7 +154,7 @@ export class TextService {
     };
   }
 
-  async getTextById(textId: string, userId: string) {
+  async getTextById(textId: string, userId: string | undefined) {
     const text = await this.prisma.text.findUnique({
       where: { id: textId },
       include: {
@@ -183,21 +187,25 @@ export class TextService {
       ),
     ];
 
-    await this.wordProgress.registerSeenWords(userId, lemmaIds);
+    if (userId) {
+      await this.wordProgress.registerSeenWords(userId, lemmaIds);
 
-    await this.prisma.userEvent.create({
-      data: {
-        userId,
-        type: UserEventType.OPEN_TEXT,
-        metadata: {
-          textId,
-          mode: "full",
+      await this.prisma.userEvent.create({
+        data: {
+          userId,
+          type: UserEventType.OPEN_TEXT,
+          metadata: {
+            textId,
+            mode: "full",
+          },
         },
-      },
-    });
+      });
+    }
 
     // ЭТАП 11
-    const progress = await this.textProgress.calculateProgress(userId, textId);
+    const progress = userId
+      ? await this.textProgress.calculateProgress(userId, textId)
+      : 0;
 
     return {
       ...text,
