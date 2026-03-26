@@ -682,6 +682,29 @@ model UserEvent {
 // TEXTS
 //////////////////////////////////////////////////////
 
+model Tag {
+  id    String @id @default(uuid())
+  name  String @unique
+
+  texts TextTag[]
+
+  createdAt DateTime @default(now())
+
+  @@map("tag")
+}
+
+model TextTag {
+  textId String
+  tagId  String
+
+  text Text @relation(fields: [textId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([textId, tagId])
+  @@index([tagId])
+  @@map("text_tag")
+}
+
 model Text {
   id          String   @id @default(uuid())
 
@@ -698,6 +721,7 @@ model Text {
   createdBy     User @relation("text", fields: [createdById], references: [id], onDelete: Cascade)
 
   pages         TextPage[]
+  tags          TextTag[]
 
   processingVersions TextProcessingVersion[]
   progress           UserTextProgress[]

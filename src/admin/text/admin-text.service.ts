@@ -46,12 +46,22 @@ export class AdminTextService {
     const countByVersionId = new Map(
       tokenCounts.map((c) => [c.versionId, c._count.id]),
     );
+    const tagRows = await this.prisma.textTag.findMany({
+      where: { textId: { in: ids } },
+      include: { tag: { select: { id: true, name: true } } },
+    });
+    const tagsByTextId = new Map<string, { id: string; name: string }[]>();
+    for (const row of tagRows) {
+      if (!tagsByTextId.has(row.textId)) tagsByTextId.set(row.textId, []);
+      tagsByTextId.get(row.textId)!.push(row.tag);
+    }
+
     return texts.map((t) => {
       const versionId = latestVersionIdByTextId.get(t.id);
       const wordCount = versionId
         ? countByVersionId.get(versionId) ?? 0
         : 0;
-      return { ...t, wordCount };
+      return { ...t, wordCount, tags: tagsByTextId.get(t.id) ?? [] };
     });
   }
 
@@ -82,15 +92,24 @@ export class AdminTextService {
         });
       }
 
+      if (dto.tagIds?.length) {
+        await tx.textTag.createMany({
+          data: dto.tagIds.map((tagId) => ({ textId: created.id, tagId })),
+        });
+      }
+
       return tx.text.findUniqueOrThrow({
         where: { id: created.id },
-        include: { pages: true },
+        include: {
+          pages: true,
+          tags: { include: { tag: { select: { id: true, name: true } } } },
+        },
       });
     });
 
     await this.tokenizerProcessor.processText(text.id);
 
-    return text;
+    return { ...text, tags: text.tags.map((tt) => tt.tag) };
   }
 
   async patchText(textId: string, dto: PatchTextDto) {
@@ -136,9 +155,21 @@ export class AdminTextService {
         }
       }
 
+      if (dto.tagIds !== undefined) {
+        await tx.textTag.deleteMany({ where: { textId } });
+        if (dto.tagIds.length > 0) {
+          await tx.textTag.createMany({
+            data: dto.tagIds.map((tagId) => ({ textId, tagId })),
+          });
+        }
+      }
+
       return tx.text.findUniqueOrThrow({
         where: { id: textId },
-        include: { pages: { orderBy: { pageNumber: "asc" } } },
+        include: {
+          pages: { orderBy: { pageNumber: "asc" } },
+          tags: { include: { tag: { select: { id: true, name: true } } } },
+        },
       });
     });
 
@@ -146,7 +177,7 @@ export class AdminTextService {
       await this.tokenizerProcessor.processText(updated.id);
     }
 
-    return updated;
+    return { ...updated, tags: updated.tags.map((tt) => tt.tag) };
   }
 
   async deleteText(textId: string) {

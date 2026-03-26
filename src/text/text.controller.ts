@@ -13,6 +13,7 @@ import { Language, Level } from "@prisma/client";
 import { OptionalAuth } from "src/auth/decorators/optional-auth.decorator";
 import { User } from "src/user/decorators/user.decorator";
 import { TextService } from "./text.service";
+import type { TextProgressStatus, TextSortOrder } from "./text.service";
 
 @ApiTags("texts")
 @ApiBearerAuth()
@@ -21,29 +22,58 @@ import { TextService } from "./text.service";
 export class TextController {
   constructor(private readonly textService: TextService) {}
 
+  @Get("tags")
+  @OptionalAuth()
+  @ApiOperation({
+    summary: "List all tags",
+    description: "Returns all available tags. Use tag IDs for filtering GET /texts.",
+  })
+  @ApiOkResponse({ description: "Array of { id, name }." })
+  async getTags() {
+    return this.textService.getAllTags();
+  }
+
   @Get()
   @OptionalAuth()
   @ApiOperation({
     summary: "List all texts",
     description:
-      "Returns a list of all published texts. Supports filtering by language and level, full-text search by title/author, and returns user progress when authenticated.",
+      "Returns a paginated list of published texts with filtering, sorting, search, progress and counters. " +
+      "Filtering by language/level/tag supports multiple values (repeat the param). " +
+      "Progress fields (progressPercent, progressStatus, lastOpened) are populated only when authenticated.",
   })
-  @ApiQuery({ name: "language", enum: Language, isArray: true, required: false, description: "One or more languages. Omit for all." })
-  @ApiQuery({ name: "level", enum: Level, isArray: true, required: false, description: "One or more levels. Omit for all." })
+  @ApiQuery({ name: "language", enum: Language, isArray: true, required: false })
+  @ApiQuery({ name: "level", enum: Level, isArray: true, required: false })
+  @ApiQuery({ name: "tagId", type: String, isArray: true, required: false, description: "One or more tag IDs" })
+  @ApiQuery({
+    name: "status",
+    enum: ["NEW", "IN_PROGRESS", "COMPLETED"],
+    required: false,
+    description: "Filter by progress status (auth required)",
+  })
+  @ApiQuery({
+    name: "orderBy",
+    enum: ["newest", "oldest", "alpha", "progress", "length", "level"],
+    required: false,
+    description: "Sort order. Default: newest. 'level' sorts A1→C2.",
+  })
   @ApiQuery({ name: "search", required: false, description: "Search by title or author" })
   @ApiOkResponse({
-    description:
-      "Array of text items with wordCount, progressPercent, lastOpened.",
+    description: "{ items: Text[], counts: { total, new, inProgress, completed } }",
   })
   async getTexts(
     @Query("language") language?: Language | Language[],
     @Query("level") level?: Level | Level[],
+    @Query("tagId") tagId?: string | string[],
+    @Query("status") status?: TextProgressStatus,
+    @Query("orderBy") orderBy?: TextSortOrder,
     @Query("search") search?: string,
     @User("id") userId?: string,
   ) {
     const languages = language ? (Array.isArray(language) ? language : [language]) : [];
     const levels = level ? (Array.isArray(level) ? level : [level]) : [];
-    return this.textService.getTexts({ languages, levels, search }, userId);
+    const tagIds = tagId ? (Array.isArray(tagId) ? tagId : [tagId]) : [];
+    return this.textService.getTexts({ languages, levels, tagIds, status, orderBy, search }, userId);
   }
 
   @Get("continue-reading")
@@ -77,27 +107,17 @@ export class TextController {
     @Param("pageNumber") pageNumber: string,
     @User("id") userId: string | undefined,
   ) {
-    return this.textService.getPage(
-      textId,
-      parseInt(pageNumber, 10),
-      userId,
-    );
+    return this.textService.getPage(textId, parseInt(pageNumber, 10), userId);
   }
 
   @Get(":id")
   @OptionalAuth()
   @ApiOperation({
     summary: "Get a text by ID (all pages)",
-    description: "Returns a single text with full details including all pages.",
+    description: "Returns a single text with full details including all pages and tags.",
   })
-  @ApiParam({
-    name: "id",
-    description: "Unique text identifier (UUID)",
-    example: "550e8400-e29b-41d4-a716-446655440000",
-  })
-  @ApiOkResponse({
-    description: "Text with metadata and pages (TipTap content).",
-  })
+  @ApiParam({ name: "id", description: "Unique text identifier (UUID)" })
+  @ApiOkResponse({ description: "Text with metadata, pages and tags." })
   @ApiNotFoundResponse({ description: "Text with the given ID was not found." })
   async getTextById(@Param("id") textId: string, @User("id") userId: string | undefined) {
     return this.textService.getTextById(textId, userId);

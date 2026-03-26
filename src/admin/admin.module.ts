@@ -29,6 +29,8 @@ import { AdminFeatureFlagsController } from "./feature-flags/admin-feature-flags
 import { AdminFeatureFlagsService } from "./feature-flags/admin-feature-flags.service";
 import { AdminFeedbackController } from "./feedback/admin-feedback.controller";
 import { AdminFeedbackService } from "./feedback/admin-feedback.service";
+import { AdminTagsController } from "./tags/admin-tags.controller";
+import { AdminTagsService } from "./tags/admin-tags.service";
 
 @Module({
   imports: [
@@ -52,10 +54,12 @@ import { AdminFeedbackService } from "./feedback/admin-feedback.service";
     AdminFeatureFlagsController,
     AdminMorphologyController,
     AdminFeedbackController,
+    AdminTagsController,
   ],
   providers: [
     AdminService,
     AdminTextService,
+    AdminTagsService,
     AdminTokenService,
     AdminUnknownWordsService,
     AdminUsersService,

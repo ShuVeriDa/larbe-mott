@@ -9,6 +9,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  IsUUID,
   Matches,
   MaxLength,
   Min,
@@ -102,6 +103,17 @@ export class CreateTextDto {
   @IsOptional()
   @IsNotEmpty()
   source: string;
+
+  @ApiProperty({
+    type: [String],
+    description: "Array of tag UUIDs to assign to the text.",
+    required: false,
+    example: ["uuid-1", "uuid-2"],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsUUID("4", { each: true })
+  tagIds?: string[];
 
   @ApiProperty({
     type: [CreateTextPageDto],
