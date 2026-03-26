@@ -7,16 +7,18 @@ export class AnalyticsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getUserAnalytics(userId: string) {
-    const [wordStats, dueToday, textStats, streak, activity] =
+    const [wordStats, dueToday, textStats, streak, streakRecord, streakDays, activity] =
       await Promise.all([
         this.getWordStats(userId),
         this.getDueTodayCount(userId),
         this.getTextStats(userId),
         this.getStreak(userId),
+        this.getStreakRecord(userId),
+        this.getStreakDays(userId),
         this.getActivityLast30Days(userId),
       ]);
 
-    return { words: wordStats, dueToday, texts: textStats, streak, activity };
+    return { words: wordStats, dueToday, texts: textStats, streak, streakRecord, streakDays, activity };
   }
 
   // ─── words ───────────────────────────────────────────────────────────────────
@@ -104,6 +106,85 @@ export class AnalyticsService {
     }
 
     return streak;
+  }
+
+  /**
+   * Максимальная серия дней за всё время.
+   */
+  private async getStreakRecord(userId: string): Promise<number> {
+    const events = await this.prisma.userEvent.findMany({
+      where: { userId },
+      select: { createdAt: true },
+      orderBy: { createdAt: "asc" },
+    });
+
+    if (!events.length) return 0;
+
+    const uniqueDays = [
+      ...new Set(events.map((e) => e.createdAt.toISOString().slice(0, 10))),
+    ].sort();
+
+    let record = 1;
+    let current = 1;
+
+    for (let i = 1; i < uniqueDays.length; i++) {
+      const prev = new Date(uniqueDays[i - 1]);
+      prev.setDate(prev.getDate() + 1);
+      const expectedNext = prev.toISOString().slice(0, 10);
+
+      if (uniqueDays[i] === expectedNext) {
+        current++;
+        if (current > record) record = current;
+      } else {
+        current = 1;
+      }
+    }
+
+    return record;
+  }
+
+  /**
+   * 7 дней текущей недели (Пн–Вс) с флагом активности.
+   * Возвращает: [{ date: "2026-03-23", label: "Пн", active: true, isToday: false }, ...]
+   */
+  private async getStreakDays(
+    userId: string,
+  ): Promise<{ date: string; label: string; active: boolean; isToday: boolean }[]> {
+    // Начало текущей недели (понедельник)
+    const now = new Date();
+    const dayOfWeek = now.getDay(); // 0=вс, 1=пн, ...
+    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() + mondayOffset);
+    monday.setHours(0, 0, 0, 0);
+
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    sunday.setHours(23, 59, 59, 999);
+
+    const events = await this.prisma.userEvent.findMany({
+      where: { userId, createdAt: { gte: monday, lte: sunday } },
+      select: { createdAt: true },
+    });
+
+    const activeDays = new Set(
+      events.map((e) => e.createdAt.toISOString().slice(0, 10)),
+    );
+
+    const todayStr = now.toISOString().slice(0, 10);
+    const LABELS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      const dateStr = d.toISOString().slice(0, 10);
+      return {
+        date: dateStr,
+        label: LABELS[i],
+        active: activeDays.has(dateStr),
+        isToday: dateStr === todayStr,
+      };
+    });
   }
 
   // ─── activity chart (last 30 days) ───────────────────────────────────────────

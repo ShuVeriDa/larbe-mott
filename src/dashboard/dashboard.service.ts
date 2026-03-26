@@ -23,6 +23,8 @@ export class DashboardService {
         textsRead: stats.texts.opened,
         wordsInDictionary: dictionaryStats.total,
         streak: stats.streak,
+        streakRecord: stats.streakRecord,
+        streakDays: stats.streakDays,
         dueToday: stats.dueToday,
         words: stats.words,
       },
