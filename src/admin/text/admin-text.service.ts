@@ -86,6 +86,7 @@ export class AdminTextService {
           data: {
             textId: created.id,
             pageNumber: page.pageNumber,
+            title: page.title,
             contentRich: page.contentRich as Prisma.InputJsonValue,
             contentRaw,
           },
@@ -148,6 +149,7 @@ export class AdminTextService {
             data: {
               textId,
               pageNumber: page.pageNumber,
+              title: page.title,
               contentRich: page.contentRich as Prisma.InputJsonValue,
               contentRaw,
             },

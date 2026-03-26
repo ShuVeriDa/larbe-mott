@@ -206,9 +206,9 @@ GET /api/texts?language=RU&level=B1&search=рассказ&orderBy=length
 
 ### GET /api/texts/:id
 
-Возвращает полный текст со всеми страницами и тегами.
+Возвращает полную карточку текста для страницы `/library/:id`.
 
-**Auth:** Optional.
+**Auth:** Optional. При авторизации возвращает дополнительные поля прогресса и статистики слов.
 
 **Ответ:**
 ```json
@@ -218,10 +218,71 @@ GET /api/texts?language=RU&level=B1&search=рассказ&orderBy=length
   "level": "B1",
   "language": "RU",
   "author": "Автор",
+  "source": "Нохчийн газета",
+  "imageUrl": null,
+  "publishedAt": "2026-03-01T00:00:00.000Z",
+  "createdAt": "2026-03-01T00:00:00.000Z",
+  "updatedAt": "2026-03-01T00:00:00.000Z",
   "tags": [{ "id": "uuid-1", "name": "Литература" }],
-  "pages": [...],
-  "progress": 35.5
+  "wordCount": 1840,
+  "readingTime": 9,
+  "totalPages": 14,
+  "pages": [
+    { "id": "uuid", "pageNumber": 1, "title": "Введение" },
+    { "id": "uuid", "pageNumber": 2, "title": null }
+  ],
+  "progress": 35.5,
+  "progressPercent": 35.5,
+  "lastOpened": "2026-03-24T10:00:00.000Z",
+  "currentPage": 5,
+  "wordStats": {
+    "total": 420,
+    "known": 64,
+    "learning": 31,
+    "new": 325
+  }
 }
+```
+
+| Поле | Auth | Описание |
+|------|------|---------|
+| `wordCount` | — | Количество токенов в тексте |
+| `readingTime` | — | Примерное время чтения (`ceil(wordCount / 200)`), мин 1 |
+| `totalPages` | — | Количество страниц |
+| `pages[]` | — | Список страниц: `id`, `pageNumber`, `title` (опционально) |
+| `publishedAt` | — | Дата публикации; `null` = черновик |
+| `imageUrl` | — | URL обложки или `null` |
+| `progress` | Optional | Прогресс 0–100 (по доле известных слов). Без токена: `0` |
+| `progressPercent` | Optional | Процент прочитанных страниц. Без токена: `0` |
+| `lastOpened` | Optional | Дата последнего открытия. Без токена: `null` |
+| `currentPage` | Optional | Текущая страница. Без токена: `0` |
+| `wordStats` | Optional | Слова текста по статусам у пользователя. Без токена: все в `new` |
+
+---
+
+### GET /api/texts/:id/related
+
+Возвращает до 6 похожих опубликованных текстов (тот же язык + совпадение уровня или тегов).
+
+**Auth:** Optional. При авторизации добавляет `progressPercent` по каждому тексту.
+
+**Ответ:**
+```json
+[
+  {
+    "id": "uuid",
+    "title": "Грамматика чеченского глагола",
+    "language": "CHE",
+    "level": "B2",
+    "author": "Автор",
+    "imageUrl": null,
+    "tags": [{ "id": "uuid-1", "name": "Грамматика" }],
+    "wordCount": 1120,
+    "readingTime": 6,
+    "totalPages": 8,
+    "progressPercent": 0
+  }
+]
 ```
 
 ---

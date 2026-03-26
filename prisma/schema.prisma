@@ -744,6 +744,7 @@ model TextPage {
   text      Text   @relation(fields: [textId], references: [id], onDelete: Cascade)
 
   pageNumber Int
+  title      String?
 
   contentRich Json
   contentRaw  String

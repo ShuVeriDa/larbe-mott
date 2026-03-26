@@ -73,7 +73,7 @@
 | `author` | string (2–50 симв.) | Да | Автор |
 | `source` | string | Нет | Источник |
 | `tagIds` | UUID[] | Нет | Массив ID тегов. Теги должны существовать в `/api/admin/tags` |
-| `pages` | Page[] | Да (мин. 1) | Страницы в формате TipTap JSON |
+| `pages` | Page[] | Да (мин. 1) | Страницы в формате TipTap JSON. Каждая страница: `pageNumber` (обязательный), `title` (опциональный), `contentRich` (обязательный) |
 
 > Текст создаётся как **черновик** (`publishedAt: null`). Для публикации — `PATCH` с `"publishedAt": "2026-03-26T00:00:00.000Z"`.
 

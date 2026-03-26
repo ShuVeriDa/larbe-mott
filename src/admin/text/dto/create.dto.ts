@@ -24,6 +24,12 @@ export class CreateTextPageDto {
   @Min(1)
   pageNumber: number;
 
+  @ApiProperty({ description: "Optional page title (e.g. chapter name)", required: false })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  title?: string;
+
   @ApiProperty({
     description:
       "TipTap/ProseMirror JSON document (type: 'doc', content: block nodes)",
@@ -147,6 +153,7 @@ export class CreateTextDto {
   @Type(() => CreateTextPageDto)
   pages: {
     pageNumber: number;
+    title?: string;
     contentRich: {
       type: "doc";
       content?: unknown[];

@@ -114,12 +114,30 @@ export class TextController {
   @OptionalAuth()
   @ApiOperation({
     summary: "Get a text by ID (all pages)",
-    description: "Returns a single text with full details including all pages and tags.",
+    description:
+      "Returns a single text with full details: metadata, pages list (id, pageNumber, title), tags, " +
+      "wordCount, readingTime, totalPages, publishedAt, imageUrl. " +
+      "When authenticated: progressPercent, lastOpened, currentPage, wordStats (known/learning/new/total).",
   })
   @ApiParam({ name: "id", description: "Unique text identifier (UUID)" })
   @ApiOkResponse({ description: "Text with metadata, pages and tags." })
   @ApiNotFoundResponse({ description: "Text with the given ID was not found." })
   async getTextById(@Param("id") textId: string, @User("id") userId: string | undefined) {
     return this.textService.getTextById(textId, userId);
+  }
+
+  @Get(":id/related")
+  @OptionalAuth()
+  @ApiOperation({
+    summary: "Related texts",
+    description:
+      "Returns up to 6 published texts with the same language and matching level or tags. " +
+      "When authenticated includes progressPercent per text.",
+  })
+  @ApiParam({ name: "id", description: "Text ID (UUID)" })
+  @ApiOkResponse({ description: "Array of related texts with wordCount, readingTime, totalPages." })
+  @ApiNotFoundResponse({ description: "Text with the given ID was not found." })
+  async getRelatedTexts(@Param("id") textId: string, @User("id") userId: string | undefined) {
+    return this.textService.getRelatedTexts(textId, userId);
   }
 }

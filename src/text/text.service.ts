@@ -372,45 +372,71 @@ export class TextService {
 
     if (!text) throw new NotFoundException("Text not found");
 
-    // получаем lemmaId всех слов текста
-    const analyses = await this.prisma.tokenAnalysis.findMany({
-      where: {
-        token: {
-          version: {
-            textId,
-          },
-        },
-        isPrimary: true,
-      },
-      select: {
-        lemmaId: true,
-      },
+    // Версия + wordCount
+    const latestVersion = await this.prisma.textProcessingVersion.findFirst({
+      where: { textId },
+      orderBy: { version: "desc" },
+      select: { id: true },
     });
 
+    const wordCount = latestVersion
+      ? await this.prisma.textToken.count({ where: { versionId: latestVersion.id } })
+      : 0;
+
+    // lemmaIds всех слов текста
+    const analyses = latestVersion
+      ? await this.prisma.tokenAnalysis.findMany({
+          where: { token: { versionId: latestVersion.id }, isPrimary: true },
+          select: { lemmaId: true },
+        })
+      : [];
+
     const lemmaIds = [
-      ...new Set(
-        analyses
-          .map((a) => a.lemmaId)
-          .filter((id): id is string => id !== null),
-      ),
+      ...new Set(analyses.map((a) => a.lemmaId).filter((id): id is string => id !== null)),
     ];
+
+    // Прогресс пользователя
+    const userProgress = userId
+      ? await this.prisma.userTextProgress.findUnique({
+          where: { userId_textId: { userId, textId } },
+          select: { progressPercent: true, lastOpened: true },
+        })
+      : null;
+
+    const progressPercent = userProgress?.progressPercent ?? 0;
+    const lastOpened = userProgress?.lastOpened ?? null;
+    const totalPages = text.pages.length;
+    const currentPage = totalPages > 0 ? Math.ceil((progressPercent / 100) * totalPages) : 0;
+
+    // Статистика слов из текста по статусам пользователя
+    let wordStats = { total: lemmaIds.length, known: 0, learning: 0, new: 0 };
+    if (userId && lemmaIds.length) {
+      const grouped = await this.prisma.userWordProgress.groupBy({
+        by: ["status"],
+        where: { userId, lemmaId: { in: lemmaIds } },
+        _count: { status: true },
+      });
+      const map = Object.fromEntries(grouped.map((g) => [g.status, g._count.status]));
+      const tracked = (map["KNOWN"] ?? 0) + (map["LEARNING"] ?? 0) + (map["NEW"] ?? 0);
+      wordStats = {
+        total: lemmaIds.length,
+        known: map["KNOWN"] ?? 0,
+        learning: map["LEARNING"] ?? 0,
+        new: lemmaIds.length - tracked,
+      };
+    }
 
     if (userId) {
       await this.wordProgress.registerSeenWords(userId, lemmaIds);
-
       await this.prisma.userEvent.create({
         data: {
           userId,
           type: UserEventType.OPEN_TEXT,
-          metadata: {
-            textId,
-            mode: "full",
-          },
+          metadata: { textId, mode: "full" },
         },
       });
     }
 
-    // ЭТАП 11
     const progress = userId
       ? await this.textProgress.calculateProgress(userId, textId)
       : 0;
@@ -418,9 +444,112 @@ export class TextService {
     const tags = text.tags.map((tt) => tt.tag);
 
     return {
-      ...text,
+      id: text.id,
+      title: text.title,
+      language: text.language,
+      level: text.level,
+      author: text.author,
+      source: text.source,
+      imageUrl: text.imageUrl,
+      publishedAt: text.publishedAt,
+      createdAt: text.createdAt,
+      updatedAt: text.updatedAt,
       tags,
+      wordCount,
+      readingTime: calcReadingTime(wordCount),
+      totalPages,
+      pages: text.pages.map((p) => ({ id: p.id, pageNumber: p.pageNumber, title: p.title ?? null })),
       progress,
+      progressPercent,
+      lastOpened,
+      currentPage,
+      wordStats,
     };
+  }
+
+  async getRelatedTexts(textId: string, userId: string | undefined) {
+    const text = await this.prisma.text.findUnique({
+      where: { id: textId },
+      select: {
+        language: true,
+        level: true,
+        tags: { select: { tagId: true } },
+      },
+    });
+    if (!text) throw new NotFoundException("Text not found");
+
+    const tagIds = text.tags.map((t) => t.tagId);
+
+    // Похожие: тот же язык + (тот же уровень ИЛИ общие теги), не включая сам текст
+    const candidates = await this.prisma.text.findMany({
+      where: {
+        publishedAt: { not: null },
+        id: { not: textId },
+        language: text.language,
+        OR: [
+          ...(text.level ? [{ level: text.level }] : []),
+          ...(tagIds.length ? [{ tags: { some: { tagId: { in: tagIds } } } }] : []),
+        ],
+      },
+      include: {
+        tags: { include: { tag: { select: { id: true, name: true } } } },
+      },
+      take: 6,
+      orderBy: { publishedAt: "desc" },
+    });
+
+    if (!candidates.length) return [];
+
+    const ids = candidates.map((t) => t.id);
+    const versions = await this.prisma.textProcessingVersion.findMany({
+      where: { textId: { in: ids } },
+      orderBy: { version: "desc" },
+      select: { id: true, textId: true },
+    });
+    const latestVersionIdByTextId = new Map<string, string>();
+    for (const v of versions) {
+      if (!latestVersionIdByTextId.has(v.textId)) latestVersionIdByTextId.set(v.textId, v.id);
+    }
+    const versionIds = [...latestVersionIdByTextId.values()];
+    const tokenCounts = await this.prisma.textToken.groupBy({
+      by: ["versionId"],
+      where: { versionId: { in: versionIds } },
+      _count: { id: true },
+    });
+    const countByVersionId = new Map(tokenCounts.map((c) => [c.versionId, c._count.id]));
+
+    const pageCounts = await this.prisma.textPage.groupBy({
+      by: ["textId"],
+      where: { textId: { in: ids } },
+      _count: { id: true },
+    });
+    const pageCountByTextId = new Map(pageCounts.map((p) => [p.textId, p._count.id]));
+
+    let progressByTextId = new Map<string, number>();
+    if (userId) {
+      const progressRows = await this.prisma.userTextProgress.findMany({
+        where: { userId, textId: { in: ids } },
+        select: { textId: true, progressPercent: true },
+      });
+      progressByTextId = new Map(progressRows.map((p) => [p.textId, p.progressPercent]));
+    }
+
+    return candidates.map((t) => {
+      const versionId = latestVersionIdByTextId.get(t.id);
+      const wordCount = versionId ? (countByVersionId.get(versionId) ?? 0) : 0;
+      return {
+        id: t.id,
+        title: t.title,
+        language: t.language,
+        level: t.level,
+        author: t.author,
+        imageUrl: t.imageUrl,
+        tags: t.tags.map((tt) => tt.tag),
+        wordCount,
+        readingTime: calcReadingTime(wordCount),
+        totalPages: pageCountByTextId.get(t.id) ?? 0,
+        progressPercent: progressByTextId.get(t.id) ?? 0,
+      };
+    });
   }
 }
