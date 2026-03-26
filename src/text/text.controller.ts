@@ -1,13 +1,15 @@
-import { Controller, Get, Param } from "@nestjs/common";
+import { Controller, Get, Param, Query } from "@nestjs/common";
 import {
   ApiBearerAuth,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiParam,
+  ApiQuery,
   ApiTags,
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
+import { Language, Level } from "@prisma/client";
 import { OptionalAuth } from "src/auth/decorators/optional-auth.decorator";
 import { User } from "src/user/decorators/user.decorator";
 import { TextService } from "./text.service";
@@ -20,17 +22,41 @@ export class TextController {
   constructor(private readonly textService: TextService) {}
 
   @Get()
+  @OptionalAuth()
   @ApiOperation({
     summary: "List all texts",
     description:
-      "Returns a list of all texts available to the authenticated user.",
+      "Returns a list of all published texts. Supports filtering by language and level, full-text search by title/author, and returns user progress when authenticated.",
   })
+  @ApiQuery({ name: "language", enum: Language, isArray: true, required: false, description: "One or more languages. Omit for all." })
+  @ApiQuery({ name: "level", enum: Level, isArray: true, required: false, description: "One or more levels. Omit for all." })
+  @ApiQuery({ name: "search", required: false, description: "Search by title or author" })
   @ApiOkResponse({
     description:
-      "Array of text items (id, title, language, level, author, etc.).",
+      "Array of text items with wordCount, progressPercent, lastOpened.",
   })
-  async getTexts() {
-    return await this.textService.getTexts();
+  async getTexts(
+    @Query("language") language?: Language | Language[],
+    @Query("level") level?: Level | Level[],
+    @Query("search") search?: string,
+    @User("id") userId?: string,
+  ) {
+    const languages = language ? (Array.isArray(language) ? language : [language]) : [];
+    const levels = level ? (Array.isArray(level) ? level : [level]) : [];
+    return this.textService.getTexts({ languages, levels, search }, userId);
+  }
+
+  @Get("continue-reading")
+  @ApiOperation({
+    summary: "Continue reading list",
+    description:
+      "Returns texts the user has started but not finished (0 < progress < 100), sorted by last opened. Includes currentPage and totalPages.",
+  })
+  @ApiOkResponse({
+    description: "Array of in-progress texts with page info and progress.",
+  })
+  async getContinueReading(@User("id") userId: string) {
+    return this.textService.getContinueReading(userId);
   }
 
   @Get(":id/pages/:pageNumber")
@@ -51,7 +77,7 @@ export class TextController {
     @Param("pageNumber") pageNumber: string,
     @User("id") userId: string | undefined,
   ) {
-    return await this.textService.getPage(
+    return this.textService.getPage(
       textId,
       parseInt(pageNumber, 10),
       userId,
@@ -74,6 +100,6 @@ export class TextController {
   })
   @ApiNotFoundResponse({ description: "Text with the given ID was not found." })
   async getTextById(@Param("id") textId: string, @User("id") userId: string | undefined) {
-    return await this.textService.getTextById(textId, userId);
+    return this.textService.getTextById(textId, userId);
   }
 }

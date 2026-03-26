@@ -690,6 +690,7 @@ model Text {
   language    Language
   author      String
   source      String?
+  imageUrl    String?
 
   publishedAt DateTime?
 

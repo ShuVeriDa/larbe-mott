@@ -6,6 +6,7 @@ import { ThrottlerStorageRedisService } from "@nest-lab/throttler-storage-redis"
 import { WinstonModule } from "nest-winston";
 import { AdminModule } from "./admin/admin.module";
 import { AnalyticsModule } from "./analytics/analytics.module";
+import { DashboardModule } from "./dashboard/dashboard.module";
 import { AuthModule } from "./auth/auth.module";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { LoggingInterceptor } from "./common/interceptors/logging.interceptor";
@@ -52,6 +53,7 @@ import { WordsModule } from "./words/words.module";
     AdminModule,
     SubscriptionModule,
     AnalyticsModule,
+    DashboardModule,
     DeckModule,
     FeedbackModule,
   ],
