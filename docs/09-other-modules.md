@@ -113,7 +113,7 @@
 
 ---
 
-## Деки (авторская система заучивания)
+## Деки — ShuVeriDenig (авторская система заучивания)
 
 Модуль: [src/deck/](../src/deck/)
 
@@ -123,27 +123,51 @@
 
 | Тип | Описание | Лимит |
 |-----|---------|-------|
-| `NEW` | Только добавленные слова | 90 карточек |
-| `OLD` | Переполнение из NEW (самые старые) | 90 карточек |
-| `RETIRED` | Переполнение из OLD | 90 карточек |
-| `NUMBERED` (1, 2, 3…) | Архивные деки, ротируются раз в день | 90 карточек каждая |
+| `NEW` | Только добавленные слова | настраивается (`deckMaxSize`, по умолч. 90) |
+| `OLD` | Переполнение из NEW (самые старые) | то же |
+| `RETIRED` | Переполнение из OLD | то же |
+| `NUMBERED` (1, 2, 3…) | Архивные деки, ротируются раз в день | то же |
+
+### Настройки пользователя
+
+Хранятся в `UserDeckState`:
+
+| Поле | По умолчанию | Описание |
+|------|-------------|---------|
+| `dailyWordCount` | 5 | Сколько слов предлагать добавить в деку каждый день (3 / 5 / 10) |
+| `deckMaxSize` | 90 | Максимальный размер каждой деки (10–500) |
 
 ### Авторебалансировка
 
-При добавлении нового слова система автоматически проверяет лимиты и сдвигает самые старые карточки вперёд:
+При добавлении нового слова система автоматически проверяет лимиты и сдвигает самые старые карточки:
 
 ```
-Добавить слово → дек NEW (до 90)
-      │ если NEW > 90: самые старые → OLD
+Добавить слово → NEW (до deckMaxSize)
+      │ если NEW > deckMaxSize: самые старые → OLD
       ▼
-   Дек OLD (до 90)
-      │ если OLD > 90: самые старые → RETIRED
+   OLD (до deckMaxSize)
+      │ если OLD > deckMaxSize: самые старые → RETIRED
       ▼
-   Дек RETIRED (до 90)
-      │ если RETIRED > 90: самые старые → NUMBERED (1, 2, 3…)
+   RETIRED (до deckMaxSize)
+      │ если RETIRED > deckMaxSize: самые старые → NUMBERED (1, 2, 3…)
       ▼
-   Нумерованные деки (по 90)
+   Нумерованные деки (по deckMaxSize)
 ```
+
+### Оценка карточки
+
+При повторении пользователь оценивает каждую карточку:
+
+| Оценка | Действие |
+|--------|---------|
+| `know` | Слово знаю — `movedAt` обновляется (карточка уходит в конец FIFO) |
+| `again` | Не вспомнил — карточка остаётся на месте |
+
+Карточка уходит из деки только при переполнении (авторебалансировка).
+
+### Ежедневные слова
+
+`GET /api/deck/daily` — возвращает N слов из словаря пользователя (`UserDictionaryEntry`), которые ещё не добавлены в деки. N = `dailyWordCount`. Пользователь решает — добавить слово в NEW (`POST /api/deck/add/:lemmaId`) или пропустить.
 
 ### Ежедневная ротация нумерованных дек
 
@@ -156,10 +180,14 @@
 
 | Метод | URL | Описание |
 |-------|-----|---------|
-| POST | `/api/deck/add/:lemmaId` | Добавить слово в дек NEW (с авторебалансировкой) |
-| DELETE | `/api/deck/remove/:lemmaId` | Убрать слово из деки |
+| GET | `/api/deck/settings` | Текущие настройки (dailyWordCount, deckMaxSize) |
+| PATCH | `/api/deck/settings` | Обновить настройки |
+| GET | `/api/deck/daily` | N слов из словаря, ещё не в деках |
+| POST | `/api/deck/add/:lemmaId` | Добавить слово в NEW (с авторебалансировкой) |
+| DELETE | `/api/deck/remove/:lemmaId` | Убрать слово из всех дек |
+| POST | `/api/deck/rate/:lemmaId` | Оценить карточку (`know` / `again`) |
 | GET | `/api/deck/due` | Карточки на сегодня: NEW + OLD + RETIRED + текущая NUMBERED |
-| GET | `/api/deck/stats` | Статистика: количество карточек в каждой деке |
+| GET | `/api/deck/stats` | Статистика: кол-во карточек в каждой деке + настройки |
 
 ### Что возвращает GET /api/deck/due
 
@@ -189,6 +217,80 @@
 | DELETE | `/api/user` | Удалить аккаунт (мягкое удаление) |
 
 Удаление — **мягкое**: статус меняется на `DELETED`, данные сохраняются.
+
+---
+
+---
+
+## Разговорник (Phrasebook)
+
+Модуль: [src/phrasebook/](../src/phrasebook/)
+
+Готовые фразы на чеченском языке, организованные по категориям. Контент создаётся администраторами, пользователи могут сохранять фразы и предлагать новые.
+
+### Модели данных
+
+| Модель | Описание |
+|--------|---------|
+| `PhrasebookCategory` | Категория (emoji, name, sortOrder) |
+| `PhrasebookPhrase` | Фраза (original, transliteration, translation, lang) |
+| `PhrasebookPhraseWord` | Разбор фразы по словам (original, translation, position) |
+| `PhrasebookPhraseExample` | Пример использования фразы (phrase, translation, context?) |
+| `UserPhrasebookSave` | Сохранённые фразы пользователя |
+| `PhrasebookSuggestion` | Предложения фраз от пользователей |
+
+### API Endpoints (пользователь)
+
+| Метод | URL | Описание |
+|-------|-----|---------|
+| GET | `/api/phrasebook/stats` | Статистика: totalPhrases, totalCategories, savedCount |
+| GET | `/api/phrasebook/categories` | Список категорий с кол-вом фраз |
+| GET | `/api/phrasebook/phrases` | Фразы с фильтрами (см. ниже) |
+| POST | `/api/phrasebook/suggestions` | Предложить фразу |
+| POST | `/api/phrasebook/saves/:phraseId` | Toggle сохранения фразы |
+
+**GET /api/phrasebook/phrases — query-параметры:**
+
+| Параметр | Описание |
+|----------|---------|
+| `categoryId` | ID категории |
+| `lang` | Язык: `CHE`, `RU` |
+| `saved` | `true` — только сохранённые |
+| `search` | Поиск по original / translation / transliteration |
+
+**Ответ GET /api/phrasebook/phrases:**
+```json
+[
+  {
+    "id": "uuid",
+    "categoryId": "uuid",
+    "original": "Салам!",
+    "transliteration": "Salam!",
+    "translation": "Привет!",
+    "lang": "CHE",
+    "saved": false,
+    "words": [{ "id": "uuid", "original": "Салам", "translation": "привет", "position": 0 }],
+    "examples": [{ "id": "uuid", "phrase": "...", "translation": "...", "context": "..." }]
+  }
+]
+```
+
+### API Endpoints (admin)
+
+| Метод | URL | Описание |
+|-------|-----|---------|
+| GET | `/api/admin/phrasebook/categories` | Список категорий с кол-вом фраз |
+| POST | `/api/admin/phrasebook/categories` | Создать категорию |
+| PATCH | `/api/admin/phrasebook/categories/:id` | Обновить категорию |
+| DELETE | `/api/admin/phrasebook/categories/:id` | Удалить категорию (и все фразы) |
+| GET | `/api/admin/phrasebook/phrases?categoryId=` | Список фраз |
+| POST | `/api/admin/phrasebook/phrases` | Создать фразу (с words и examples) |
+| PATCH | `/api/admin/phrasebook/phrases/:id` | Обновить фразу (words/examples заменяются целиком) |
+| DELETE | `/api/admin/phrasebook/phrases/:id` | Удалить фразу |
+| GET | `/api/admin/phrasebook/suggestions` | Предложения от пользователей |
+| DELETE | `/api/admin/phrasebook/suggestions/:id` | Удалить предложение |
+
+Все admin-эндпоинты требуют разрешение `CAN_EDIT_TEXTS`.
 
 ---
 

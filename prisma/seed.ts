@@ -6,6 +6,7 @@ import { seedCoupons } from "./helpers/couponHelper";
 import { seedDeck } from "./helpers/deckHelper";
 import { seedFeatureFlags } from "./helpers/featureFlagsHelper";
 import { seedFeedback } from "./helpers/feedbackHelper";
+import { seedPhrasebook } from "./helpers/phrasebookHelper";
 import { seedMorphologyRules } from "./helpers/morphologyHelper";
 import { seedRolesAndPermissions } from "./helpers/rbacHelper";
 import { seedSubscriptions } from "./helpers/subscriptionHelper";
@@ -48,12 +49,20 @@ async function up() {
 
   // 6. Фидбек
   await seedFeedback();
+
+  // 7. Разговорник
+  await seedPhrasebook();
 }
 
 async function down() {
   try {
     await prisma.$executeRaw`
       TRUNCATE TABLE
+        "user_phrasebook_save",
+        "phrasebook_phrase_example",
+        "phrasebook_phrase_word",
+        "phrasebook_phrase",
+        "phrasebook_category",
         "feedback_reaction",
         "feedback_message",
         "feedback_thread",

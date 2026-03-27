@@ -1,6 +1,7 @@
 // update-folder.dto.ts
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import {
+  IsHexColor,
   IsInt,
   IsOptional,
   IsString,
@@ -15,6 +16,23 @@ export class UpdateDictionaryFolderDto {
   @MinLength(1)
   @MaxLength(64)
   name?: string;
+
+  @ApiPropertyOptional({
+    description: "Folder description",
+    example: "Слова на тему транспорта",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(256)
+  description?: string;
+
+  @ApiPropertyOptional({
+    description: "Folder color (hex)",
+    example: "#2254d3",
+  })
+  @IsOptional()
+  @IsHexColor()
+  color?: string;
 
   @ApiPropertyOptional({
     description: "Sort order (lower = first)",

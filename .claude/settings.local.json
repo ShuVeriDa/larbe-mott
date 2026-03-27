@@ -18,7 +18,16 @@
       "Bash(node -e \"const p=require\\(''''./package.json''''\\); console.log\\(''''deps:'''', JSON.stringify\\(p.dependencies,null,2\\)\\); console.log\\(''''devDeps:'''', JSON.stringify\\(p.devDependencies,null,2\\)\\)\")",
       "Bash(node -e \"const d=require\\(''''fs''''\\).readFileSync\\(''''/dev/stdin'''',''''utf8''''\\);const j=JSON.parse\\(d\\);console.log\\(''''total:'''',j.metadata?.vulnerabilities?.total,''''high:'''',j.metadata?.vulnerabilities?.high,''''critical:'''',j.metadata?.vulnerabilities?.critical\\)\")",
       "Bash(npm ls:*)",
-      "Bash(find /f/programming/mott-larbe/mott-larbe-backend/src -name \"*.ts\" -exec grep -l \"continue\\\\|recent\\\\|in.*progress\" {})"
+      "Bash(find /f/programming/mott-larbe/mott-larbe-backend/src -name \"*.ts\" -exec grep -l \"continue\\\\|recent\\\\|in.*progress\" {})",
+      "Bash(grep -r \"разговорник\\\\|фраза\\\\|phrasebook\\\\|/phrase\" /f/programming/mott-larbe/mott-larbe-backend/src --include=*.ts)",
+      "Bash(find /f/programming/mott-larbe/mott-larbe-backend/src -type f \\\\\\(-name *.ts -o -name *.prisma \\\\\\))",
+      "Bash(grep -r \"phrasebook\\\\|разговорник\" /f/programming/mott-larbe/mott-larbe-backend/dist --include=*.js)",
+      "Bash(find /f/programming/mott-larbe/mott-larbe-backend -name *migration* -o -name *seed*)",
+      "Bash(grep -r \"фраз\\\\|expression\\\\|idiom\\\\|collocation\" /f/programming/mott-larbe/mott-larbe-backend/src --include=*.ts)",
+      "Bash(grep -r \"@Controller\\\\|@Module\\\\|@Get\\\\|@Post\\\\|@Put\\\\|@Delete\" /f/programming/mott-larbe/mott-larbe-backend/src --include=*.ts -A 1)",
+      "Bash(grep -r \"TODO\\\\|FIXME\\\\|phrasebook\\\\|разговорник\" /f/programming/mott-larbe/mott-larbe-backend/src --include=*.ts)",
+      "Read(//c/Users/SHUVAR~1/AppData/Local/Temp/claude/f--programming-mott-larbe-mott-larbe-backend/815c0833-f91a-45ff-bf62-b01c351d7478/tasks/**)",
+      "Bash(grep -E \"\\\\.\\(md|txt\\)$\")"
     ]
   }
 }

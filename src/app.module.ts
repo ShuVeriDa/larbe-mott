@@ -13,6 +13,7 @@ import { LoggingInterceptor } from "./common/interceptors/logging.interceptor";
 import { DeckModule } from "./deck/deck.module";
 import { DictionaryModule } from "./dictionary/dictionary.module";
 import { FeedbackModule } from "./feedback/feedback.module";
+import { PhrasebookModule } from "./phrasebook/phrasebook.module";
 import { createWinstonOptions } from "./logger/logger.config";
 import { TokenizerModule } from "./markup-engine/tokenizer/tokenizer.module";
 import { ProgressModule } from "./progress/progress.module";
@@ -56,6 +57,7 @@ import { WordsModule } from "./words/words.module";
     DashboardModule,
     DeckModule,
     FeedbackModule,
+    PhrasebookModule,
   ],
   controllers: [],
   providers: [

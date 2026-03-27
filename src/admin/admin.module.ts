@@ -31,6 +31,8 @@ import { AdminFeedbackController } from "./feedback/admin-feedback.controller";
 import { AdminFeedbackService } from "./feedback/admin-feedback.service";
 import { AdminTagsController } from "./tags/admin-tags.controller";
 import { AdminTagsService } from "./tags/admin-tags.service";
+import { AdminPhrasebookController } from "./phrasebook/admin-phrasebook.controller";
+import { AdminPhrasebookService } from "./phrasebook/admin-phrasebook.service";
 
 @Module({
   imports: [
@@ -55,6 +57,7 @@ import { AdminTagsService } from "./tags/admin-tags.service";
     AdminMorphologyController,
     AdminFeedbackController,
     AdminTagsController,
+    AdminPhrasebookController,
   ],
   providers: [
     AdminService,
@@ -69,6 +72,7 @@ import { AdminTagsService } from "./tags/admin-tags.service";
     AdminFeatureFlagsService,
     AdminMorphologyService,
     AdminFeedbackService,
+    AdminPhrasebookService,
     PrismaService,
   ],
 })

@@ -69,11 +69,26 @@ SM-2 — это научный алгоритм, который определя
 ### Прогресс по словам
 | Метод | URL | Описание |
 |-------|-----|---------|
-| GET | `/api/progress/words` | Все слова с прогрессом |
-| GET | `/api/progress/words/due` | Слова, которые нужно повторить сегодня |
-| POST | `/api/progress/words/:lemmaId/review` | Записать результат повторения (0–5) |
-| PATCH | `/api/progress/words/:lemmaId/status` | Вручную изменить статус слова |
+| GET | `/api/progress/review/stats` | Статистика для SM-2 intro: dueCount, learningCount, streak |
+| GET | `/api/progress/review/due` | Слова, которые нужно повторить сегодня |
+| POST | `/api/progress/review/:lemmaId` | Записать результат повторения (0–5) |
 | GET | `/api/progress/words/:lemmaId/contexts` | Примеры слова из прочитанных текстов |
+
+### GET /api/progress/review/stats — ответ
+
+```json
+{
+  "dueCount": 12,
+  "learningCount": 48,
+  "streak": 7
+}
+```
+
+| Поле | Описание |
+|------|---------|
+| `dueCount` | Слова к повторению сегодня (nextReview ≤ now, status ≠ KNOWN) |
+| `learningCount` | Всего слов в статусе LEARNING |
+| `streak` | Серия дней подряд (активность по UserEvent) |
 
 ### Прогресс по текстам
 | Метод | URL | Описание |

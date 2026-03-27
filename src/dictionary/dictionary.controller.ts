@@ -68,6 +68,17 @@ export class DictionaryController {
     return await this.foldersService.getUserDictionaryFolders(userId);
   }
 
+  @Get("folders/summary")
+  @RequiresPremium()
+  @ApiOperation({
+    summary: "Get folders summary",
+    description: "Get summary stats for the vocabulary folders page: folder count, words in folders, known words, words without folder. Requires Premium.",
+  })
+  @ApiOkResponse({ description: "Folders summary" })
+  async getDictionaryFoldersSummary(@User("id") userId: string) {
+    return await this.foldersService.getUserDictionaryFoldersSummary(userId);
+  }
+
   @Get("folders/:id")
   @RequiresPremium()
   @ApiOperation({

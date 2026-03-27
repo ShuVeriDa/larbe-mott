@@ -205,6 +205,8 @@ model User {
   feedbackReactions FeedbackReaction[] @relation("UserFeedbackReactions")
 
   bookmarks         UserTextBookmark[]
+  phrasebookSaves       UserPhrasebookSave[]
+  phrasebookSuggestions PhrasebookSuggestion[]
 
   @@index([status])
   @@index([language])
@@ -434,12 +436,15 @@ model UserRoleAssignment {
 //////////////////////////////////////////////////////
 
 model UserDictionaryFolder {
-  id        String   @id @default(uuid())
-  userId    String
-  name      String   // название папки
-  sortOrder Int      @default(0)
-  user     User     @relation("UserDictionaryFolderUser", fields: [userId], references: [id], onDelete: Cascade)
-  entries  UserDictionaryEntry[] @relation("UserDictionaryEntryFolder")
+  id          String    @id @default(uuid())
+  userId      String
+  name        String    // название папки
+  description String?   // описание папки
+  color       String?   // hex-цвет, напр. #2254d3
+  sortOrder   Int       @default(0)
+  updatedAt   DateTime  @updatedAt
+  user        User      @relation("UserDictionaryFolderUser", fields: [userId], references: [id], onDelete: Cascade)
+  entries     UserDictionaryEntry[] @relation("UserDictionaryEntryFolder")
   @@index([userId])
   @@map("user_dictionary_folder")
 }
@@ -454,6 +459,7 @@ model UserDictionaryEntry {
   normalized       String?  // для дедупликации и поиска
   translation      String
   addedAt          DateTime @default(now())
+  updatedAt        DateTime @updatedAt
   learningLevel    WordStatus @default(NEW)  // NEW | LEARNING | KNOWN
   cefrLevel        Level?                    // A1, A2, B1, B2
   repetitionCount  Int      @default(0)
@@ -990,9 +996,112 @@ model UserDeckState {
   currentNumberedDeck Int       @default(1)
   lastRotatedAt       DateTime?
 
+  dailyWordCount      Int       @default(5)  // сколько слов предлагать в день (3 | 5 | 10)
+  deckMaxSize         Int       @default(90) // максимальный размер каждой колоды
+
   user                User @relation("UserDeckState", fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_deck_state")
+}
+
+//////////////////////////////////////////////////////
+// PHRASEBOOK
+//////////////////////////////////////////////////////
+
+model PhrasebookCategory {
+  id        String   @id @default(uuid())
+  emoji     String
+  name      String
+  sortOrder Int      @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  phrases     PhrasebookPhrase[]
+  suggestions PhrasebookSuggestion[]
+
+  @@map("phrasebook_category")
+}
+
+model PhrasebookPhrase {
+  id               String   @id @default(uuid())
+  categoryId       String
+  original         String
+  transliteration  String?
+  translation      String
+  lang             Language
+  sortOrder        Int      @default(0)
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  category         PhrasebookCategory       @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  words            PhrasebookPhraseWord[]
+  examples         PhrasebookPhraseExample[]
+  saves            UserPhrasebookSave[]
+
+  @@index([categoryId])
+  @@index([lang])
+  @@map("phrasebook_phrase")
+}
+
+model PhrasebookPhraseWord {
+  id          String @id @default(uuid())
+  phraseId    String
+  original    String
+  translation String
+  position    Int    @default(0)
+
+  phrase      PhrasebookPhrase @relation(fields: [phraseId], references: [id], onDelete: Cascade)
+
+  @@index([phraseId])
+  @@map("phrasebook_phrase_word")
+}
+
+model PhrasebookPhraseExample {
+  id          String  @id @default(uuid())
+  phraseId    String
+  phrase      String
+  translation String
+  context     String?
+
+  phrasebookPhrase PhrasebookPhrase @relation(fields: [phraseId], references: [id], onDelete: Cascade)
+
+  @@index([phraseId])
+  @@map("phrasebook_phrase_example")
+}
+
+model PhrasebookSuggestion {
+  id          String   @id @default(uuid())
+  userId      String?
+  original    String
+  translation String
+  lang        Language
+  context     String?
+  categoryId  String?
+
+  createdAt   DateTime @default(now())
+
+  user        User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
+  category    PhrasebookCategory?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@map("phrasebook_suggestion")
+}
+
+model UserPhrasebookSave {
+  id        String   @id @default(cuid())
+  userId    String
+  phraseId  String
+
+  createdAt DateTime @default(now())
+
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phrase    PhrasebookPhrase @relation(fields: [phraseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, phraseId])
+  @@index([userId])
+  @@map("user_phrasebook_save")
 }
 
 //////////////////////////////////////////////////////

@@ -2,7 +2,7 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import { DeckType } from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
 
-const DECK_LIMIT = 90;
+const DEFAULT_DECK_LIMIT = 90;
 
 const lemmaSelect = {
   id: true,
@@ -17,6 +17,35 @@ const lemmaSelect = {
 @Injectable()
 export class DeckService {
   constructor(private prisma: PrismaService) {}
+
+  // ─── settings ────────────────────────────────────────────────────────────────
+
+  async getSettings(userId: string) {
+    const state = await this.prisma.userDeckState.findUnique({ where: { userId } });
+    return {
+      dailyWordCount: state?.dailyWordCount ?? 5,
+      deckMaxSize: state?.deckMaxSize ?? DEFAULT_DECK_LIMIT,
+    };
+  }
+
+  async updateSettings(userId: string, dailyWordCount?: number, deckMaxSize?: number) {
+    const data: { dailyWordCount?: number; deckMaxSize?: number } = {};
+    if (dailyWordCount !== undefined) data.dailyWordCount = dailyWordCount;
+    if (deckMaxSize !== undefined) data.deckMaxSize = deckMaxSize;
+
+    return this.prisma.userDeckState.upsert({
+      where: { userId },
+      update: data,
+      create: {
+        userId,
+        currentNumberedDeck: 1,
+        dailyWordCount: dailyWordCount ?? 5,
+        deckMaxSize: deckMaxSize ?? DEFAULT_DECK_LIMIT,
+      },
+    });
+  }
+
+  // ─── add / remove ────────────────────────────────────────────────────────────
 
   async addWord(userId: string, lemmaId: string) {
     const existing = await this.prisma.userDeckCard.findUnique({
@@ -45,6 +74,68 @@ export class DeckService {
       where: { userId_lemmaId: { userId, lemmaId } },
     });
   }
+
+  // ─── rate card ────────────────────────────────────────────────────────────────
+
+  /**
+   * Оценить карточку после повторения.
+   * 'know'  — слово знаю: обновляем movedAt чтобы карточка ушла в конец FIFO.
+   * 'again' — не вспомнил: ничего не меняем, карточка остаётся на месте.
+   */
+  async rateCard(userId: string, lemmaId: string, result: "know" | "again") {
+    const card = await this.prisma.userDeckCard.findUnique({
+      where: { userId_lemmaId: { userId, lemmaId } },
+    });
+    if (!card) throw new NotFoundException("Card not found");
+
+    if (result === "know") {
+      return this.prisma.userDeckCard.update({
+        where: { userId_lemmaId: { userId, lemmaId } },
+        data: { movedAt: new Date() },
+      });
+    }
+
+    return card;
+  }
+
+  // ─── daily words ─────────────────────────────────────────────────────────────
+
+  /**
+   * Возвращает N слов из словаря пользователя (UserDictionaryEntry),
+   * которые ещё НЕ добавлены в деки. N берётся из настроек (dailyWordCount).
+   */
+  async getDailyWords(userId: string) {
+    const settings = await this.getSettings(userId);
+
+    const inDeck = await this.prisma.userDeckCard.findMany({
+      where: { userId },
+      select: { lemmaId: true },
+    });
+    const inDeckLemmaIds = new Set(
+      inDeck.map((c) => c.lemmaId).filter((id): id is string => id !== null),
+    );
+
+    const entries = await this.prisma.userDictionaryEntry.findMany({
+      where: { userId, lemmaId: { not: null } },
+      orderBy: { addedAt: "asc" },
+      select: {
+        id: true,
+        word: true,
+        translation: true,
+        lemmaId: true,
+        addedAt: true,
+        lemma: {
+          select: { id: true, baseForm: true, partOfSpeech: true },
+        },
+      },
+    });
+
+    return entries
+      .filter((e) => e.lemmaId && !inDeckLemmaIds.has(e.lemmaId))
+      .slice(0, settings.dailyWordCount);
+  }
+
+  // ─── due cards ───────────────────────────────────────────────────────────────
 
   async getDueCards(userId: string) {
     const [newCards, oldCards, retiredCards] = await Promise.all([
@@ -93,7 +184,11 @@ export class DeckService {
     };
   }
 
+  // ─── stats ───────────────────────────────────────────────────────────────────
+
   async getStats(userId: string) {
+    const settings = await this.getSettings(userId);
+
     const [newCount, oldCount, retiredCount, numberedGroups] = await Promise.all([
       this.prisma.userDeckCard.count({ where: { userId, deckType: DeckType.NEW } }),
       this.prisma.userDeckCard.count({ where: { userId, deckType: DeckType.OLD } }),
@@ -114,22 +209,29 @@ export class DeckService {
       retired: retiredCount,
       numbered: numberedGroups.map((g) => ({ deckNumber: g.deckNumber, count: g._count.id })),
       total: newCount + oldCount + retiredCount + numberedTotal,
+      deckMaxSize: settings.deckMaxSize,
+      dailyWordCount: settings.dailyWordCount,
     };
   }
 
+  // ─── rebalance ────────────────────────────────────────────────────────────────
+
   private async rebalance(userId: string) {
-    await this.rebalanceDeck(userId, DeckType.NEW, DeckType.OLD);
-    await this.rebalanceDeck(userId, DeckType.OLD, DeckType.RETIRED);
-    await this.rebalanceRetired(userId);
+    const settings = await this.getSettings(userId);
+    const limit = settings.deckMaxSize;
+
+    await this.rebalanceDeck(userId, DeckType.NEW, DeckType.OLD, limit);
+    await this.rebalanceDeck(userId, DeckType.OLD, DeckType.RETIRED, limit);
+    await this.rebalanceRetired(userId, limit);
   }
 
-  private async rebalanceDeck(userId: string, from: DeckType, to: DeckType) {
+  private async rebalanceDeck(userId: string, from: DeckType, to: DeckType, limit: number) {
     const count = await this.prisma.userDeckCard.count({
       where: { userId, deckType: from },
     });
-    if (count <= DECK_LIMIT) return;
+    if (count <= limit) return;
 
-    const overflow = count - DECK_LIMIT;
+    const overflow = count - limit;
     const oldest = await this.prisma.userDeckCard.findMany({
       where: { userId, deckType: from },
       orderBy: { movedAt: "asc" },
@@ -143,13 +245,13 @@ export class DeckService {
     });
   }
 
-  private async rebalanceRetired(userId: string) {
+  private async rebalanceRetired(userId: string, limit: number) {
     const count = await this.prisma.userDeckCard.count({
       where: { userId, deckType: DeckType.RETIRED },
     });
-    if (count <= DECK_LIMIT) return;
+    if (count <= limit) return;
 
-    const overflow = count - DECK_LIMIT;
+    const overflow = count - limit;
     const oldest = await this.prisma.userDeckCard.findMany({
       where: { userId, deckType: DeckType.RETIRED },
       orderBy: { movedAt: "asc" },
@@ -162,7 +264,7 @@ export class DeckService {
       const deckCount = await this.prisma.userDeckCard.count({
         where: { userId, deckType: DeckType.NUMBERED, deckNumber },
       });
-      if (deckCount >= DECK_LIMIT) deckNumber++;
+      if (deckCount >= limit) deckNumber++;
 
       await this.prisma.userDeckCard.update({
         where: { id: card.id },
@@ -170,6 +272,8 @@ export class DeckService {
       });
     }
   }
+
+  // ─── numbered deck rotation ───────────────────────────────────────────────────
 
   private async getCurrentNumberedDeck(userId: string, max: number): Promise<number> {
     const today = new Date();
