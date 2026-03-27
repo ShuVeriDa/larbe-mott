@@ -204,6 +204,8 @@ model User {
   feedbackThreads   FeedbackThread[]   @relation("UserFeedbackThreads")
   feedbackReactions FeedbackReaction[] @relation("UserFeedbackReactions")
 
+  bookmarks         UserTextBookmark[]
+
   @@index([status])
   @@index([language])
   @@index([level])
@@ -453,6 +455,7 @@ model UserDictionaryEntry {
   translation      String
   addedAt          DateTime @default(now())
   learningLevel    WordStatus @default(NEW)  // NEW | LEARNING | KNOWN
+  cefrLevel        Level?                    // A1, A2, B1, B2
   repetitionCount  Int      @default(0)
   folderId         String?
   lemmaId          String?  // опционально: связь с Lemma, если слово из словаря
@@ -730,6 +733,8 @@ model Text {
   feedbackThreads   FeedbackThread[]   @relation("TextFeedbackThreads")
   feedbackReactions FeedbackReaction[] @relation("TextFeedbackReactions")
 
+  bookmarks         UserTextBookmark[]
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -938,6 +943,22 @@ model UserTextProgress {
   @@index([userId])
   @@index([textId])
   @@map("user_text_progress")
+}
+
+model UserTextBookmark {
+  id        String   @id @default(cuid())
+
+  userId    String
+  textId    String
+
+  createdAt DateTime @default(now())
+
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  text      Text @relation(fields: [textId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, textId])
+  @@index([userId])
+  @@map("user_text_bookmark")
 }
 
 //////////////////////////////////////////////////////

@@ -52,6 +52,8 @@ Tag (id, name) — глобальный справочник тегов
 | GET | `/api/texts/tags` | Optional | Список всех тегов (для построения фильтров) |
 | GET | `/api/texts` | Optional | Список опубликованных текстов с фильтрацией, сортировкой и прогрессом |
 | GET | `/api/texts/continue-reading` | Bearer | Тексты в процессе чтения (0 < progress < 100) |
+| GET | `/api/texts/bookmarks` | Bearer | Избранные (закладки) пользователя |
+| POST | `/api/texts/:id/bookmark` | Bearer | Добавить/убрать из избранного (toggle) |
 | GET | `/api/texts/:id` | Optional | Текст со всеми страницами и тегами |
 | GET | `/api/texts/:id/pages/:pageNumber` | Optional | Одна страница + токены + прогресс |
 
@@ -154,7 +156,8 @@ GET /api/texts?language=RU&level=B1&search=рассказ&orderBy=length
       "progressPercent": 35.5,
       "progressStatus": "IN_PROGRESS",
       "lastOpened": "2026-03-20T10:00:00.000Z",
-      "isNew": false
+      "isNew": false,
+      "isFavorite": true
     }
   ],
   "counts": {
@@ -170,6 +173,7 @@ GET /api/texts?language=RU&level=B1&search=рассказ&orderBy=length
 > `counts` отражает статистику по **текущей выборке** (с учётом фильтров language/level/tag/search, но без фильтра status).
 > `progressPercent`, `progressStatus`, `lastOpened` — только при авторизации. Без токена: `0`, `"NEW"`, `null`.
 > `isNew: true` — если текст опубликован менее 30 дней назад. Возвращается всегда (не требует авторизации).
+> `isFavorite: true` — если пользователь добавил текст в закладки. Без токена: `false`.
 
 ---
 
@@ -201,6 +205,49 @@ GET /api/texts?language=RU&level=B1&search=рассказ&orderBy=length
 ```
 
 > `currentPage` = `ceil(progressPercent / 100 * totalPages)`.
+
+---
+
+### GET /api/texts/bookmarks
+
+Возвращает тексты, добавленные пользователем в избранное.
+
+**Auth:** Bearer (обязателен).
+
+**Ответ:**
+```json
+[
+  {
+    "id": "uuid",
+    "title": "Название текста",
+    "level": "B1",
+    "language": "CHE",
+    "author": "Автор",
+    "imageUrl": null,
+    "tags": [{ "id": "uuid-1", "name": "Литература" }],
+    "wordCount": 420,
+    "readingTime": 3,
+    "totalPages": 8,
+    "progressPercent": 20.0,
+    "bookmarkedAt": "2026-03-25T10:00:00.000Z"
+  }
+]
+```
+
+---
+
+### POST /api/texts/:id/bookmark
+
+Переключает состояние закладки (добавить если нет, удалить если есть).
+
+**Auth:** Bearer (обязателен).
+
+**Ответ:**
+```json
+{ "bookmarked": true }
+```
+
+> `bookmarked: true` — закладка добавлена, `bookmarked: false` — закладка удалена.
 
 ---
 
@@ -257,6 +304,7 @@ GET /api/texts?language=RU&level=B1&search=рассказ&orderBy=length
 | `lastOpened` | Optional | Дата последнего открытия. Без токена: `null` |
 | `currentPage` | Optional | Текущая страница. Без токена: `0` |
 | `wordStats` | Optional | Слова текста по статусам у пользователя. Без токена: все в `new` |
+| `isFavorite` | Optional | Добавлен ли текст в закладки. Без токена: `false` |
 
 ---
 
@@ -296,23 +344,39 @@ GET /api/texts?language=RU&level=B1&search=рассказ&orderBy=length
 **Ответ:**
 ```json
 {
-  "id": "uuid",
-  "title": "Название текста",
-  "level": "B1",
-  "language": "RU",
-  "contentRich": { "type": "doc", "content": [...] },
-  "tokens": [
-    { "id": "uuid", "position": 0, "original": "Со", "normalized": "со", "status": "ANALYZED", "vocabId": "uuid" }
-  ],
-  "progress": 35.5,
+  "totalPages": 14,
+  "wordCount": 320,
   "page": {
     "id": "uuid",
     "pageNumber": 1,
+    "title": "Введение",
     "contentRich": { "type": "doc", "content": [...] },
     "contentRaw": "Со бусулба нохчи ву."
-  }
+  },
+  "tokens": [
+    {
+      "id": "uuid",
+      "position": 0,
+      "original": "Со",
+      "normalized": "со",
+      "status": "ANALYZED",
+      "vocabId": "uuid",
+      "lemmaId": "lemma-uuid",
+      "userStatus": "LEARNING"
+    }
+  ],
+  "progress": 35.5
 }
 ```
+
+| Поле | Auth | Описание |
+|------|------|---------|
+| `totalPages` | — | Общее количество страниц текста |
+| `wordCount` | — | Количество токенов на странице |
+| `page.title` | — | Название главы/раздела (или `null`) |
+| `tokens[].lemmaId` | — | ID леммы токена (или `null`) |
+| `tokens[].userStatus` | Optional | Статус слова у пользователя: `NEW`, `LEARNING`, `KNOWN`, или `null` |
+| `progress` | Optional | Прогресс чтения 0–100. Без токена: `0` |
 
 ---
 

@@ -1,6 +1,6 @@
 // update-entry.dto.ts
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { WordStatus } from "@prisma/client";
+import { Level, WordStatus } from "@prisma/client";
 import { IsEnum, IsInt, IsOptional, IsUUID, Min } from "class-validator";
 
 export class UpdateDictionaryEntryDto {
@@ -11,6 +11,14 @@ export class UpdateDictionaryEntryDto {
   @IsOptional()
   @IsEnum(WordStatus)
   learningLevel?: WordStatus;
+
+  @ApiPropertyOptional({
+    description: "CEFR level of the word (A1, A2, B1, B2)",
+    enum: Level,
+  })
+  @IsOptional()
+  @IsEnum(Level)
+  cefrLevel?: Level | null;
 
   @ApiPropertyOptional({
     description: "Move to folder. Pass null to remove from folder.",

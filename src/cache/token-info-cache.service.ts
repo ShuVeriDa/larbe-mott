@@ -16,8 +16,10 @@ export type TokenInfoCacheValue = {
   forms: string[];
   source: string | null;
   translation: string | null;
+  tranAlt: string | null;
   grammar: string | null;
   baseForm: string | null;
+  tags: string[];
 };
 
 @Injectable()

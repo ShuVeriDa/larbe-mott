@@ -37,7 +37,7 @@ export class WordsController {
   })
   @ApiBody({ type: WordLookupDto })
   @ApiOkResponse({
-    description: "translation, grammar, baseForm",
+    description: "lemmaId, translation, tranAlt, grammar, baseForm, forms[], tags[], examples[], userStatus, inDictionary, dictionaryEntryId",
   })
   async lookup(@Body() dto: WordLookupDto, @User("id") userId: string | undefined) {
     return this.wordsService.lookup(dto.tokenId, userId);

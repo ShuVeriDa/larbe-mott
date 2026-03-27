@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query } from "@nestjs/common";
+import { Controller, Delete, Get, Param, Post, Query } from "@nestjs/common";
 import {
   ApiBearerAuth,
   ApiNotFoundResponse,
@@ -10,6 +10,7 @@ import {
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
 import { Language, Level } from "@prisma/client";
+import { Auth } from "src/auth/decorators/auth.decorator";
 import { OptionalAuth } from "src/auth/decorators/optional-auth.decorator";
 import { User } from "src/user/decorators/user.decorator";
 import { TextService } from "./text.service";
@@ -124,6 +125,29 @@ export class TextController {
   @ApiNotFoundResponse({ description: "Text with the given ID was not found." })
   async getTextById(@Param("id") textId: string, @User("id") userId: string | undefined) {
     return this.textService.getTextById(textId, userId);
+  }
+
+  @Get("bookmarks")
+  @Auth()
+  @ApiOperation({
+    summary: "My bookmarks",
+    description: "Returns texts bookmarked by the authenticated user, sorted by bookmark date.",
+  })
+  @ApiOkResponse({ description: "Array of bookmarked texts with progress info." })
+  async getBookmarks(@User("id") userId: string) {
+    return this.textService.getBookmarks(userId);
+  }
+
+  @Post(":id/bookmark")
+  @Auth()
+  @ApiOperation({
+    summary: "Toggle bookmark",
+    description: "Adds or removes the text from the user's bookmarks. Returns { bookmarked: boolean }.",
+  })
+  @ApiParam({ name: "id", description: "Text ID (UUID)" })
+  @ApiOkResponse({ description: "{ bookmarked: true } or { bookmarked: false }" })
+  async toggleBookmark(@Param("id") textId: string, @User("id") userId: string) {
+    return this.textService.toggleBookmark(textId, userId);
   }
 
   @Get(":id/related")

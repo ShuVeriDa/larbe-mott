@@ -19,6 +19,9 @@ export class FoldersService {
       orderBy: {
         sortOrder: "asc",
       },
+      include: {
+        _count: { select: { entries: true } },
+      },
     });
   }
 

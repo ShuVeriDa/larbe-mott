@@ -83,7 +83,7 @@ export class TextService {
 
     const ids = texts.map((t) => t.id);
 
-    const [versions, userProgressRows] = await Promise.all([
+    const [versions, userProgressRows, bookmarkRows] = await Promise.all([
       this.prisma.textProcessingVersion.findMany({
         where: { textId: { in: ids } },
         orderBy: { version: "desc" },
@@ -93,6 +93,12 @@ export class TextService {
         ? this.prisma.userTextProgress.findMany({
             where: { userId, textId: { in: ids } },
             select: { textId: true, progressPercent: true, lastOpened: true },
+          })
+        : Promise.resolve([]),
+      userId
+        ? this.prisma.userTextBookmark.findMany({
+            where: { userId, textId: { in: ids } },
+            select: { textId: true },
           })
         : Promise.resolve([]),
     ]);
@@ -119,6 +125,7 @@ export class TextService {
         (p) => [p.textId, p],
       ),
     );
+    const bookmarkedTextIds = new Set((bookmarkRows as { textId: string }[]).map((b) => b.textId));
 
     const newThreshold = new Date();
     newThreshold.setDate(newThreshold.getDate() - NEW_TEXT_DAYS);
@@ -139,6 +146,7 @@ export class TextService {
         progressStatus: getProgressStatus(progressPercent),
         lastOpened: userProgress?.lastOpened ?? null,
         isNew,
+        isFavorite: bookmarkedTextIds.has(t.id),
       };
     });
 
@@ -274,59 +282,75 @@ export class TextService {
     });
     if (!text) throw new NotFoundException("Text not found");
 
-    const page = await this.prisma.textPage.findFirst({
-      where: { textId, pageNumber },
-    });
+    const [page, latestVersion, totalPages] = await Promise.all([
+      this.prisma.textPage.findFirst({ where: { textId, pageNumber } }),
+      this.prisma.textProcessingVersion.findFirst({
+        where: { textId },
+        orderBy: { version: "desc" },
+        select: { id: true },
+      }),
+      this.prisma.textPage.count({ where: { textId } }),
+    ]);
     if (!page) throw new NotFoundException("Page not found");
 
-    const latestVersion = await this.prisma.textProcessingVersion.findFirst({
-      where: { textId },
-      orderBy: { version: "desc" },
-      select: { id: true },
-    });
     if (!latestVersion) {
       return {
         ...text,
+        totalPages,
+        wordCount: 0,
         contentRich: page.contentRich,
         tokens: [],
         progress: 0,
         page: {
           id: page.id,
           pageNumber: page.pageNumber,
+          title: page.title ?? null,
           contentRich: page.contentRich,
           contentRaw: page.contentRaw,
         },
       };
     }
 
-    const tokens = await this.prisma.textToken.findMany({
-      where: { versionId: latestVersion.id, pageId: page.id },
-      orderBy: { position: "asc" },
-      select: {
-        id: true,
-        position: true,
-        original: true,
-        normalized: true,
-        status: true,
-        vocabId: true,
-      },
-    });
-
-    const lemmaIds = await this.prisma.tokenAnalysis
-      .findMany({
-        where: {
-          tokenId: { in: tokens.map((t) => t.id) },
-          isPrimary: true,
+    const [tokens, wordCount] = await Promise.all([
+      this.prisma.textToken.findMany({
+        where: { versionId: latestVersion.id, pageId: page.id },
+        orderBy: { position: "asc" },
+        select: {
+          id: true,
+          position: true,
+          original: true,
+          normalized: true,
+          status: true,
+          vocabId: true,
         },
-        select: { lemmaId: true },
-      })
-      .then((rows) => [
-        ...new Set(
-          rows.map((r) => r.lemmaId).filter((id): id is string => id !== null),
-        ),
-      ]);
-    if (userId && lemmaIds.length) {
-      await this.wordProgress.registerSeenWords(userId, lemmaIds);
+      }),
+      this.prisma.textToken.count({ where: { versionId: latestVersion.id } }),
+    ]);
+
+    // Primary lemmaId per token
+    const tokenAnalyses = await this.prisma.tokenAnalysis.findMany({
+      where: { tokenId: { in: tokens.map((t) => t.id) }, isPrimary: true },
+      select: { tokenId: true, lemmaId: true },
+    });
+    const lemmaIdByTokenId = new Map(
+      tokenAnalyses
+        .filter((a): a is typeof a & { lemmaId: string } => a.lemmaId !== null)
+        .map((a) => [a.tokenId, a.lemmaId]),
+    );
+    const uniqueLemmaIds = [...new Set(lemmaIdByTokenId.values())];
+
+    if (userId && uniqueLemmaIds.length) {
+      await this.wordProgress.registerSeenWords(userId, uniqueLemmaIds);
+    }
+
+    // userStatus per lemma
+    let userStatusByLemmaId = new Map<string, string>();
+    if (userId && uniqueLemmaIds.length) {
+      const progressRows = await this.prisma.userWordProgress.findMany({
+        where: { userId, lemmaId: { in: uniqueLemmaIds } },
+        select: { lemmaId: true, status: true },
+      });
+      userStatusByLemmaId = new Map(progressRows.map((r) => [r.lemmaId, r.status]));
     }
 
     if (userId) {
@@ -334,10 +358,7 @@ export class TextService {
         data: {
           userId,
           type: UserEventType.OPEN_TEXT,
-          metadata: {
-            textId,
-            pageNumber,
-          },
+          metadata: { textId, pageNumber },
         },
       });
     }
@@ -346,15 +367,23 @@ export class TextService {
       ? await this.textProgress.calculateProgress(userId, textId)
       : 0;
 
-    // ЭТАП 15: ответ «страница текста» — tokens[], contentRich (и дублируем в page для совместимости)
+    const tokensWithStatus = tokens.map((t) => {
+      const lemmaId = lemmaIdByTokenId.get(t.id) ?? null;
+      const userStatus = lemmaId ? (userStatusByLemmaId.get(lemmaId) ?? null) : null;
+      return { ...t, lemmaId, userStatus };
+    });
+
     return {
       ...text,
+      totalPages,
+      wordCount,
       contentRich: page.contentRich,
-      tokens,
+      tokens: tokensWithStatus,
       progress,
       page: {
         id: page.id,
         pageNumber: page.pageNumber,
+        title: page.title ?? null,
         contentRich: page.contentRich,
         contentRaw: page.contentRaw,
       },
@@ -395,13 +424,21 @@ export class TextService {
       ...new Set(analyses.map((a) => a.lemmaId).filter((id): id is string => id !== null)),
     ];
 
-    // Прогресс пользователя
-    const userProgress = userId
-      ? await this.prisma.userTextProgress.findUnique({
-          where: { userId_textId: { userId, textId } },
-          select: { progressPercent: true, lastOpened: true },
-        })
-      : null;
+    // Прогресс пользователя + закладка
+    const [userProgress, bookmark] = await Promise.all([
+      userId
+        ? this.prisma.userTextProgress.findUnique({
+            where: { userId_textId: { userId, textId } },
+            select: { progressPercent: true, lastOpened: true },
+          })
+        : Promise.resolve(null),
+      userId
+        ? this.prisma.userTextBookmark.findUnique({
+            where: { userId_textId: { userId, textId } },
+            select: { id: true },
+          })
+        : Promise.resolve(null),
+    ]);
 
     const progressPercent = userProgress?.progressPercent ?? 0;
     const lastOpened = userProgress?.lastOpened ?? null;
@@ -464,7 +501,89 @@ export class TextService {
       lastOpened,
       currentPage,
       wordStats,
+      isFavorite: bookmark !== null,
     };
+  }
+
+  async toggleBookmark(textId: string, userId: string): Promise<{ bookmarked: boolean }> {
+    const existing = await this.prisma.userTextBookmark.findUnique({
+      where: { userId_textId: { userId, textId } },
+    });
+    if (existing) {
+      await this.prisma.userTextBookmark.delete({ where: { id: existing.id } });
+      return { bookmarked: false };
+    }
+    await this.prisma.userTextBookmark.create({ data: { userId, textId } });
+    return { bookmarked: true };
+  }
+
+  async getBookmarks(userId: string) {
+    const rows = await this.prisma.userTextBookmark.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      include: {
+        text: {
+          include: {
+            tags: { include: { tag: { select: { id: true, name: true } } } },
+          },
+        },
+      },
+    });
+
+    if (!rows.length) return [];
+
+    const textIds = rows.map((r) => r.text.id);
+
+    const [versions, pageCounts, progressRows] = await Promise.all([
+      this.prisma.textProcessingVersion.findMany({
+        where: { textId: { in: textIds } },
+        orderBy: { version: "desc" },
+        select: { id: true, textId: true },
+      }),
+      this.prisma.textPage.groupBy({
+        by: ["textId"],
+        where: { textId: { in: textIds } },
+        _count: { id: true },
+      }),
+      this.prisma.userTextProgress.findMany({
+        where: { userId, textId: { in: textIds } },
+        select: { textId: true, progressPercent: true },
+      }),
+    ]);
+
+    const latestVersionIdByTextId = new Map<string, string>();
+    for (const v of versions) {
+      if (!latestVersionIdByTextId.has(v.textId)) latestVersionIdByTextId.set(v.textId, v.id);
+    }
+    const versionIds = [...latestVersionIdByTextId.values()];
+    const tokenCounts = await this.prisma.textToken.groupBy({
+      by: ["versionId"],
+      where: { versionId: { in: versionIds } },
+      _count: { id: true },
+    });
+    const countByVersionId = new Map(tokenCounts.map((c) => [c.versionId, c._count.id]));
+    const pageCountByTextId = new Map(pageCounts.map((p) => [p.textId, p._count.id]));
+    const progressByTextId = new Map(progressRows.map((p) => [p.textId, p.progressPercent]));
+
+    return rows.map((r) => {
+      const t = r.text;
+      const versionId = latestVersionIdByTextId.get(t.id);
+      const wordCount = versionId ? (countByVersionId.get(versionId) ?? 0) : 0;
+      return {
+        id: t.id,
+        title: t.title,
+        language: t.language,
+        level: t.level,
+        author: t.author,
+        imageUrl: t.imageUrl,
+        tags: t.tags.map((tt) => tt.tag),
+        wordCount,
+        readingTime: calcReadingTime(wordCount),
+        totalPages: pageCountByTextId.get(t.id) ?? 0,
+        progressPercent: progressByTextId.get(t.id) ?? 0,
+        bookmarkedAt: r.createdAt,
+      };
+    });
   }
 
   async getRelatedTexts(textId: string, userId: string | undefined) {

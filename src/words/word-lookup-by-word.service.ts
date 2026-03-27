@@ -4,12 +4,14 @@ import { DictionaryCacheService } from "src/markup-engine/dictionary-cache/dicti
 import { DictionaryService } from "src/markup-engine/dictionary/dictionary.service";
 import { MorphologyService } from "src/markup-engine/morphology/morphology.service";
 import { OnlineDictionaryService } from "src/markup-engine/online-dictionary/online-dictionary.service";
+import { parseTranslation } from "src/markup-engine/online-dictionary/translation-parser";
 import { normalizeToken } from "src/markup-engine/tokenizer/tokenizer.utils";
 import { UnknownWordProcessor } from "src/markup-engine/unknown-word/unknown-word.processor";
 import { PrismaService } from "src/prisma.service";
 
 export type WordLookupResult = {
   translation: string | null;
+  tranAlt: string | null;
   grammar: string | null;
   baseForm: string | null;
 };
@@ -69,7 +71,7 @@ export class WordLookupByWordService {
         .catch(() => {});
     }
 
-    return { translation: null, grammar: null, baseForm: null };
+    return { translation: null, tranAlt: null, grammar: null, baseForm: null };
   }
 
   private async resolveUserLanguage(userId?: string): Promise<Language> {
@@ -97,7 +99,9 @@ export class WordLookupByWordService {
     const map = await this.dictionaryCache.findMap([normalized]);
     const row = map.get(normalized);
     if (!row) return null;
-    const translation = row.translation ?? null;
+    const parsed = parseTranslation(row.translation);
+    const translation = parsed?.main ?? row.translation ?? null;
+    const tranAlt = parsed?.alt ?? null;
     if (row.lemmaId) {
       const lemma = await this.prisma.lemma.findUnique({
         where: { id: row.lemmaId },
@@ -105,11 +109,12 @@ export class WordLookupByWordService {
       });
       return {
         translation,
+        tranAlt,
         grammar: lemma?.partOfSpeech ?? null,
         baseForm: lemma?.baseForm ?? null,
       };
     }
-    return { translation, grammar: null, baseForm: null };
+    return { translation, tranAlt, grammar: null, baseForm: null };
   }
 
   private async fromOnline(
@@ -120,6 +125,7 @@ export class WordLookupByWordService {
     if (!result?.translation) return null;
     return {
       translation: result.translation,
+      tranAlt: result.tranAlt ?? null,
       grammar: null,
       baseForm: null,
     };
@@ -147,14 +153,24 @@ export class WordLookupByWordService {
         headwords: {
           take: 1,
           orderBy: { order: "asc" },
-          include: { entry: { select: { rawTranslate: true } } },
+          include: {
+            entry: {
+              select: {
+                rawTranslate: true,
+                senses: { select: { definition: true }, take: 1, orderBy: { order: "asc" } },
+              },
+            },
+          },
         },
       },
     });
-    if (!lemma) return { translation: null, grammar: null, baseForm: null };
-    const translation = lemma.headwords[0]?.entry?.rawTranslate ?? null;
+    if (!lemma) return { translation: null, tranAlt: null, grammar: null, baseForm: null };
+    const rawTranslate = lemma.headwords[0]?.entry?.rawTranslate ?? null;
+    const parsed = parseTranslation(rawTranslate);
+    const senseDefinition = lemma.headwords[0]?.entry?.senses?.[0]?.definition ?? null;
     return {
-      translation,
+      translation: parsed?.main ?? rawTranslate,
+      tranAlt: parsed?.alt ?? senseDefinition,
       grammar: lemma.partOfSpeech ?? null,
       baseForm: lemma.baseForm ?? null,
     };

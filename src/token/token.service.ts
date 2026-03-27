@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { TokenInfoCacheService } from "src/cache/token-info-cache.service";
+import { parseTranslation } from "src/markup-engine/online-dictionary/translation-parser";
 import { TokenizerService } from "src/markup-engine/tokenizer/tokenizer.service";
 import { PrismaService } from "src/prisma.service";
 import { WordProgressService } from "src/progress/word-progress/word-progress.service";
@@ -54,7 +55,7 @@ export class TokenService {
                     entry: { select: { rawTranslate: true } },
                   },
                 },
-                morphForms: true,
+                morphForms: { select: { form: true, normalized: true, grammarTag: true } },
               },
             },
           },
@@ -78,8 +79,10 @@ export class TokenService {
         word: token.original,
         textId: token.version.textId,
         translation: cachedByWord.translation ?? null,
+        tranAlt: cachedByWord.tranAlt ?? null,
         grammar: cachedByWord.grammar ?? null,
         baseForm: cachedByWord.baseForm ?? null,
+        tags: cachedByWord.tags ?? [],
       };
       if (userId && result.lemmaId) {
         await this.wordProgress.registerClick(userId, result.lemmaId);
@@ -126,8 +129,17 @@ export class TokenService {
 
     const headword = primary?.lemma?.headwords?.[0];
     const entry = headword?.entry as { rawTranslate?: string } | undefined;
-    const translation =
-      entry?.rawTranslate ?? token.vocabulary?.translation ?? null;
+    const rawTranslation = entry?.rawTranslate ?? token.vocabulary?.translation ?? null;
+    const parsedTranslation = parseTranslation(rawTranslation);
+
+    // grammarTag from the MorphForm matching this token's normalized form
+    const matchingForm = primary?.lemma?.morphForms?.find(
+      (f) => f.normalized === token.normalized,
+    );
+    const grammarTag = matchingForm?.grammarTag ?? null;
+    const partOfSpeech = primary?.lemma?.partOfSpeech ?? null;
+    const tags: string[] = [partOfSpeech, grammarTag].filter((t): t is string => t !== null);
+
     const result = {
       tokenId: token.id,
       word: token.original,
@@ -137,9 +149,11 @@ export class TokenService {
       lemma: headword?.text ?? null,
       forms: primary?.lemma?.morphForms?.map((f) => f.form) ?? [],
       source: primary?.source ?? null,
-      translation,
-      grammar: primary?.lemma?.partOfSpeech ?? null,
+      translation: parsedTranslation?.main ?? rawTranslation,
+      tranAlt: parsedTranslation?.alt ?? null,
+      grammar: partOfSpeech,
       baseForm: primary?.lemma?.baseForm ?? headword?.text ?? null,
+      tags,
     };
 
     await this.cache.set(token.id, token.versionId, token.normalized, result);

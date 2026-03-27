@@ -83,6 +83,18 @@ export class DictionaryController {
     return await this.foldersService.getUserDictionaryFolder(id, userId);
   }
 
+  @Get("due")
+  @Auth()
+  @ApiOperation({
+    summary: "Get words due for review",
+    description:
+      "Get words whose next review date is now or in the past, ordered by review date",
+  })
+  @ApiOkResponse({ description: "Due words with count and next scheduled review" })
+  async getDueWords(@User("id") userId: string) {
+    return await this.dictionaryService.getDueWords(userId);
+  }
+
   @Get(":id")
   @Auth()
   @ApiOperation({

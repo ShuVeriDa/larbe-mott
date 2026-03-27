@@ -20,4 +20,5 @@ export interface DikResponse {
 export type LookupResult = {
   normalized: string;
   translation: string | null;
+  tranAlt: string | null;
 } | null;

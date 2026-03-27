@@ -19,9 +19,74 @@ export class DictionaryService {
   ) {}
 
   async getUserDictionaryEntries(userId: string) {
-    return await this.prismaService.userDictionaryEntry.findMany({
+    const entries = await this.prismaService.userDictionaryEntry.findMany({
       where: { userId },
       orderBy: { addedAt: "desc" },
+      include: {
+        folder: { select: { id: true, name: true } },
+        lemma: {
+          select: {
+            id: true,
+            baseForm: true,
+            partOfSpeech: true,
+            morphForms: { select: { form: true, grammarTag: true } },
+            headwords: {
+              select: {
+                entry: {
+                  select: {
+                    senses: {
+                      orderBy: { order: "asc" },
+                      take: 3,
+                      select: {
+                        definition: true,
+                        examples: {
+                          take: 2,
+                          select: { text: true, translation: true },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            wordContexts: {
+              where: { userId },
+              take: 1,
+              orderBy: { seenAt: "desc" },
+              select: {
+                textId: true,
+                snippet: true,
+                text: { select: { title: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Attach nextReview from UserWordProgress for entries that have a lemmaId
+    const lemmaIds = entries
+      .map((e) => e.lemmaId)
+      .filter((id): id is string => id !== null);
+
+    const progressMap = new Map<string, { nextReview: Date | null; status: string }>();
+    if (lemmaIds.length > 0) {
+      const progresses = await this.prismaService.userWordProgress.findMany({
+        where: { userId, lemmaId: { in: lemmaIds } },
+        select: { lemmaId: true, nextReview: true, status: true },
+      });
+      for (const p of progresses) {
+        progressMap.set(p.lemmaId, { nextReview: p.nextReview, status: p.status });
+      }
+    }
+
+    return entries.map((entry) => {
+      const progress = entry.lemmaId ? progressMap.get(entry.lemmaId) : null;
+      return {
+        ...entry,
+        nextReview: progress?.nextReview ?? null,
+        wordProgressStatus: progress?.status ?? null,
+      };
     });
   }
 
@@ -36,7 +101,8 @@ export class DictionaryService {
   }
 
   async getUserDictionaryStats(userId: string) {
-    const [grouped, agg] = await Promise.all([
+    const now = new Date();
+    const [grouped, agg, dueCount] = await Promise.all([
       this.prismaService.userDictionaryEntry.groupBy({
         by: ["learningLevel"],
         _count: true,
@@ -47,6 +113,12 @@ export class DictionaryService {
         _count: true,
         _sum: { repetitionCount: true },
       }),
+      this.prismaService.userWordProgress.count({
+        where: {
+          userId,
+          nextReview: { lte: now },
+        },
+      }),
     ]);
     const byLevel: Record<string, number> = {
       NEW: 0,
@@ -56,10 +128,15 @@ export class DictionaryService {
     for (const row of grouped) {
       byLevel[row.learningLevel] = row._count;
     }
+    const total = agg._count;
+    const known = byLevel.KNOWN;
+    const masteryPercent = total > 0 ? Math.round((known / total) * 100) : 0;
     return {
-      total: agg._count,
+      total,
       byLevel,
       totalRepetitions: agg._sum.repetitionCount ?? 0,
+      dueCount,
+      masteryPercent,
     };
   }
 
@@ -148,7 +225,7 @@ export class DictionaryService {
     id: string,
     userId: string,
   ) {
-    const { learningLevel, folderId, repetitionCount } = dto;
+    const { learningLevel, cefrLevel, folderId, repetitionCount } = dto;
     const existingEntry = await this.getUserDictionaryEntry(id, userId);
 
     if (folderId !== undefined && folderId !== null) {
@@ -162,6 +239,7 @@ export class DictionaryService {
 
     const data: Prisma.UserDictionaryEntryUpdateInput = {};
     if (learningLevel !== undefined) data.learningLevel = learningLevel;
+    if (cefrLevel !== undefined) data.cefrLevel = cefrLevel;
     if (repetitionCount !== undefined && repetitionCount !== null) {
       data.repetitionCount = repetitionCount;
     }
@@ -186,6 +264,64 @@ export class DictionaryService {
     });
 
     return "Dictionary entry deleted";
+  }
+
+  async getDueWords(userId: string) {
+    const now = new Date();
+    // Words due for review: UserWordProgress.nextReview <= now, joined with UserDictionaryEntry
+    const progresses = await this.prismaService.userWordProgress.findMany({
+      where: {
+        userId,
+        nextReview: { lte: now },
+      },
+      orderBy: { nextReview: "asc" },
+      select: {
+        lemmaId: true,
+        nextReview: true,
+        status: true,
+        lemma: {
+          select: {
+            baseForm: true,
+            partOfSpeech: true,
+            userDictionaryEntries: {
+              where: { userId },
+              take: 1,
+              select: {
+                id: true,
+                word: true,
+                translation: true,
+                learningLevel: true,
+                cefrLevel: true,
+                folderId: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Next upcoming review (first one after now)
+    const nextScheduled = await this.prismaService.userWordProgress.findFirst({
+      where: {
+        userId,
+        nextReview: { gt: now },
+      },
+      orderBy: { nextReview: "asc" },
+      select: { nextReview: true },
+    });
+
+    return {
+      count: progresses.length,
+      nextScheduledAt: nextScheduled?.nextReview ?? null,
+      words: progresses.map((p) => ({
+        lemmaId: p.lemmaId,
+        nextReview: p.nextReview,
+        status: p.status,
+        baseForm: p.lemma.baseForm,
+        partOfSpeech: p.lemma.partOfSpeech,
+        dictionaryEntry: p.lemma.userDictionaryEntries[0] ?? null,
+      })),
+    };
   }
 
   async deleteAllUserDictionaryEntries(userId: string) {

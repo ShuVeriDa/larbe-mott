@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import axios from "axios";
 import { Language } from "@prisma/client";
 import { DikResponse, LookupResult } from "./online-dictionary.type";
+import { parseTranslation } from "./translation-parser";
 
 /** Конфигурация внешних словарей по языку */
 const ONLINE_DICT_CONFIG: Partial<Record<Language, { url: string; lang: string }>> = {
@@ -56,25 +57,26 @@ export class OnlineDictionaryService {
 
       if (!data) return null;
 
-      // 1️⃣ прямой перевод
+      // 1️⃣ прямой перевод — берём первый словарь с совпадением по слову
       if (data.data?.length) {
-        const words = data.data[0]?.words;
-
-        if (words?.length) {
+        const rawTranslate = this.pickBestTranslate(data.data, word);
+        if (rawTranslate != null) {
+          const parsed = parseTranslation(rawTranslate);
           return {
             normalized: word,
-            translation: words[0].translate ?? null,
+            translation: parsed?.main ?? null,
+            tranAlt: parsed?.alt ?? null,
           };
         }
       }
 
       // 2️⃣ suggestedWords fallback
       if (data.suggestedWords?.length) {
-        const suggestion = data.suggestedWords[0];
-
+        const parsed = parseTranslation(data.suggestedWords[0].translate);
         return {
           normalized: word,
-          translation: suggestion.translate ?? null,
+          translation: parsed?.main ?? null,
+          tranAlt: parsed?.alt ?? null,
         };
       }
 
@@ -82,5 +84,33 @@ export class OnlineDictionaryService {
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Picks the best translate string from all dictionaries.
+   * Priority: exact word1/word match (case-insensitive, accent-stripped) → first available.
+   */
+  private pickBestTranslate(
+    dicts: DikResponse["data"],
+    query: string,
+  ): string | null {
+    const q = this.stripAccents(query.toLowerCase());
+    for (const dict of dicts) {
+      for (const w of dict.words ?? []) {
+        const key = this.stripAccents((w.word1 ?? w.word ?? "").toLowerCase());
+        if (key === q && w.translate) return w.translate;
+      }
+    }
+    // fallback: first non-empty translate
+    for (const dict of dicts) {
+      const first = dict.words?.find((w) => w.translate);
+      if (first) return first.translate;
+    }
+    return null;
+  }
+
+  /** Remove combining diacritical marks and accent chars used in Chechen dictionaries. */
+  private stripAccents(s: string): string {
+    return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   }
 }
