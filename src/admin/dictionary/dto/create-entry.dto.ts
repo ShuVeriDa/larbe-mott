@@ -1,13 +1,14 @@
 import {
   ArrayNotEmpty,
   IsArray,
+  IsEnum,
   IsOptional,
   IsString,
   Matches,
 } from "class-validator";
 
 import { ApiProperty } from "@nestjs/swagger";
-import { Language } from "@prisma/client";
+import { Language, Level } from "@prisma/client";
 
 export class CreateEntryDto {
   @ApiProperty({ description: "Word or phrase (lemma)", example: "машин" })
@@ -45,6 +46,11 @@ export class CreateEntryDto {
   @ApiProperty({ description: "Translation text", example: "car" })
   @IsString()
   translation: string;
+
+  @ApiProperty({ enum: Level, description: "CEFR level", required: false })
+  @IsOptional()
+  @IsEnum(Level)
+  level?: Level;
 
   @ApiProperty({
     description: "Optional notes",

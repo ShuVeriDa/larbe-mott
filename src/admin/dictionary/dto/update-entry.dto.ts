@@ -1,5 +1,6 @@
-import { IsArray, IsOptional, IsString, MaxLength, MinLength } from "class-validator";
+import { IsArray, IsEnum, IsOptional, IsString, MaxLength, MinLength } from "class-validator";
 import { ApiPropertyOptional } from "@nestjs/swagger";
+import { Level } from "@prisma/client";
 
 /** DTO for PATCH /admin/dictionary/:id — update lemma, translation, notes, forms. */
 export class PatchEntryDto {
@@ -30,6 +31,11 @@ export class PatchEntryDto {
   @IsString()
   @MaxLength(2000)
   translation?: string;
+
+  @ApiPropertyOptional({ enum: Level, description: "CEFR level" })
+  @IsOptional()
+  @IsEnum(Level)
+  level?: Level;
 
   @ApiPropertyOptional({
     description: "Notes",

@@ -584,6 +584,8 @@ model Lemma {
   partOfSpeech    String?
   frequency       Int?
   transliteration String?
+  level           Level?
+  createdAt       DateTime @default(now())
 
   headwords     Headword[] @relation("HeadwordLemma")
   userDictionaryEntries UserDictionaryEntry[] @relation("UserDictionaryEntryLemma")
@@ -943,6 +945,22 @@ model TokenAnalysis {
   @@index([lemmaId])
   @@index([tokenId])
   @@map("token_analysis")
+}
+
+//////////////////////////////////////////////////////
+// TOKENIZATION SETTINGS (singleton, id = 1)
+//////////////////////////////////////////////////////
+
+model TokenizationSettings {
+  id                 Int     @id @default(1)
+  autoTokenize       Boolean @default(true)
+  normalization      Boolean @default(true)
+  morphAnalysis      Boolean @default(true)
+  onlineDictionaries Boolean @default(false)
+
+  updatedAt DateTime @updatedAt
+
+  @@map("tokenization_settings")
 }
 
 //////////////////////////////////////////////////////

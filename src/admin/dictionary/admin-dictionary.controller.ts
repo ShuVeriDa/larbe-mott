@@ -1,28 +1,43 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
   Post,
   Query,
+  Res,
+  UploadedFile,
+  UseInterceptors,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import {
   ApiBearerAuth,
   ApiBody,
+  ApiConsumes,
   ApiCreatedResponse,
   ApiForbiddenResponse,
+  ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiParam,
+  ApiQuery,
   ApiTags,
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
 import { PermissionCode } from "@prisma/client";
+import type { Response } from "express";
+import { BulkDeleteDto } from "src/admin/dictionary/dto/bulk-delete.dto";
 import { CreateEntryDto } from "src/admin/dictionary/dto/create-entry.dto";
+import { CreateExampleDto } from "src/admin/dictionary/dto/create-example.dto";
+import { CreateSenseDto } from "src/admin/dictionary/dto/create-sense.dto";
 import { DictionaryListQueryDto } from "src/admin/dictionary/dto/list-query.dto";
 import { PatchEntryDto } from "src/admin/dictionary/dto/update-entry.dto";
+import { UpdateSenseDto } from "src/admin/dictionary/dto/update-sense.dto";
 import { AdminPermission } from "src/auth/decorators/admin-permission.decorator";
 import { DictionaryService } from "src/markup-engine/dictionary/dictionary.service";
 import { User } from "src/user/decorators/user.decorator";
@@ -34,35 +49,101 @@ import { User } from "src/user/decorators/user.decorator";
 export class AdminDictionaryController {
   constructor(private dictionaryService: DictionaryService) {}
 
+  // ─────────────────────────────────────────────────────
+  // STATS
+  // ─────────────────────────────────────────────────────
+
+  @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
+  @Get("stats")
+  @ApiOperation({
+    summary: "Dictionary stats (admin only)",
+    description:
+      "Returns total entries, lemmas, senses, morph forms, entries without senses, and unknown words count.",
+  })
+  @ApiOkResponse({
+    description:
+      "{ totalEntries, totalLemmas, totalSenses, totalMorphForms, entriesWithoutSenses, unknownWordsCount }",
+  })
+  @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
+  getStats() {
+    return this.dictionaryService.getStats();
+  }
+
+  // ─────────────────────────────────────────────────────
+  // LIST
+  // ─────────────────────────────────────────────────────
+
   @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
   @Get()
   @ApiOperation({
     summary: "List dictionary entries (admin only)",
     description:
-      "Search and paginate admin dictionary. Query: q (search), language, page, limit.",
+      "Search and paginate admin dictionary. Supports filtering by pos, level, tab (all|no_senses|no_examples|no_forms) and sorting.",
   })
   @ApiOkResponse({
-    description: "Object with items[], total, page, limit.",
+    description: "{ items[], total, page, limit, tabCounts }",
   })
   @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
   list(@Query() query: DictionaryListQueryDto) {
     return this.dictionaryService.getListForAdmin({
       q: query.q,
       language: query.language,
+      pos: query.pos,
+      level: query.level,
+      sort: query.sort,
+      tab: query.tab,
       page: query.page,
       limit: query.limit,
     });
   }
 
+  // ─────────────────────────────────────────────────────
+  // EXPORT
+  // ─────────────────────────────────────────────────────
+
+  @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
+  @Get("export")
+  @ApiOperation({
+    summary: "Export dictionary entries as JSON (admin only)",
+    description: "Pass optional ids[] to export specific entries; omit for full export.",
+  })
+  @ApiQuery({
+    name: "ids",
+    required: false,
+    isArray: true,
+    type: String,
+    description: "Lemma UUIDs to export (omit for all)",
+  })
+  @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
+  async export(
+    @Query("ids") ids: string | string[] | undefined,
+    @Res() res: Response,
+  ) {
+    const idList = ids ? (Array.isArray(ids) ? ids : [ids]) : undefined;
+    const data = await this.dictionaryService.exportEntries(idList);
+    res
+      .setHeader("Content-Type", "application/json")
+      .setHeader(
+        "Content-Disposition",
+        `attachment; filename="dictionary-export-${Date.now()}.json"`,
+      )
+      .json(data);
+  }
+
+  // ─────────────────────────────────────────────────────
+  // GET CARD
+  // ─────────────────────────────────────────────────────
+
   @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
   @Get(":id")
   @ApiOperation({
     summary: "Get dictionary entry card by lemma id (admin only)",
-    description: "Returns lemma, translation, notes, forms.",
+    description: "Returns lemma, translation, notes, senses with examples, and forms.",
   })
   @ApiParam({ name: "id", description: "Lemma ID (UUID)" })
   @ApiOkResponse({
-    description: "Entry card: id, baseForm, normalized, language, partOfSpeech, translation, notes, forms.",
+    description:
+      "Entry card: id, baseForm, normalized, language, partOfSpeech, level, frequency, createdAt, translation, notes, entryId, senses[], forms[]",
   })
   @ApiNotFoundResponse({ description: "Entry not found." })
   @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
@@ -70,43 +151,187 @@ export class AdminDictionaryController {
     return this.dictionaryService.getCardForAdmin(lemmaId);
   }
 
+  // ─────────────────────────────────────────────────────
+  // CREATE
+  // ─────────────────────────────────────────────────────
+
   @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
   @Post()
   @ApiOperation({
     summary: "Create dictionary entry (admin only)",
     description:
-      "Creates a new dictionary entry: word, normalized form, language, translation, optional part of speech, notes, and forms. Requires admin role.",
+      "Creates a new dictionary entry: word, normalized form, language, translation, optional part of speech, level, notes, and forms.",
   })
-  @ApiBody({
-    description: "Dictionary entry payload.",
-    type: CreateEntryDto,
-  })
-  @ApiCreatedResponse({
-    description: "Dictionary entry created successfully.",
-  })
+  @ApiBody({ type: CreateEntryDto })
+  @ApiCreatedResponse({ description: "Dictionary entry created successfully." })
   @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
   create(@Body() dto: CreateEntryDto, @User("id") userId: string) {
     return this.dictionaryService.createEntry(dto, userId);
   }
+
+  // ─────────────────────────────────────────────────────
+  // UPDATE
+  // ─────────────────────────────────────────────────────
 
   @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
   @Patch(":id")
   @ApiOperation({
     summary: "Update dictionary entry (admin only)",
     description:
-      "Update baseForm, partOfSpeech, translation, notes, or forms (replaces all forms). Lemma ID in path.",
+      "Update baseForm, partOfSpeech, level, translation, notes, or forms (replaces all forms).",
   })
   @ApiParam({ name: "id", description: "Lemma ID (UUID)" })
-  @ApiBody({
-    description: "Fields to update (all optional).",
-    type: PatchEntryDto,
-  })
-  @ApiOkResponse({
-    description: "Updated entry card.",
-  })
+  @ApiBody({ type: PatchEntryDto })
+  @ApiOkResponse({ description: "Updated entry card." })
   @ApiNotFoundResponse({ description: "Entry not found." })
   @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
   update(@Param("id") lemmaId: string, @Body() dto: PatchEntryDto) {
     return this.dictionaryService.updateEntry(lemmaId, dto);
+  }
+
+  // ─────────────────────────────────────────────────────
+  // DELETE SINGLE
+  // ─────────────────────────────────────────────────────
+
+  @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
+  @Delete(":id")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: "Delete dictionary entry (admin only)",
+    description: "Deletes the lemma and all associated entry data (senses, examples, forms).",
+  })
+  @ApiParam({ name: "id", description: "Lemma ID (UUID)" })
+  @ApiNoContentResponse({ description: "Deleted." })
+  @ApiNotFoundResponse({ description: "Entry not found." })
+  @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
+  async deleteEntry(@Param("id") lemmaId: string) {
+    await this.dictionaryService.deleteEntry(lemmaId);
+  }
+
+  // ─────────────────────────────────────────────────────
+  // BULK DELETE
+  // ─────────────────────────────────────────────────────
+
+  @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
+  @Delete()
+  @ApiOperation({
+    summary: "Bulk delete dictionary entries (admin only)",
+    description: "Deletes multiple entries by lemma IDs.",
+  })
+  @ApiBody({ type: BulkDeleteDto })
+  @ApiOkResponse({ description: "{ deleted: number }" })
+  @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
+  bulkDelete(@Body() dto: BulkDeleteDto) {
+    return this.dictionaryService.bulkDelete(dto);
+  }
+
+  // ─────────────────────────────────────────────────────
+  // IMPORT
+  // ─────────────────────────────────────────────────────
+
+  @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
+  @Post("import")
+  @UseInterceptors(FileInterceptor("file"))
+  @ApiConsumes("multipart/form-data")
+  @ApiOperation({
+    summary: "Import dictionary entries from JSON file (admin only)",
+    description:
+      "Upload a JSON file (max 10 MB) with an array of entries. Skips existing normalized forms. Returns { created, skipped, total }.",
+  })
+  @ApiBody({
+    schema: {
+      type: "object",
+      properties: { file: { type: "string", format: "binary" } },
+    },
+  })
+  @ApiOkResponse({ description: "{ created, skipped, total }" })
+  @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
+  async import(
+    @UploadedFile() file: Express.Multer.File,
+    @User("id") userId: string,
+  ) {
+    if (!file?.buffer) {
+      return { created: 0, skipped: 0, total: 0 };
+    }
+    const raw = file.buffer.toString("utf-8");
+    const records = JSON.parse(raw);
+    return this.dictionaryService.importEntries(records, userId);
+  }
+
+  // ─────────────────────────────────────────────────────
+  // SENSES
+  // ─────────────────────────────────────────────────────
+
+  @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
+  @Post(":id/senses")
+  @ApiOperation({
+    summary: "Add sense to dictionary entry (admin only)",
+    description: "Appends a new sense (meaning) to the entry's DictionaryEntry.",
+  })
+  @ApiParam({ name: "id", description: "Lemma ID (UUID)" })
+  @ApiBody({ type: CreateSenseDto })
+  @ApiCreatedResponse({ description: "Created sense: { id, order, definition, notes }" })
+  @ApiNotFoundResponse({ description: "Entry not found." })
+  @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
+  addSense(@Param("id") lemmaId: string, @Body() dto: CreateSenseDto) {
+    return this.dictionaryService.addSense(lemmaId, dto);
+  }
+
+  @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
+  @Patch("senses/:senseId")
+  @ApiOperation({
+    summary: "Update a sense (admin only)",
+    description: "Update definition, notes, or order of an existing sense.",
+  })
+  @ApiParam({ name: "senseId", description: "Sense ID (UUID)" })
+  @ApiBody({ type: UpdateSenseDto })
+  @ApiOkResponse({ description: "Updated sense." })
+  @ApiNotFoundResponse({ description: "Sense not found." })
+  @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
+  updateSense(@Param("senseId") senseId: string, @Body() dto: UpdateSenseDto) {
+    return this.dictionaryService.updateSense(senseId, dto);
+  }
+
+  @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
+  @Delete("senses/:senseId")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: "Delete a sense (admin only)" })
+  @ApiParam({ name: "senseId", description: "Sense ID (UUID)" })
+  @ApiNoContentResponse({ description: "Deleted." })
+  @ApiNotFoundResponse({ description: "Sense not found." })
+  @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
+  async deleteSense(@Param("senseId") senseId: string) {
+    await this.dictionaryService.deleteSense(senseId);
+  }
+
+  // ─────────────────────────────────────────────────────
+  // EXAMPLES
+  // ─────────────────────────────────────────────────────
+
+  @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
+  @Post("senses/:senseId/examples")
+  @ApiOperation({
+    summary: "Add example to a sense (admin only)",
+    description: "Adds an example sentence (with optional translation) to the given sense.",
+  })
+  @ApiParam({ name: "senseId", description: "Sense ID (UUID)" })
+  @ApiBody({ type: CreateExampleDto })
+  @ApiCreatedResponse({ description: "Created example: { id, text, translation }" })
+  @ApiNotFoundResponse({ description: "Sense not found." })
+  @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
+  addExample(@Param("senseId") senseId: string, @Body() dto: CreateExampleDto) {
+    return this.dictionaryService.addExample(senseId, dto);
+  }
+
+  @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
+  @Delete("examples/:exampleId")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: "Delete an example (admin only)" })
+  @ApiParam({ name: "exampleId", description: "Example ID (UUID)" })
+  @ApiNoContentResponse({ description: "Deleted." })
+  @ApiNotFoundResponse({ description: "Example not found." })
+  @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
+  async deleteExample(@Param("exampleId") exampleId: string) {
+    await this.dictionaryService.deleteExample(exampleId);
   }
 }

@@ -35,6 +35,8 @@ import { AdminPhrasebookController } from "./phrasebook/admin-phrasebook.control
 import { AdminPhrasebookService } from "./phrasebook/admin-phrasebook.service";
 import { AdminDashboardController } from "./dashboard/admin-dashboard.controller";
 import { AdminDashboardService } from "./dashboard/admin-dashboard.service";
+import { AdminTokenizationController } from "./tokenization/admin-tokenization.controller";
+import { AdminTokenizationService } from "./tokenization/admin-tokenization.service";
 
 @Module({
   imports: [
@@ -61,6 +63,7 @@ import { AdminDashboardService } from "./dashboard/admin-dashboard.service";
     AdminTagsController,
     AdminPhrasebookController,
     AdminDashboardController,
+    AdminTokenizationController,
   ],
   providers: [
     AdminService,
@@ -77,6 +80,7 @@ import { AdminDashboardService } from "./dashboard/admin-dashboard.service";
     AdminFeedbackService,
     AdminPhrasebookService,
     AdminDashboardService,
+    AdminTokenizationService,
     PrismaService,
   ],
 })

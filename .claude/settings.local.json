@@ -37,7 +37,8 @@
       "Bash(sed -n '555,615p' \"f:/programming/mott-larbe/mott-larbe-backend/prisma/schema.prisma\")",
       "Bash(sed -n '631,670p' \"f:/programming/mott-larbe/mott-larbe-backend/prisma/schema.prisma\")",
       "Bash(grep -v \"//\")",
-      "Bash(npx nest:*)"
+      "Bash(npx nest:*)",
+      "Bash(npm run:*)"
     ]
   }
 }
