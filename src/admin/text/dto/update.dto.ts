@@ -4,13 +4,16 @@ import { Type } from "class-transformer";
 import {
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsDateString,
+  IsEnum,
   IsInt,
   IsNotEmpty,
   IsObject,
   IsOptional,
   IsString,
   IsUUID,
+  IsUrl,
   Matches,
   MaxLength,
   Min,
@@ -18,6 +21,12 @@ import {
   ValidateIf,
   ValidateNested,
 } from "class-validator";
+
+export enum TextStatusUpdate {
+  DRAFT = "draft",
+  PUBLISHED = "published",
+  ARCHIVED = "archived",
+}
 import { IsTiptapDoc } from "../../../text/dto/tiptap-doc.validator";
 
 export class CreateTextPageDto {
@@ -60,15 +69,11 @@ export class CreateTextPageDto {
 
 /** DTO for PATCH /texts/:id — all fields optional, only sent fields are updated. */
 export class PatchTextDto {
-  @ApiProperty({ required: false })
+  @ApiProperty({ required: false, maxLength: 200 })
   @IsOptional()
   @IsString()
-  @MinLength(2, {
-    message: "Title must be at least 2 characters long",
-  })
-  @MaxLength(50, {
-    message: "Title must be no more than 50 characters long",
-  })
+  @MinLength(2, { message: "Title must be at least 2 characters long" })
+  @MaxLength(200, { message: "Title must be no more than 200 characters long" })
   title?: string;
 
   @ApiProperty({
@@ -108,12 +113,8 @@ export class PatchTextDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
-  @MinLength(2, {
-    message: "Author must be at least 2 characters long",
-  })
-  @MaxLength(50, {
-    message: "Author must be no more than 50 characters long",
-  })
+  @MinLength(2, { message: "Author must be at least 2 characters long" })
+  @MaxLength(50, { message: "Author must be no more than 50 characters long" })
   author?: string;
 
   @ApiProperty({ required: false })
@@ -123,7 +124,7 @@ export class PatchTextDto {
 
   @ApiProperty({
     description:
-      "Publish: ISO date string (e.g. '2025-01-15T00:00:00.000Z'). Unpublish: null. Omit to leave unchanged.",
+      "Publish: ISO date string. Unpublish: null. Omit to leave unchanged.",
     required: false,
     nullable: true,
   })
@@ -131,6 +132,27 @@ export class PatchTextDto {
   @ValidateIf((_o, v) => v != null && v !== "")
   @IsDateString()
   publishedAt?: string | null;
+
+  @ApiProperty({
+    description:
+      "Archive: ISO date string. Un-archive: null. Omit to leave unchanged.",
+    required: false,
+    nullable: true,
+  })
+  @IsOptional()
+  @ValidateIf((_o, v) => v != null && v !== "")
+  @IsDateString()
+  archivedAt?: string | null;
+
+  @ApiProperty({
+    description: "Cover image URL. Null to remove.",
+    required: false,
+    nullable: true,
+  })
+  @IsOptional()
+  @ValidateIf((_o, v) => v != null)
+  @IsUrl({}, { message: "imageUrl must be a valid URL" })
+  imageUrl?: string | null;
 
   @ApiProperty({
     type: [CreateTextPageDto],
@@ -186,4 +208,37 @@ export class PatchTextDto {
   @IsArray()
   @IsUUID("4", { each: true })
   tagIds?: string[];
+
+  @ApiProperty({
+    enum: TextStatusUpdate,
+    description: "Convenience status field. Maps to publishedAt / archivedAt.",
+    required: false,
+  })
+  @IsOptional()
+  @IsEnum(TextStatusUpdate)
+  status?: TextStatusUpdate;
+
+  @ApiProperty({
+    description: "Auto-retokenize on save when pages change.",
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  autoTokenizeOnSave?: boolean;
+
+  @ApiProperty({
+    description: "Bring words to base form during tokenization.",
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  useNormalization?: boolean;
+
+  @ApiProperty({
+    description: "Apply morphological rules during tokenization.",
+    required: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  useMorphAnalysis?: boolean;
 }

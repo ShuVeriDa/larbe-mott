@@ -142,6 +142,26 @@ enum UserStatus {
   DELETED
 }
 
+enum ProcessingStatus {
+  IDLE
+  RUNNING
+  COMPLETED
+  ERROR
+}
+
+enum ProcessingTrigger {
+  MANUAL
+  AUTO_ON_SAVE
+  AUTO_ON_CREATE
+}
+
+enum LogLevel {
+  INFO
+  OK
+  WARN
+  ERROR
+}
+
 //////////////////////////////////////////////////////
 // USER EVENTS (ANALYTICS)
 //////////////////////////////////////////////////////
@@ -214,6 +234,8 @@ model User {
   preferences   UserPreferences?
   goals         UserGoals?
   notifications UserNotificationPreferences?
+
+  initiatedVersions TextProcessingVersion[] @relation("VersionInitiator")
 
   @@index([status])
   @@index([language])
@@ -731,11 +753,20 @@ model Text {
   description String?
   level       Level?
   language    Language
-  author      String
+  author      String?
   source      String?
   imageUrl    String?
 
   publishedAt DateTime?
+  archivedAt  DateTime?
+
+  processingStatus   ProcessingStatus @default(IDLE)
+  processingProgress Int              @default(0)
+  processingError    String?
+
+  autoTokenizeOnSave Boolean @default(true)
+  useNormalization   Boolean @default(true)
+  useMorphAnalysis   Boolean @default(false)
 
   createdById   String
   createdBy     User @relation("text", fields: [createdById], references: [id], onDelete: Cascade)
@@ -790,15 +821,45 @@ model TextProcessingVersion {
   textId    String
   version   Int
 
-  createdAt DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  status        ProcessingStatus  @default(RUNNING)
+  progress      Int               @default(0)
+  errorMessage  String?
+  durationMs    Int?
 
-  text      Text @relation(fields: [textId], references: [id], onDelete: Cascade)
+  isCurrent     Boolean           @default(false)
+
+  trigger       ProcessingTrigger @default(MANUAL)
+  initiatorId   String?
+  label         String?
+
+  useNormalization Boolean @default(true)
+  useMorphAnalysis Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  text      Text  @relation(fields: [textId], references: [id], onDelete: Cascade)
+  initiator User? @relation("VersionInitiator", fields: [initiatorId], references: [id], onDelete: SetNull)
   tokens    TextToken[]
   vocabulary TextVocabulary[]
+  logs      TextVersionLog[]
 
   @@unique([textId, version])
+  @@index([textId, isCurrent])
   @@map("text_processing_version")
+}
+
+model TextVersionLog {
+  id        String   @id @default(cuid())
+  versionId String
+  timestamp DateTime @default(now())
+  level     LogLevel
+  message   String
+
+  version   TextProcessingVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@index([versionId])
+  @@map("text_version_log")
 }
 
 //////////////////////////////////////////////////////

@@ -1,18 +1,26 @@
 import { ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
+import { NestExpressApplication } from "@nestjs/platform-express";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import cookieParser from "cookie-parser";
 import * as dotenv from "dotenv";
 import type { Application, Request, Response } from "express";
+import * as fs from "fs";
 import helmet from "helmet";
 import { WINSTON_MODULE_NEST_PROVIDER } from "nest-winston";
+import { join } from "path";
 import { AppModule } from "./app.module";
 
 async function bootstrap() {
   dotenv.config();
 
-  const app = await NestFactory.create(AppModule, { logger: false });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { logger: false });
+
+  // Ensure uploads directory exists and serve static files
+  const uploadsDir = join(process.cwd(), "uploads");
+  fs.mkdirSync(join(uploadsDir, "covers"), { recursive: true });
+  app.useStaticAssets(uploadsDir, { prefix: "/uploads" });
 
   // After full initialization switch to Winston for runtime logs
   app.useLogger(app.get(WINSTON_MODULE_NEST_PROVIDER));
