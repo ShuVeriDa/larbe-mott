@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
+import { Body, Controller, Get, Param, Patch, Post, Query } from "@nestjs/common";
 import {
   ApiBearerAuth,
   ApiOkResponse,
@@ -14,6 +14,7 @@ import { User } from "src/user/decorators/user.decorator";
 import { PrismaService } from "src/prisma.service";
 import { TextProgressService } from "./text-progress/text-progress.service";
 import { WordProgressService } from "./word-progress/word-progress.service";
+import { SetWordStatusDto } from "./dto/set-word-status.dto";
 import { SubmitReviewDto } from "./dto/submit-review.dto";
 
 @ApiTags("progress")
@@ -111,10 +112,35 @@ export class ProgressController {
     @User("id") userId: string,
     @Body() dto: SubmitReviewDto,
   ) {
-    return this.wordProgress.submitReview(userId, lemmaId, dto.quality);
+    const [result] = await Promise.all([
+      this.wordProgress.submitReview(userId, lemmaId, dto.quality),
+      this.prisma.userReviewLog.create({
+        data: { userId, lemmaId, quality: dto.quality, correct: dto.quality >= 3 },
+      }),
+    ]);
+    return result;
   }
 
   // ─── words ───────────────────────────────────────────────────────────────────
+
+  @Auth()
+  @Patch("words/:lemmaId/status")
+  @ApiOperation({
+    summary: "Set word status manually",
+    description:
+      "Manually sets the learning status of a word from the reader. " +
+      "NEW resets SM-2 state. LEARNING schedules the word for review today. " +
+      "KNOWN marks the word as known and sets the next review in 21 days.",
+  })
+  @ApiParam({ name: "lemmaId", description: "Lemma ID" })
+  @ApiOkResponse({ description: "Updated word progress record." })
+  async setWordStatus(
+    @Param("lemmaId") lemmaId: string,
+    @User("id") userId: string,
+    @Body() dto: SetWordStatusDto,
+  ) {
+    return this.wordProgress.setWordStatus(userId, lemmaId, dto.status);
+  }
 
   @RequiresPremium()
   @Get("words/:lemmaId/contexts")

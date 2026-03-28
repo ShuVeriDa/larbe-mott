@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -198,6 +199,30 @@ export class AuthService {
     const unit = match[2] || "s";
     const multipliers: Record<string, number> = { s: 1, m: 60, h: 3600, d: 86400 };
     return num * (multipliers[unit] ?? 1);
+  }
+
+  async getSessions(userId: string) {
+    return this.prisma.userSession.findMany({
+      where: { userId, revokedAt: null },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, ipAddress: true, userAgent: true, createdAt: true },
+    });
+  }
+
+  async revokeSession(sessionId: string, userId: string) {
+    const session = await this.prisma.userSession.findFirst({
+      where: { id: sessionId, userId },
+    });
+
+    if (!session) throw new NotFoundException("Session not found");
+    if (session.revokedAt) throw new BadRequestException("Session already revoked");
+
+    await this.prisma.userSession.update({
+      where: { id: sessionId },
+      data: { revokedAt: new Date() },
+    });
+
+    return { success: true };
   }
 
   private async validateUser(dto: LoginDto) {

@@ -70,6 +70,7 @@ export class AdminTextService {
       const created = await tx.text.create({
         data: {
           title: dto.title,
+          description: dto.description,
           language: dto.language,
           level: dto.level,
           author: dto.author,
@@ -123,6 +124,7 @@ export class AdminTextService {
     const updated = await this.prisma.$transaction(async (tx) => {
       const textData: Parameters<typeof tx.text.update>[0]["data"] = {};
       if (dto.title !== undefined) textData.title = dto.title;
+      if (dto.description !== undefined) textData.description = dto.description;
       if (dto.language !== undefined) textData.language = dto.language;
       if (dto.level !== undefined) textData.level = dto.level;
       if (dto.author !== undefined) textData.author = dto.author;

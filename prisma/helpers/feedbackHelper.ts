@@ -63,12 +63,12 @@ export const seedFeedback = async () => {
     },
   });
 
-  // ─── 2. Баг в предложении (в обработке, есть ответ админа) ─────────────────
+  // ─── 2. Баг в предложении (ответ получен) ──────────────────────────────────
   const thread2 = await prisma.feedbackThread.create({
     data: {
       userId: user2.id,
       type: FeedbackType.BUG,
-      status: FeedbackStatus.IN_PROGRESS,
+      status: FeedbackStatus.ANSWERED,
       contextType: FeedbackContextType.SENTENCE,
       contextSentence: "Цуьнан цlе хаьа суна.",
       contextLemmaId: lemma2?.id,
@@ -165,6 +165,34 @@ export const seedFeedback = async () => {
     },
   });
 
+  // ─── 6. Жалоба (в обработке, взята в работу) ────────────────────────────────
+  const thread6 = await prisma.feedbackThread.create({
+    data: {
+      userId: user3.id,
+      type: FeedbackType.COMPLAINT,
+      status: FeedbackStatus.IN_PROGRESS,
+      contextType: FeedbackContextType.TEXT,
+      contextTextId: text1?.id,
+      contextAction: "read",
+      messages: {
+        create: {
+          authorType: FeedbackAuthorType.USER,
+          authorId: user3.id,
+          body: "Приложение зависает при переходе между страницами текста на Android. Приходится перезапускать.",
+        },
+      },
+    },
+  });
+
+  await prisma.feedbackMessage.create({
+    data: {
+      threadId: thread6.id,
+      authorType: FeedbackAuthorType.ADMIN,
+      authorId: admin.id,
+      body: "Получили ваш отчёт. Воспроизвели на эмуляторе Android 12 — разбираемся. Уточните, пожалуйста, версию приложения.",
+    },
+  });
+
   // ─── 6. Быстрые реакции ─────────────────────────────────────────────────────
   const reactionData: Array<{
     userId: string;
@@ -200,5 +228,5 @@ export const seedFeedback = async () => {
     });
   }
 
-  console.log("✅  Feedback seed: создано тредов — 5, сообщений — 7, реакций —", reactionData.length);
+  console.log("✅  Feedback seed: создано тредов — 6, сообщений — 9, реакций —", reactionData.length);
 };

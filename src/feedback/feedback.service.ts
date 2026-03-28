@@ -72,7 +72,21 @@ export class FeedbackService {
       },
     });
     if (!thread) throw new NotFoundException("Thread not found");
-    return thread;
+
+    const authorIds = [...new Set(thread.messages.map((m) => m.authorId))];
+    const authors = await this.prisma.user.findMany({
+      where: { id: { in: authorIds } },
+      select: { id: true, name: true, surname: true },
+    });
+    const authorMap = Object.fromEntries(authors.map((a) => [a.id, a]));
+
+    return {
+      ...thread,
+      messages: thread.messages.map((m) => ({
+        ...m,
+        author: authorMap[m.authorId] ?? null,
+      })),
+    };
   }
 
   async addMessage(userId: string, threadId: string, dto: AddMessageDto) {

@@ -14,6 +14,8 @@ import { DeckModule } from "./deck/deck.module";
 import { DictionaryModule } from "./dictionary/dictionary.module";
 import { FeedbackModule } from "./feedback/feedback.module";
 import { PhrasebookModule } from "./phrasebook/phrasebook.module";
+import { SettingsModule } from "./settings/settings.module";
+import { StatisticsModule } from "./statistics/statistics.module";
 import { createWinstonOptions } from "./logger/logger.config";
 import { TokenizerModule } from "./markup-engine/tokenizer/tokenizer.module";
 import { ProgressModule } from "./progress/progress.module";
@@ -58,6 +60,8 @@ import { WordsModule } from "./words/words.module";
     DeckModule,
     FeedbackModule,
     PhrasebookModule,
+    SettingsModule,
+    StatisticsModule,
   ],
   controllers: [],
   providers: [

@@ -367,6 +367,14 @@ export class TextService {
       ? await this.textProgress.calculateProgress(userId, textId)
       : 0;
 
+    if (userId) {
+      await this.prisma.userTextProgress.upsert({
+        where: { userId_textId: { userId, textId } },
+        update: { progressPercent: progress, lastOpened: new Date() },
+        create: { userId, textId, progressPercent: progress, lastOpened: new Date() },
+      });
+    }
+
     const tokensWithStatus = tokens.map((t) => {
       const lemmaId = lemmaIdByTokenId.get(t.id) ?? null;
       const userStatus = lemmaId ? (userStatusByLemmaId.get(lemmaId) ?? null) : null;
@@ -478,11 +486,20 @@ export class TextService {
       ? await this.textProgress.calculateProgress(userId, textId)
       : 0;
 
+    if (userId) {
+      await this.prisma.userTextProgress.upsert({
+        where: { userId_textId: { userId, textId } },
+        update: { progressPercent: progress, lastOpened: new Date() },
+        create: { userId, textId, progressPercent: progress, lastOpened: new Date() },
+      });
+    }
+
     const tags = text.tags.map((tt) => tt.tag);
 
     return {
       id: text.id,
       title: text.title,
+      description: text.description ?? null,
       language: text.language,
       level: text.level,
       author: text.author,

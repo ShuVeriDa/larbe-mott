@@ -1,7 +1,10 @@
 import {
   Body,
   Controller,
+  Delete,
+  Get,
   HttpCode,
+  Param,
   Post,
   Req,
   Res,
@@ -18,6 +21,7 @@ import {
   ApiOperation,
   ApiTags,
   ApiUnauthorizedResponse,
+  ApiBadRequestResponse,
 } from "@nestjs/swagger";
 import * as express from "express";
 
@@ -116,6 +120,32 @@ export class AuthController {
     this.authService.addRefreshTokenResponse(res, refreshToken);
 
     return response;
+  }
+
+  @Auth()
+  @Get("sessions")
+  @ApiBearerAuth()
+  @ApiUnauthorizedResponse({ description: "Missing or invalid bearer token" })
+  @ApiOperation({ summary: "Get active sessions for current user" })
+  @ApiOkResponse({ description: "List of active (non-revoked) sessions" })
+  async getSessions(@User("id") userId: string) {
+    return this.authService.getSessions(userId);
+  }
+
+  @Auth()
+  @HttpCode(200)
+  @Delete("sessions/:id")
+  @ApiBearerAuth()
+  @ApiUnauthorizedResponse({ description: "Missing or invalid bearer token" })
+  @ApiNotFoundResponse({ description: "Session not found" })
+  @ApiBadRequestResponse({ description: "Session already revoked" })
+  @ApiOperation({ summary: "Revoke a specific session" })
+  @ApiOkResponse({ description: "Session revoked successfully" })
+  async revokeSession(
+    @Param("id") sessionId: string,
+    @User("id") userId: string,
+  ) {
+    return this.authService.revokeSession(sessionId, userId);
   }
 
   @Auth()

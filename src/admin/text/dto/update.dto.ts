@@ -99,6 +99,12 @@ export class PatchTextDto {
   )
   level?: Level;
 
+  @ApiProperty({ required: false, description: "Short description / annotation of the text" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  description?: string;
+
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()

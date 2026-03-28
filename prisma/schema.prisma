@@ -152,6 +152,8 @@ enum UserEventType {
   CLICK_WORD
   ADD_TO_DICTIONARY
   FAIL_LOOKUP
+  READ_SESSION    // metadata: { textId, durationSeconds }
+  REVIEW_SESSION  // metadata: { correct, wrong, streak }
 }
 
 //////////////////////////////////////////////////////
@@ -180,6 +182,7 @@ model User {
 
   events UserEvent[] @relation("UserEventUser")
   wordContexts WordContext[]
+  reviewLogs   UserReviewLog[] @relation("UserReviewLogs")
 
   status        UserStatus @default(ACTIVE)
   language      Language? @default(CHE)
@@ -207,6 +210,10 @@ model User {
   bookmarks         UserTextBookmark[]
   phrasebookSaves       UserPhrasebookSave[]
   phrasebookSuggestions PhrasebookSuggestion[]
+
+  preferences   UserPreferences?
+  goals         UserGoals?
+  notifications UserNotificationPreferences?
 
   @@index([status])
   @@index([language])
@@ -562,6 +569,7 @@ model Lemma {
   wordProgress  UserWordProgress[]
   wordContexts  WordContext[]
   deckCards     UserDeckCard[] @relation("LemmaDeckCards")
+  reviewLogs    UserReviewLog[] @relation("LemmaReviewLogs")
 
   feedbackThreads   FeedbackThread[]   @relation("LemmaFeedbackThreads")
   feedbackReactions FeedbackReaction[] @relation("LemmaFeedbackReactions")
@@ -718,6 +726,7 @@ model Text {
   id          String   @id @default(uuid())
 
   title       String
+  description String?
   level       Level?
   language    Language
   author      String
@@ -1118,6 +1127,7 @@ enum FeedbackType {
 enum FeedbackStatus {
   NEW
   IN_PROGRESS
+  ANSWERED
   RESOLVED
 }
 
@@ -1201,4 +1211,82 @@ model FeedbackReaction {
   @@index([lemmaId])
   @@index([textId])
   @@map("feedback_reaction")
+}
+
+//////////////////////////////////////////////////////
+// USER REVIEW LOG
+//////////////////////////////////////////////////////
+
+model UserReviewLog {
+  id        String   @id @default(cuid())
+
+  userId    String
+  lemmaId   String
+  quality   Int      // 0-5
+  correct   Boolean  // quality >= 3
+
+  createdAt DateTime @default(now())
+
+  user  User  @relation("UserReviewLogs", fields: [userId], references: [id], onDelete: Cascade)
+  lemma Lemma @relation("LemmaReviewLogs", fields: [lemmaId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId])
+  @@map("user_review_log")
+}
+
+//////////////////////////////////////////////////////
+// SETTINGS
+//////////////////////////////////////////////////////
+
+model UserPreferences {
+  userId         String  @id
+
+  // Внешний вид
+  theme          String  @default("LIGHT")  // LIGHT | DARK | SYSTEM
+  uiLanguage     String  @default("RU")
+
+  // Ридер
+  fontSize       Int     @default(16)
+  popupMode      String  @default("POPUP")  // POPUP | SIDEBAR | BOTH
+  highlightKnown Boolean @default(true)
+  showProgress   Boolean @default(true)
+  autoNextPage   Boolean @default(false)
+
+  // Словарь
+  autoAddOnClick Boolean @default(false)
+  showGrammar    Boolean @default(true)
+  showExamples   Boolean @default(true)
+
+  user           User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+model UserGoals {
+  userId       String @id
+
+  dailyWords   Int    @default(10)  // 5 | 10 | 20 | 30 | 50
+  dailyMinutes Int    @default(15)  // 5 | 15 | 30 | 60
+
+  user         User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_goals")
+}
+
+model UserNotificationPreferences {
+  userId         String  @id
+
+  repeatReminder Boolean @default(true)
+  weeklyReport   Boolean @default(true)
+  newTexts       Boolean @default(false)
+  supportReplies Boolean @default(true)
+  marketing      Boolean @default(false)
+
+  reminderTime   String  @default("09:00")
+  timezone       String  @default("UTC+3")
+
+  user           User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_notification_preferences")
 }

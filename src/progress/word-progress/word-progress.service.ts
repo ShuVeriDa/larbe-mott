@@ -215,6 +215,84 @@ export class WordProgressService {
     }
   }
 
+  // Ручная установка статуса слова (NEW / LEARNING / KNOWN) из ридера
+  async setWordStatus(userId: string, lemmaId: string, status: "NEW" | "LEARNING" | "KNOWN") {
+    const now = new Date();
+
+    if (status === "NEW") {
+      // Сброс SM-2: слово возвращается в начало очереди
+      return this.prisma.userWordProgress.upsert({
+        where: { userId_lemmaId: { userId, lemmaId } },
+        update: {
+          status: "NEW",
+          repetitions: 0,
+          interval: 0,
+          easeFactor: EF_DEFAULT,
+          nextReview: null,
+          lastSeen: now,
+        },
+        create: {
+          userId,
+          lemmaId,
+          status: "NEW",
+          repetitions: 0,
+          interval: 0,
+          easeFactor: EF_DEFAULT,
+          nextReview: null,
+          lastSeen: now,
+        },
+      });
+    }
+
+    if (status === "LEARNING") {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      // Попадает в очередь повторения сегодня
+      return this.prisma.userWordProgress.upsert({
+        where: { userId_lemmaId: { userId, lemmaId } },
+        update: {
+          status: "LEARNING",
+          nextReview: today,
+          lastSeen: now,
+        },
+        create: {
+          userId,
+          lemmaId,
+          status: "LEARNING",
+          repetitions: 0,
+          interval: 0,
+          easeFactor: EF_DEFAULT,
+          nextReview: today,
+          lastSeen: now,
+        },
+      });
+    }
+
+    // KNOWN: интервал 21 день, выбывает из очереди повторений
+    const nextReview = new Date();
+    nextReview.setDate(nextReview.getDate() + KNOWN_INTERVAL);
+
+    return this.prisma.userWordProgress.upsert({
+      where: { userId_lemmaId: { userId, lemmaId } },
+      update: {
+        status: "KNOWN",
+        interval: KNOWN_INTERVAL,
+        nextReview,
+        lastSeen: now,
+      },
+      create: {
+        userId,
+        lemmaId,
+        status: "KNOWN",
+        repetitions: 0,
+        interval: KNOWN_INTERVAL,
+        easeFactor: EF_DEFAULT,
+        nextReview,
+        lastSeen: now,
+      },
+    });
+  }
+
   // Возвращает все контексты для слова пользователя
   async getWordContexts(userId: string, lemmaId: string) {
     return this.prisma.wordContext.findMany({

@@ -93,6 +93,12 @@ export class CreateTextDto {
   )
   level?: Level;
 
+  @ApiProperty({ required: false, description: "Short description / annotation of the text" })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  description?: string;
+
   @ApiProperty()
   @IsString()
   @IsNotEmpty()

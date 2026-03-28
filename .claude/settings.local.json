@@ -27,7 +27,11 @@
       "Bash(grep -r \"@Controller\\\\|@Module\\\\|@Get\\\\|@Post\\\\|@Put\\\\|@Delete\" /f/programming/mott-larbe/mott-larbe-backend/src --include=*.ts -A 1)",
       "Bash(grep -r \"TODO\\\\|FIXME\\\\|phrasebook\\\\|разговорник\" /f/programming/mott-larbe/mott-larbe-backend/src --include=*.ts)",
       "Read(//c/Users/SHUVAR~1/AppData/Local/Temp/claude/f--programming-mott-larbe-mott-larbe-backend/815c0833-f91a-45ff-bf62-b01c351d7478/tasks/**)",
-      "Bash(grep -E \"\\\\.\\(md|txt\\)$\")"
+      "Bash(grep -E \"\\\\.\\(md|txt\\)$\")",
+      "Bash(find /f/programming/mott-larbe/mott-larbe-backend/src -type f -name *statistic* -o -name *stat* -o -name *progress* -o -name *streak* -o -name *review*)",
+      "Bash(grep -r \"logReadingSession\\\\|logReviewSession\" /f/programming/mott-larbe/mott-larbe-backend/src --include=*.ts)",
+      "Read(//f/programming/mott-larbe//**)",
+      "Bash(find \"f:/programming/mott-larbe/mott-larbe-backend/src\" -name \"*.controller.ts\" -exec grep -l \"Get\\\\|Post\\\\|Patch\\\\|Delete\" {})"
     ]
   }
 }
