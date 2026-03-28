@@ -279,6 +279,7 @@ model Plan {
   currency   String   @default("USD")
   interval   String?  // "month" | "year" | null (for lifetime/free)
   isActive   Boolean  @default(true)
+  groupCode  String?  // links monthly/yearly variants (e.g. "PRO")
 
   limits     Json?
 
@@ -558,8 +559,9 @@ model Lemma {
   baseForm      String
   normalized    String
   language      Language
-  partOfSpeech  String?
-  frequency     Int?
+  partOfSpeech    String?
+  frequency       Int?
+  transliteration String?
 
   headwords     Headword[] @relation("HeadwordLemma")
   userDictionaryEntries UserDictionaryEntry[] @relation("UserDictionaryEntryLemma")
@@ -1002,6 +1004,7 @@ model UserDeckCard {
 model UserDeckState {
   userId              String    @id
 
+  isEnabled           Boolean   @default(true) // включить/выключить метод дек
   currentNumberedDeck Int       @default(1)
   lastRotatedAt       DateTime?
 
@@ -1153,6 +1156,7 @@ model FeedbackThread {
   userId String
   type   FeedbackType
   status FeedbackStatus @default(NEW)
+  title  String?
 
   // Context snapshot — what the user was looking at
   contextType     FeedbackContextType?
@@ -1184,6 +1188,7 @@ model FeedbackMessage {
   authorType FeedbackAuthorType
   authorId   String
   body       String             @db.Text
+  isReadByUser Boolean          @default(false)
 
   createdAt DateTime @default(now())
 
@@ -1254,9 +1259,10 @@ model UserPreferences {
   autoNextPage   Boolean @default(false)
 
   // Словарь
-  autoAddOnClick Boolean @default(false)
-  showGrammar    Boolean @default(true)
-  showExamples   Boolean @default(true)
+  autoAddOnClick      Boolean @default(false)
+  showGrammar         Boolean @default(true)
+  showExamples        Boolean @default(true)
+  translationLanguage String  @default("RU")  // RU | EN | AR
 
   user           User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 

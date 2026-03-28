@@ -64,7 +64,7 @@ export class SettingsService {
 
   // ─── EXPORT ──────────────────────────────────────────────────────────────────
 
-  async exportVocabulary(userId: string) {
+  async exportVocabulary(userId: string, format: "json" | "csv" = "json") {
     const entries = await this.prisma.userDictionaryEntry.findMany({
       where: { userId },
       select: {
@@ -79,7 +79,60 @@ export class SettingsService {
       orderBy: { addedAt: "asc" },
     });
 
+    if (format === "csv") {
+      const header = "word,normalized,translation,learningLevel,cefrLevel,repetitionCount,addedAt";
+      const rows = entries.map((e) =>
+        [
+          this.csvCell(e.word),
+          this.csvCell(e.normalized ?? ""),
+          this.csvCell(e.translation),
+          e.learningLevel,
+          e.cefrLevel ?? "",
+          e.repetitionCount,
+          e.addedAt.toISOString(),
+        ].join(","),
+      );
+      return [header, ...rows].join("\n");
+    }
+
     return entries;
+  }
+
+  async exportArchive(userId: string) {
+    const [vocabulary, textProgress, wordProgress, reviewLogs] = await Promise.all([
+      this.exportVocabulary(userId),
+      this.prisma.userTextProgress.findMany({
+        where: { userId },
+        select: { textId: true, progressPercent: true, lastOpened: true },
+      }),
+      this.prisma.userWordProgress.findMany({
+        where: { userId },
+        select: {
+          lemmaId: true,
+          status: true,
+          seenCount: true,
+          repetitions: true,
+          easeFactor: true,
+          interval: true,
+          lastSeen: true,
+          nextReview: true,
+        },
+      }),
+      this.prisma.userReviewLog.findMany({
+        where: { userId },
+        select: { lemmaId: true, quality: true, correct: true, createdAt: true },
+        orderBy: { createdAt: "asc" },
+      }),
+    ]);
+
+    return { vocabulary, textProgress, wordProgress, reviewLogs };
+  }
+
+  private csvCell(value: string): string {
+    if (value.includes(",") || value.includes('"') || value.includes("\n")) {
+      return `"${value.replace(/"/g, '""')}"`;
+    }
+    return value;
   }
 
   async exportProgress(userId: string) {

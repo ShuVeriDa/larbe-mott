@@ -12,10 +12,30 @@ export class SubscriptionService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getActivePlans() {
-    return this.prisma.plan.findMany({
+    const plans = await this.prisma.plan.findMany({
       where: { isActive: true },
       orderBy: { priceCents: "asc" },
     });
+
+    // Group plans that share a groupCode (e.g. monthly + yearly variants of the same tier)
+    const grouped: Record<string, typeof plans> = {};
+    const ungrouped: typeof plans = [];
+
+    for (const plan of plans) {
+      if (plan.groupCode) {
+        if (!grouped[plan.groupCode]) grouped[plan.groupCode] = [];
+        grouped[plan.groupCode].push(plan);
+      } else {
+        ungrouped.push(plan);
+      }
+    }
+
+    const groups = Object.entries(grouped).map(([groupCode, variants]) => ({
+      groupCode,
+      variants,
+    }));
+
+    return { groups, ungrouped };
   }
 
   async getMySubscription(userId: string) {

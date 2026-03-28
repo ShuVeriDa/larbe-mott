@@ -225,6 +225,15 @@ export class AuthService {
     return { success: true };
   }
 
+  async revokeAllSessions(userId: string) {
+    await this.prisma.userSession.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+
+    return { success: true };
+  }
+
   private async validateUser(dto: LoginDto) {
     const user = await this.prisma.user.findFirst({
       where: { username: dto.username },

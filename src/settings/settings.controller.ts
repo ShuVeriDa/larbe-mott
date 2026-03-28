@@ -5,6 +5,7 @@ import {
   HttpCode,
   Patch,
   Post,
+  Query,
   Res,
 } from "@nestjs/common";
 import {
@@ -14,7 +15,7 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
-import { Response } from "express";
+import type { Response } from "express";
 import { Auth } from "src/auth/decorators/auth.decorator";
 import { User } from "src/user/decorators/user.decorator";
 import { UpdateGoalsDto } from "./dto/update-goals.dto";
@@ -78,10 +79,19 @@ export class SettingsController {
   // ─── EXPORT ──────────────────────────────────────────────────────────────────
 
   @Get("export/vocabulary")
-  @ApiOperation({ summary: "Export personal vocabulary as JSON" })
-  @ApiOkResponse({ description: "Array of dictionary entries" })
-  exportVocabulary(@User("id") userId: string) {
-    return this.settingsService.exportVocabulary(userId);
+  @ApiOperation({ summary: "Export personal vocabulary as JSON or CSV" })
+  @ApiOkResponse({ description: "Array of dictionary entries (JSON) or CSV string" })
+  async exportVocabulary(
+    @User("id") userId: string,
+    @Query("format") format: "json" | "csv" = "json",
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const data = await this.settingsService.exportVocabulary(userId, format);
+    if (format === "csv") {
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", 'attachment; filename="vocabulary.csv"');
+    }
+    return data;
   }
 
   @Get("export/progress")
@@ -89,6 +99,13 @@ export class SettingsController {
   @ApiOkResponse({ description: "Object with textProgress, wordProgress, reviewLogs" })
   exportProgress(@User("id") userId: string) {
     return this.settingsService.exportProgress(userId);
+  }
+
+  @Get("export/archive")
+  @ApiOperation({ summary: "Export full data archive (vocabulary + progress) as JSON" })
+  @ApiOkResponse({ description: "Object with vocabulary, textProgress, wordProgress, reviewLogs" })
+  exportArchive(@User("id") userId: string) {
+    return this.settingsService.exportArchive(userId);
   }
 
   // ─── RESET ───────────────────────────────────────────────────────────────────

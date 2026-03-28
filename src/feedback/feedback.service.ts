@@ -19,6 +19,7 @@ export class FeedbackService {
       data: {
         userId,
         type: dto.type,
+        title: dto.title,
         contextType: dto.contextType,
         contextWord: dto.contextWord,
         contextSentence: dto.contextSentence,
@@ -48,7 +49,7 @@ export class FeedbackService {
       ...(status && { status }),
     };
 
-    const [items, total] = await Promise.all([
+    const [threads, total] = await Promise.all([
       this.prisma.feedbackThread.findMany({
         where,
         orderBy: { createdAt: "desc" },
@@ -60,6 +61,25 @@ export class FeedbackService {
       }),
       this.prisma.feedbackThread.count({ where }),
     ]);
+
+    const threadIds = threads.map((t) => t.id);
+    const unreadCounts = await this.prisma.feedbackMessage.groupBy({
+      by: ["threadId"],
+      where: {
+        threadId: { in: threadIds },
+        authorType: FeedbackAuthorType.ADMIN,
+        isReadByUser: false,
+      },
+      _count: { id: true },
+    });
+    const unreadMap = Object.fromEntries(
+      unreadCounts.map((r) => [r.threadId, r._count.id]),
+    );
+
+    const items = threads.map((t) => ({
+      ...t,
+      unreadCount: unreadMap[t.id] ?? 0,
+    }));
 
     return { items, total, page, limit };
   }
@@ -73,6 +93,18 @@ export class FeedbackService {
     });
     if (!thread) throw new NotFoundException("Thread not found");
 
+    // Mark unread admin messages as read
+    const unreadAdminMsgIds = thread.messages
+      .filter((m) => m.authorType === FeedbackAuthorType.ADMIN && !m.isReadByUser)
+      .map((m) => m.id);
+
+    if (unreadAdminMsgIds.length > 0) {
+      await this.prisma.feedbackMessage.updateMany({
+        where: { id: { in: unreadAdminMsgIds } },
+        data: { isReadByUser: true },
+      });
+    }
+
     const authorIds = [...new Set(thread.messages.map((m) => m.authorId))];
     const authors = await this.prisma.user.findMany({
       where: { id: { in: authorIds } },
@@ -84,9 +116,28 @@ export class FeedbackService {
       ...thread,
       messages: thread.messages.map((m) => ({
         ...m,
+        isReadByUser: unreadAdminMsgIds.includes(m.id) ? true : m.isReadByUser,
         author: authorMap[m.authorId] ?? null,
       })),
     };
+  }
+
+  async markAsRead(userId: string, threadId: string) {
+    const thread = await this.prisma.feedbackThread.findFirst({
+      where: { id: threadId, userId },
+    });
+    if (!thread) throw new NotFoundException("Thread not found");
+
+    await this.prisma.feedbackMessage.updateMany({
+      where: {
+        threadId,
+        authorType: FeedbackAuthorType.ADMIN,
+        isReadByUser: false,
+      },
+      data: { isReadByUser: true },
+    });
+
+    return { success: true };
   }
 
   async addMessage(userId: string, threadId: string, dto: AddMessageDto) {

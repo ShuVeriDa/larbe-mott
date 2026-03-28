@@ -3,7 +3,9 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
   Param,
+  Patch,
   Post,
   Query,
 } from "@nestjs/common";
@@ -42,6 +44,16 @@ export class FeedbackController {
     @Param("threadId") threadId: string,
   ) {
     return this.feedbackService.getThread(userId, threadId);
+  }
+
+  @Patch(":threadId/read")
+  @HttpCode(200)
+  @ApiOperation({ summary: "Mark all admin messages in thread as read" })
+  markAsRead(
+    @User("id") userId: string,
+    @Param("threadId") threadId: string,
+  ) {
+    return this.feedbackService.markAsRead(userId, threadId);
   }
 
   @Post(":threadId/messages")

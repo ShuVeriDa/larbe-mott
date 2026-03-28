@@ -44,7 +44,7 @@ export class DeckController {
     @User("id") userId: string,
     @Body() dto: UpdateDeckSettingsDto,
   ) {
-    return this.deck.updateSettings(userId, dto.dailyWordCount, dto.deckMaxSize);
+    return this.deck.updateSettings(userId, dto.isEnabled, dto.dailyWordCount, dto.deckMaxSize);
   }
 
   // ─── add / remove ────────────────────────────────────────────────────────────

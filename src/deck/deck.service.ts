@@ -23,13 +23,15 @@ export class DeckService {
   async getSettings(userId: string) {
     const state = await this.prisma.userDeckState.findUnique({ where: { userId } });
     return {
+      isEnabled: state?.isEnabled ?? true,
       dailyWordCount: state?.dailyWordCount ?? 5,
       deckMaxSize: state?.deckMaxSize ?? DEFAULT_DECK_LIMIT,
     };
   }
 
-  async updateSettings(userId: string, dailyWordCount?: number, deckMaxSize?: number) {
-    const data: { dailyWordCount?: number; deckMaxSize?: number } = {};
+  async updateSettings(userId: string, isEnabled?: boolean, dailyWordCount?: number, deckMaxSize?: number) {
+    const data: { isEnabled?: boolean; dailyWordCount?: number; deckMaxSize?: number } = {};
+    if (isEnabled !== undefined) data.isEnabled = isEnabled;
     if (dailyWordCount !== undefined) data.dailyWordCount = dailyWordCount;
     if (deckMaxSize !== undefined) data.deckMaxSize = deckMaxSize;
 
@@ -39,6 +41,7 @@ export class DeckService {
       create: {
         userId,
         currentNumberedDeck: 1,
+        isEnabled: isEnabled ?? true,
         dailyWordCount: dailyWordCount ?? 5,
         deckMaxSize: deckMaxSize ?? DEFAULT_DECK_LIMIT,
       },

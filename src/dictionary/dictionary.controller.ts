@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from "@nestjs/common";
 import {
   ApiBearerAuth,
@@ -21,6 +22,7 @@ import { User } from "src/user/decorators/user.decorator";
 import { DictionaryService } from "./dictionary.service";
 import { CreateDictionaryEntryDto } from "./dto/create-dictionary-entry.dto";
 import { CreateDictionaryFolderDto } from "./dto/create-folder";
+import { GetDictionaryEntriesDto } from "./dto/get-dictionary-entries.dto";
 import { UpdateDictionaryEntryDto } from "./dto/update-dictionary-entry.dto";
 import { UpdateDictionaryFolderDto } from "./dto/update-folder";
 import { FoldersService } from "./folders.service";
@@ -39,11 +41,15 @@ export class DictionaryController {
   @Auth()
   @ApiOperation({
     summary: "Get all dictionary entries",
-    description: "Get all dictionary entries for the authenticated user",
+    description:
+      "Get dictionary entries for the authenticated user. Supports filtering by status, cefrLevel, folderId and sorting.",
   })
-  @ApiOkResponse({ description: "All dictionary entries" })
-  async getDictionaryEntries(@User("id") userId: string) {
-    return await this.dictionaryService.getUserDictionaryEntries(userId);
+  @ApiOkResponse({ description: "Dictionary entries" })
+  async getDictionaryEntries(
+    @User("id") userId: string,
+    @Query() query: GetDictionaryEntriesDto,
+  ) {
+    return await this.dictionaryService.getUserDictionaryEntries(userId, query);
   }
 
   @Get("stats")
@@ -110,15 +116,16 @@ export class DictionaryController {
   @Auth()
   @ApiOperation({
     summary: "Get a dictionary entry by ID",
-    description: "Get a dictionary entry by ID for the authenticated user",
+    description:
+      "Returns full word detail: lemma (transliteration, POS, frequency, morphForms), meanings with examples, occurrences in user's texts, SM-2 progress, and review history.",
   })
-  @ApiOkResponse({ description: "Dictionary entry" })
+  @ApiOkResponse({ description: "Dictionary entry detail" })
   @ApiNotFoundResponse({ description: "Dictionary entry not found" })
   async getDictionaryEntry(
     @Param("id") id: string,
     @User("id") userId: string,
   ) {
-    return await this.dictionaryService.getUserDictionaryEntry(id, userId);
+    return await this.dictionaryService.getUserDictionaryEntryDetail(id, userId);
   }
 
   @Post()
@@ -202,17 +209,6 @@ export class DictionaryController {
       id,
       userId,
     );
-  }
-
-  @Delete()
-  @Auth()
-  @ApiOperation({
-    summary: "Delete all dictionary entries",
-    description: "Delete all dictionary entries for the authenticated user",
-  })
-  @ApiOkResponse({ description: "All dictionary entries deleted" })
-  async deleteAllDictionaryEntries(@User("id") userId: string) {
-    return await this.dictionaryService.deleteAllUserDictionaryEntries(userId);
   }
 
   @Delete("folders/:id")

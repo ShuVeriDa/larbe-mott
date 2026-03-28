@@ -14,6 +14,12 @@ export class CreateFeedbackDto {
   @IsEnum(FeedbackType)
   type: FeedbackType;
 
+  @ApiPropertyOptional({ description: "Short thread subject", maxLength: 200 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  title?: string;
+
   @ApiProperty({ description: "First message body", minLength: 1, maxLength: 2000 })
   @IsString()
   @MinLength(1)

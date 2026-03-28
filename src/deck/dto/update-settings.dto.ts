@@ -1,7 +1,12 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { IsIn, IsInt, IsOptional, Max, Min } from "class-validator";
+import { IsBoolean, IsIn, IsInt, IsOptional, Max, Min } from "class-validator";
 
 export class UpdateDeckSettingsDto {
+  @ApiPropertyOptional({ description: "Enable or disable the deck learning method" })
+  @IsOptional()
+  @IsBoolean()
+  isEnabled?: boolean;
+
   @ApiPropertyOptional({
     description: "How many words to suggest per day",
     enum: [3, 5, 10],

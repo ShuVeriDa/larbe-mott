@@ -61,4 +61,9 @@ export class UpdatePreferencesDto {
   @IsOptional()
   @IsBoolean()
   showExamples?: boolean;
+
+  @ApiPropertyOptional({ enum: ["RU", "EN", "AR"] })
+  @IsOptional()
+  @IsIn(["RU", "EN", "AR"])
+  translationLanguage?: string;
 }

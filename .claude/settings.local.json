@@ -31,7 +31,12 @@
       "Bash(find /f/programming/mott-larbe/mott-larbe-backend/src -type f -name *statistic* -o -name *stat* -o -name *progress* -o -name *streak* -o -name *review*)",
       "Bash(grep -r \"logReadingSession\\\\|logReviewSession\" /f/programming/mott-larbe/mott-larbe-backend/src --include=*.ts)",
       "Read(//f/programming/mott-larbe//**)",
-      "Bash(find \"f:/programming/mott-larbe/mott-larbe-backend/src\" -name \"*.controller.ts\" -exec grep -l \"Get\\\\|Post\\\\|Patch\\\\|Delete\" {})"
+      "Bash(find \"f:/programming/mott-larbe/mott-larbe-backend/src\" -name \"*.controller.ts\" -exec grep -l \"Get\\\\|Post\\\\|Patch\\\\|Delete\" {})",
+      "Bash(grep -E \"\\\\.\\(ts|prisma\\)$\")",
+      "Bash(sed -n '1220,1270p' \"f:/programming/mott-larbe/mott-larbe-backend/prisma/schema.prisma\")",
+      "Bash(sed -n '555,615p' \"f:/programming/mott-larbe/mott-larbe-backend/prisma/schema.prisma\")",
+      "Bash(sed -n '631,670p' \"f:/programming/mott-larbe/mott-larbe-backend/prisma/schema.prisma\")",
+      "Bash(grep -v \"//\")"
     ]
   }
 }

@@ -9,6 +9,7 @@ import { normalizeToken } from "src/markup-engine/tokenizer/tokenizer.utils";
 import { PrismaService } from "src/prisma.service";
 import { TokenService } from "src/token/token.service";
 import { CreateDictionaryEntryDto } from "./dto/create-dictionary-entry.dto";
+import { DictionarySort, GetDictionaryEntriesDto } from "./dto/get-dictionary-entries.dto";
 import { UpdateDictionaryEntryDto } from "./dto/update-dictionary-entry.dto";
 
 @Injectable()
@@ -18,10 +19,23 @@ export class DictionaryService {
     private readonly tokenService: TokenService,
   ) {}
 
-  async getUserDictionaryEntries(userId: string) {
+  async getUserDictionaryEntries(userId: string, query: GetDictionaryEntriesDto = {}) {
+    const { status, cefrLevel, folderId, noFolder, sort = DictionarySort.ADDED } = query;
+
+    const where: Prisma.UserDictionaryEntryWhereInput = { userId };
+    if (status) where.learningLevel = status;
+    if (cefrLevel) where.cefrLevel = cefrLevel;
+    if (noFolder) {
+      where.folderId = null;
+    } else if (folderId) {
+      where.folderId = folderId;
+    }
+
+    const orderBy = this.buildOrderBy(sort);
+
     const entries = await this.prismaService.userDictionaryEntry.findMany({
-      where: { userId },
-      orderBy: { addedAt: "desc" },
+      where,
+      orderBy,
       include: {
         folder: { select: { id: true, name: true } },
         lemma: {
@@ -80,7 +94,7 @@ export class DictionaryService {
       }
     }
 
-    return entries.map((entry) => {
+    const mapped = entries.map((entry) => {
       const progress = entry.lemmaId ? progressMap.get(entry.lemmaId) : null;
       return {
         ...entry,
@@ -88,6 +102,37 @@ export class DictionaryService {
         wordProgressStatus: progress?.status ?? null,
       };
     });
+
+    if (sort === DictionarySort.REVIEW) {
+      mapped.sort((a, b) => {
+        if (!a.nextReview && !b.nextReview) return 0;
+        if (!a.nextReview) return 1;
+        if (!b.nextReview) return -1;
+        return a.nextReview.getTime() - b.nextReview.getTime();
+      });
+    } else if (sort === DictionarySort.STATUS) {
+      const priority: Record<string, number> = { NEW: 0, LEARNING: 1, KNOWN: 2 };
+      mapped.sort(
+        (a, b) =>
+          (priority[a.learningLevel] ?? 0) - (priority[b.learningLevel] ?? 0),
+      );
+    }
+
+    return mapped;
+  }
+
+  private buildOrderBy(
+    sort: DictionarySort,
+  ): Prisma.UserDictionaryEntryOrderByWithRelationInput {
+    switch (sort) {
+      case DictionarySort.ALPHA:
+        return { word: "asc" };
+      case DictionarySort.REVIEW:
+      case DictionarySort.STATUS:
+      case DictionarySort.ADDED:
+      default:
+        return { addedAt: "desc" };
+    }
   }
 
   async getUserDictionaryEntry(id: string, userId: string) {
@@ -98,6 +143,138 @@ export class DictionaryService {
       throw new NotFoundException("Dictionary entry not found");
     }
     return entry;
+  }
+
+  async getUserDictionaryEntryDetail(id: string, userId: string) {
+    const entry = await this.prismaService.userDictionaryEntry.findUnique({
+      where: { id },
+      include: {
+        folder: { select: { id: true, name: true, color: true } },
+        lemma: {
+          select: {
+            id: true,
+            baseForm: true,
+            partOfSpeech: true,
+            frequency: true,
+            transliteration: true,
+            morphForms: {
+              select: { form: true, grammarTag: true },
+              orderBy: { form: "asc" },
+            },
+            headwords: {
+              select: {
+                entry: {
+                  select: {
+                    senses: {
+                      orderBy: { order: "asc" },
+                      select: {
+                        id: true,
+                        definition: true,
+                        notes: true,
+                        examples: {
+                          select: { text: true, translation: true },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+            wordContexts: {
+              where: { userId },
+              orderBy: { seenAt: "desc" },
+              take: 5,
+              select: {
+                id: true,
+                snippet: true,
+                seenAt: true,
+                text: {
+                  select: { id: true, title: true, level: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!entry || entry.userId !== userId) {
+      throw new NotFoundException("Dictionary entry not found");
+    }
+
+    // SM-2 progress
+    const progress = entry.lemmaId
+      ? await this.prismaService.userWordProgress.findUnique({
+          where: { userId_lemmaId: { userId, lemmaId: entry.lemmaId } },
+          select: {
+            status: true,
+            seenCount: true,
+            repetitions: true,
+            lastSeen: true,
+            nextReview: true,
+            easeFactor: true,
+            interval: true,
+          },
+        })
+      : null;
+
+    // Review history (last 10) + success count
+    const reviewLogs = entry.lemmaId
+      ? await this.prismaService.userReviewLog.findMany({
+          where: { userId, lemmaId: entry.lemmaId },
+          orderBy: { createdAt: "desc" },
+          take: 10,
+          select: { id: true, quality: true, correct: true, createdAt: true },
+        })
+      : [];
+
+    const successCount = reviewLogs.filter((r) => r.correct).length;
+
+    // Flatten senses from all headwords (deduplicate by id)
+    const seenSenseIds = new Set<string>();
+    const senses: Array<{
+      id: string;
+      definition: string;
+      notes: string | null;
+      examples: { text: string; translation: string | null }[];
+    }> = [];
+    for (const hw of entry.lemma?.headwords ?? []) {
+      for (const sense of hw.entry.senses) {
+        if (!seenSenseIds.has(sense.id)) {
+          seenSenseIds.add(sense.id);
+          senses.push(sense);
+        }
+      }
+    }
+
+    return {
+      id: entry.id,
+      word: entry.word,
+      translation: entry.translation,
+      normalized: entry.normalized,
+      learningLevel: entry.learningLevel,
+      cefrLevel: entry.cefrLevel,
+      addedAt: entry.addedAt,
+      folder: entry.folder ?? null,
+      lemma: entry.lemma
+        ? {
+            id: entry.lemma.id,
+            baseForm: entry.lemma.baseForm,
+            partOfSpeech: entry.lemma.partOfSpeech,
+            frequency: entry.lemma.frequency,
+            transliteration: entry.lemma.transliteration,
+            morphForms: entry.lemma.morphForms,
+            wordContexts: entry.lemma.wordContexts,
+          }
+        : null,
+      senses,
+      sm2: progress ?? null,
+      reviewHistory: {
+        totalReviews: reviewLogs.length,
+        successCount,
+        logs: reviewLogs,
+      },
+    };
   }
 
   async getUserDictionaryStats(userId: string) {
@@ -324,14 +501,4 @@ export class DictionaryService {
     };
   }
 
-  async deleteAllUserDictionaryEntries(userId: string) {
-    const existingEntries = await this.getUserDictionaryEntries(userId);
-    if (!existingEntries.length) {
-      throw new NotFoundException("No dictionary entries found");
-    }
-    await this.prismaService.userDictionaryEntry.deleteMany({
-      where: { userId },
-    });
-    return "All dictionary entries deleted";
-  }
 }

@@ -134,6 +134,17 @@ export class AuthController {
 
   @Auth()
   @HttpCode(200)
+  @Delete("sessions")
+  @ApiBearerAuth()
+  @ApiUnauthorizedResponse({ description: "Missing or invalid bearer token" })
+  @ApiOperation({ summary: "Revoke all active sessions for current user" })
+  @ApiOkResponse({ description: "All sessions revoked successfully" })
+  async revokeAllSessions(@User("id") userId: string) {
+    return this.authService.revokeAllSessions(userId);
+  }
+
+  @Auth()
+  @HttpCode(200)
   @Delete("sessions/:id")
   @ApiBearerAuth()
   @ApiUnauthorizedResponse({ description: "Missing or invalid bearer token" })
