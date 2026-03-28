@@ -94,6 +94,21 @@ enum Language {
   EN
 }
 
+enum GrammaticalCase {
+  NOM
+  GEN
+  DAT
+  ERG
+  INS
+  LOC
+  ALL
+}
+
+enum GrammaticalNumber {
+  SG
+  PL
+}
+
 enum Level {
   A1
   A2
@@ -561,6 +576,7 @@ model Headword {
   text       String
   normalized String
   order      Int @default(0)
+  isPrimary  Boolean @default(false)
 
   entry      DictionaryEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
 
@@ -586,6 +602,7 @@ model Lemma {
   transliteration String?
   level           Level?
   createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   headwords     Headword[] @relation("HeadwordLemma")
   userDictionaryEntries UserDictionaryEntry[] @relation("UserDictionaryEntryLemma")
@@ -637,6 +654,9 @@ model MorphForm {
   form        String
   normalized  String
   grammarTag  String?
+
+  gramCase    GrammaticalCase?
+  gramNumber  GrammaticalNumber?
 
   lemmaId     String
   entryId     String?

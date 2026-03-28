@@ -38,7 +38,9 @@
       "Bash(sed -n '631,670p' \"f:/programming/mott-larbe/mott-larbe-backend/prisma/schema.prisma\")",
       "Bash(grep -v \"//\")",
       "Bash(npx nest:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(find f:/programming/mott-larbe/mott-larbe-backend -name *dictionary* -type f)",
+      "Bash(grep -E \"\\\\.\\(ts|js\\)$\")"
     ]
   }
 }

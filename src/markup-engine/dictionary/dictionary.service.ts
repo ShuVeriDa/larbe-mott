@@ -3,13 +3,17 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { DictionarySource, Language, Level, Prisma } from "@prisma/client";
+import { DictionarySource, Language, Level, Prisma, WordStatus } from "@prisma/client";
 import { BulkDeleteDto } from "src/admin/dictionary/dto/bulk-delete.dto";
 import { CreateEntryDto } from "src/admin/dictionary/dto/create-entry.dto";
 import { CreateExampleDto } from "src/admin/dictionary/dto/create-example.dto";
+import { CreateHeadwordDto } from "src/admin/dictionary/dto/create-headword.dto";
+import { CreateMorphFormDto } from "src/admin/dictionary/dto/create-morph-form.dto";
 import { CreateSenseDto } from "src/admin/dictionary/dto/create-sense.dto";
 import { DictSortOption, DictTabOption } from "src/admin/dictionary/dto/list-query.dto";
 import { PatchEntryDto } from "src/admin/dictionary/dto/update-entry.dto";
+import { UpdateExampleDto } from "src/admin/dictionary/dto/update-example.dto";
+import { UpdateMorphFormDto } from "src/admin/dictionary/dto/update-morph-form.dto";
 import { UpdateSenseDto } from "src/admin/dictionary/dto/update-sense.dto";
 import { PrismaService } from "src/prisma.service";
 import { normalizeToken } from "../tokenizer/tokenizer.utils";
@@ -54,7 +58,7 @@ export class DictionaryService {
       });
 
       await tx.headword.create({
-        data: { entryId: entry.id, text: dto.word, normalized, lemmaId: lemma.id, order: 0 },
+        data: { entryId: entry.id, text: dto.word, normalized, lemmaId: lemma.id, order: 0, isPrimary: true },
       });
 
       if (dto.forms?.length) {
@@ -280,6 +284,7 @@ export class DictionaryService {
       include: {
         headwords: {
           where: { entry: { source: DictionarySource.ADMIN } },
+          orderBy: { order: "asc" },
           include: {
             entry: {
               select: {
@@ -303,13 +308,18 @@ export class DictionaryService {
             },
           },
         },
-        morphForms: { select: { id: true, form: true, normalized: true, grammarTag: true } },
+        morphForms: {
+          orderBy: [{ gramCase: "asc" }, { gramNumber: "asc" }],
+          select: { id: true, form: true, normalized: true, grammarTag: true, gramCase: true, gramNumber: true },
+        },
       },
     });
 
     if (!lemma) throw new NotFoundException("Dictionary entry not found");
 
-    const entry = lemma.headwords[0]?.entry;
+    const primaryHw = lemma.headwords.find((h) => h.isPrimary) ?? lemma.headwords[0];
+    const entry = primaryHw?.entry;
+
     return {
       id: lemma.id,
       baseForm: lemma.baseForm,
@@ -319,9 +329,17 @@ export class DictionaryService {
       level: lemma.level,
       frequency: lemma.frequency,
       createdAt: lemma.createdAt,
+      updatedAt: lemma.updatedAt,
       translation: entry?.rawTranslate ?? null,
       notes: entry?.notes ?? null,
       entryId: entry?.id ?? null,
+      headwords: lemma.headwords.map((h) => ({
+        id: h.id,
+        text: h.text,
+        normalized: h.normalized,
+        isPrimary: h.isPrimary,
+        order: h.order,
+      })),
       senses: entry?.senses ?? [],
       forms: lemma.morphForms,
     };
@@ -683,6 +701,198 @@ export class DictionaryService {
     }
 
     return { created, skipped, total: records.length };
+  }
+
+  // ─────────────────────────────────────────────────────
+  // INTERNAL (pipeline usage)
+  // ─────────────────────────────────────────────────────
+
+  // ─────────────────────────────────────────────────────
+  // HEADWORDS
+  // ─────────────────────────────────────────────────────
+
+  async addHeadword(lemmaId: string, dto: CreateHeadwordDto) {
+    const entryId = await this.getEntryIdForLemma(lemmaId);
+    const normalized = normalizeToken(dto.word);
+
+    const maxOrder = await this.prisma.headword.aggregate({
+      where: { entryId },
+      _max: { order: true },
+    });
+    const order = (maxOrder._max.order ?? -1) + 1;
+
+    if (dto.isPrimary) {
+      await this.prisma.headword.updateMany({
+        where: { entryId },
+        data: { isPrimary: false },
+      });
+    }
+
+    return this.prisma.headword.create({
+      data: { entryId, lemmaId, text: dto.word, normalized, order, isPrimary: dto.isPrimary ?? false },
+      select: { id: true, text: true, normalized: true, isPrimary: true, order: true },
+    });
+  }
+
+  async deleteHeadword(hwId: string) {
+    const hw = await this.prisma.headword.findUnique({ where: { id: hwId } });
+    if (!hw) throw new NotFoundException("Headword not found");
+    if (hw.isPrimary) throw new BadRequestException("Cannot delete the primary headword");
+    await this.prisma.headword.delete({ where: { id: hwId } });
+  }
+
+  // ─────────────────────────────────────────────────────
+  // MORPH FORMS (individual CRUD)
+  // ─────────────────────────────────────────────────────
+
+  async addMorphForm(lemmaId: string, dto: CreateMorphFormDto) {
+    const lemma = await this.prisma.lemma.findFirst({
+      where: { id: lemmaId, headwords: { some: { entry: { source: DictionarySource.ADMIN } } } },
+      select: { id: true },
+    });
+    if (!lemma) throw new NotFoundException("Dictionary entry not found");
+
+    const normalized = normalizeToken(dto.form);
+
+    return this.prisma.morphForm.create({
+      data: {
+        form: dto.form,
+        normalized,
+        lemmaId,
+        gramCase: dto.gramCase ?? null,
+        gramNumber: dto.gramNumber ?? null,
+        grammarTag: dto.grammarTag ?? null,
+      },
+      select: { id: true, form: true, normalized: true, gramCase: true, gramNumber: true, grammarTag: true },
+    });
+  }
+
+  async updateMorphForm(formId: string, dto: UpdateMorphFormDto) {
+    const form = await this.prisma.morphForm.findUnique({ where: { id: formId } });
+    if (!form) throw new NotFoundException("Morph form not found");
+
+    return this.prisma.morphForm.update({
+      where: { id: formId },
+      data: {
+        ...(dto.form !== undefined && { form: dto.form, normalized: normalizeToken(dto.form) }),
+        ...(dto.gramCase !== undefined && { gramCase: dto.gramCase }),
+        ...(dto.gramNumber !== undefined && { gramNumber: dto.gramNumber }),
+        ...(dto.grammarTag !== undefined && { grammarTag: dto.grammarTag }),
+      },
+      select: { id: true, form: true, normalized: true, gramCase: true, gramNumber: true, grammarTag: true },
+    });
+  }
+
+  async deleteMorphForm(formId: string) {
+    const form = await this.prisma.morphForm.findUnique({ where: { id: formId } });
+    if (!form) throw new NotFoundException("Morph form not found");
+    await this.prisma.morphForm.delete({ where: { id: formId } });
+  }
+
+  // ─────────────────────────────────────────────────────
+  // EXAMPLES (update)
+  // ─────────────────────────────────────────────────────
+
+  async updateExample(exampleId: string, dto: UpdateExampleDto) {
+    const example = await this.prisma.example.findUnique({ where: { id: exampleId } });
+    if (!example) throw new NotFoundException("Example not found");
+
+    return this.prisma.example.update({
+      where: { id: exampleId },
+      data: {
+        ...(dto.text !== undefined && { text: dto.text }),
+        ...(dto.translation !== undefined && { translation: dto.translation }),
+      },
+      select: { id: true, text: true, translation: true },
+    });
+  }
+
+  // ─────────────────────────────────────────────────────
+  // NAVIGATION (prev / next)
+  // ─────────────────────────────────────────────────────
+
+  async getNextEntry(lemmaId: string) {
+    const current = await this.prisma.lemma.findUnique({
+      where: { id: lemmaId },
+      select: { normalized: true },
+    });
+    if (!current) throw new NotFoundException("Entry not found");
+
+    return this.prisma.lemma.findFirst({
+      where: {
+        normalized: { gt: current.normalized },
+        headwords: { some: { entry: { source: DictionarySource.ADMIN } } },
+      },
+      orderBy: { normalized: "asc" },
+      select: { id: true, baseForm: true, normalized: true },
+    });
+  }
+
+  async getPrevEntry(lemmaId: string) {
+    const current = await this.prisma.lemma.findUnique({
+      where: { id: lemmaId },
+      select: { normalized: true },
+    });
+    if (!current) throw new NotFoundException("Entry not found");
+
+    return this.prisma.lemma.findFirst({
+      where: {
+        normalized: { lt: current.normalized },
+        headwords: { some: { entry: { source: DictionarySource.ADMIN } } },
+      },
+      orderBy: { normalized: "desc" },
+      select: { id: true, baseForm: true, normalized: true },
+    });
+  }
+
+  // ─────────────────────────────────────────────────────
+  // USER STATS
+  // ─────────────────────────────────────────────────────
+
+  async getUserStatsForEntry(lemmaId: string) {
+    const [totalAdded, countNew, countLearning, countKnown] = await Promise.all([
+      this.prisma.userDictionaryEntry.count({ where: { lemmaId } }),
+      this.prisma.userDictionaryEntry.count({ where: { lemmaId, learningLevel: WordStatus.NEW } }),
+      this.prisma.userDictionaryEntry.count({ where: { lemmaId, learningLevel: WordStatus.LEARNING } }),
+      this.prisma.userDictionaryEntry.count({ where: { lemmaId, learningLevel: WordStatus.KNOWN } }),
+    ]);
+    return { totalAdded, countNew, countLearning, countKnown };
+  }
+
+  // ─────────────────────────────────────────────────────
+  // CORPUS CONTEXTS
+  // ─────────────────────────────────────────────────────
+
+  async getContextsForEntry(lemmaId: string, limit = 20) {
+    const lemma = await this.prisma.lemma.findUnique({
+      where: { id: lemmaId },
+      select: { id: true },
+    });
+    if (!lemma) throw new NotFoundException("Entry not found");
+
+    const contexts = await this.prisma.wordContext.findMany({
+      where: { lemmaId },
+      orderBy: { seenAt: "desc" },
+      take: limit,
+      distinct: ["textId"],
+      include: {
+        text: { select: { id: true, title: true } },
+      },
+    });
+
+    const total = await this.prisma.wordContext.count({ where: { lemmaId } });
+
+    return {
+      total,
+      items: contexts.map((c) => ({
+        id: c.id,
+        word: c.word,
+        snippet: c.snippet ?? null,
+        textId: c.textId,
+        textTitle: c.text.title,
+        seenAt: c.seenAt,
+      })),
+    };
   }
 
   // ─────────────────────────────────────────────────────
