@@ -68,7 +68,10 @@ export class SubscriptionController {
   @ApiUnauthorizedResponse({ description: "Missing or invalid bearer token" })
   @ApiNotFoundResponse({ description: "Plan not found or inactive" })
   @ApiOperation({ summary: "Subscribe to a plan (replaces current subscription)" })
-  @ApiOkResponse({ description: "New subscription with plan info" })
+  @ApiOkResponse({
+    description:
+      "New subscription with plan info. Includes couponApplied when a redeemed promo was used.",
+  })
   async subscribe(@User("id") userId: string, @Body() dto: SubscribePlanDto) {
     return this.subscriptionService.subscribeToPlan(userId, dto.planId);
   }
@@ -94,7 +97,10 @@ export class SubscriptionController {
   @ApiBadRequestResponse({ description: "Promo code expired or limit reached" })
   @ApiConflictResponse({ description: "Promo code already redeemed" })
   @ApiOperation({ summary: "Redeem a promo code" })
-  @ApiOkResponse({ description: "Coupon redeemed, returns discount type and amount" })
+  @ApiOkResponse({
+    description:
+      "Coupon redeemed. Returns discount details and indicates it will be applied to the next subscription payment.",
+  })
   async redeemPromo(@User("id") userId: string, @Body() dto: RedeemPromoDto) {
     return this.subscriptionService.redeemCoupon(userId, dto.code);
   }

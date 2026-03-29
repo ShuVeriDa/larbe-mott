@@ -98,6 +98,7 @@ export class AdminBillingService {
       canceledLast30,
       newUsersLast30,
       newPaidLast30,
+      activeAtPeriodStart,
     ] = await Promise.all([
       this.prisma.user.count({
         where: { status: { not: UserStatus.DELETED } },
@@ -125,6 +126,14 @@ export class AdminBillingService {
           plan: { type: { not: PlanType.FREE } },
         },
       }),
+      // Subscriptions active at the start of the 30-day window (correct churn denominator)
+      this.prisma.subscription.count({
+        where: {
+          startDate: { lte: thirtyDaysAgo },
+          OR: [{ canceledAt: null }, { canceledAt: { gt: thirtyDaysAgo } }],
+          plan: { type: { not: PlanType.FREE } },
+        },
+      }),
     ]);
 
     const payingCount = activeSubsWithPlan.filter(
@@ -147,8 +156,8 @@ export class AdminBillingService {
         : 0;
 
     const churnRate =
-      payingCount > 0
-        ? Math.round((canceledLast30 / payingCount) * 1000) / 10
+      activeAtPeriodStart > 0
+        ? Math.round((canceledLast30 / activeAtPeriodStart) * 1000) / 10
         : 0;
 
     return {

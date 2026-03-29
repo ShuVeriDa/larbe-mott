@@ -1,13 +1,20 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import {
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from "@nestjs/common";
+import { SubscriptionStatus, UserEventType } from "@prisma/client";
 import { TokenInfoCacheService } from "src/cache/token-info-cache.service";
 import { parseTranslation } from "src/markup-engine/online-dictionary/translation-parser";
 import { TokenizerService } from "src/markup-engine/tokenizer/tokenizer.service";
 import { PrismaService } from "src/prisma.service";
 import { WordProgressService } from "src/progress/word-progress/word-progress.service";
-import { UserEventType } from "@prisma/client";
 
 @Injectable()
 export class TokenService {
+  private readonly logger = new Logger(TokenService.name);
+
   constructor(
     private prisma: PrismaService,
     private wordProgress: WordProgressService,
@@ -16,12 +23,44 @@ export class TokenService {
   ) {}
 
   async getTokenInfo(tokenId: string, userId: string | undefined) {
+    // Enforce maxTranslationsPerDay plan limit
+    if (userId) {
+      const todayStart = new Date();
+      todayStart.setUTCHours(0, 0, 0, 0);
+
+      const [translationsToday, subscription] = await Promise.all([
+        this.prisma.userEvent.count({
+          where: { userId, type: UserEventType.CLICK_WORD, createdAt: { gte: todayStart } },
+        }),
+        this.prisma.subscription.findFirst({
+          where: {
+            userId,
+            status: { in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING] },
+          },
+          include: { plan: true },
+          orderBy: { startDate: "desc" },
+        }),
+      ]);
+
+      const planLimits = subscription?.plan?.limits as Record<string, number> | null;
+      const maxTranslationsPerDay = planLimits?.maxTranslationsPerDay ?? 50;
+      if (translationsToday >= maxTranslationsPerDay) {
+        throw new ForbiddenException(
+          `Daily translation limit of ${maxTranslationsPerDay} reached. Upgrade your plan for more.`,
+        );
+      }
+    }
+
     // 1️⃣ кэш по tokenId
     const cached = await this.cache.get(tokenId);
     if (cached) {
       if (userId && cached.lemmaId) {
-        await this.wordProgress.registerClick(userId, cached.lemmaId);
-        await this.prisma.userEvent.create({
+        // Побочные эффекты не блокируют ответ — fire-and-forget
+        this.runInBackground(
+          this.wordProgress.registerClick(userId, cached.lemmaId),
+          "registerClick(cached)",
+        );
+        this.runInBackground(this.prisma.userEvent.create({
           data: {
             userId,
             type: UserEventType.CLICK_WORD,
@@ -32,9 +71,18 @@ export class TokenService {
               normalized: cached.normalized,
             },
           },
-        });
+        }), "userEvent.create(cached)");
         if (cached.textId) {
-          void this.wordProgress.saveContext(userId, cached.lemmaId, cached.textId, cached.word, tokenId);
+          this.runInBackground(
+            this.wordProgress.saveContext(
+              userId,
+              cached.lemmaId,
+              cached.textId,
+              cached.word,
+              tokenId,
+            ),
+            "saveContext(cached)",
+          );
         }
       }
       return cached;
@@ -85,8 +133,11 @@ export class TokenService {
         tags: cachedByWord.tags ?? [],
       };
       if (userId && result.lemmaId) {
-        await this.wordProgress.registerClick(userId, result.lemmaId);
-        await this.prisma.userEvent.create({
+        this.runInBackground(
+          this.wordProgress.registerClick(userId, result.lemmaId),
+          "registerClick(cachedByWord)",
+        );
+        this.runInBackground(this.prisma.userEvent.create({
           data: {
             userId,
             type: UserEventType.CLICK_WORD,
@@ -98,8 +149,17 @@ export class TokenService {
               normalized: token.normalized,
             },
           },
-        });
-        void this.wordProgress.saveContext(userId, result.lemmaId, token.version.textId, token.original, token.id);
+        }), "userEvent.create(cachedByWord)");
+        this.runInBackground(
+          this.wordProgress.saveContext(
+            userId,
+            result.lemmaId,
+            token.version.textId,
+            token.original,
+            token.id,
+          ),
+          "saveContext(cachedByWord)",
+        );
       }
       await this.cache.set(token.id, token.versionId, token.normalized, result);
       return result;
@@ -110,8 +170,11 @@ export class TokenService {
     const lemmaId = primary?.lemmaId;
 
     if (userId && lemmaId) {
-      await this.wordProgress.registerClick(userId, lemmaId);
-      await this.prisma.userEvent.create({
+      this.runInBackground(
+        this.wordProgress.registerClick(userId, lemmaId),
+        "registerClick(db)",
+      );
+      this.runInBackground(this.prisma.userEvent.create({
         data: {
           userId,
           type: UserEventType.CLICK_WORD,
@@ -123,8 +186,17 @@ export class TokenService {
             normalized: token.normalized,
           },
         },
-      });
-      void this.wordProgress.saveContext(userId, lemmaId, token.version.textId, token.original, token.id);
+      }), "userEvent.create(db)");
+      this.runInBackground(
+        this.wordProgress.saveContext(
+          userId,
+          lemmaId,
+          token.version.textId,
+          token.original,
+          token.id,
+        ),
+        "saveContext(db)",
+      );
     }
 
     const headword = primary?.lemma?.headwords?.[0];
@@ -158,5 +230,13 @@ export class TokenService {
 
     await this.cache.set(token.id, token.versionId, token.normalized, result);
     return result;
+  }
+
+  private runInBackground(promise: Promise<unknown>, operation: string): void {
+    void promise.catch((error) => {
+      this.logger.warn(
+        `${operation} failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    });
   }
 }

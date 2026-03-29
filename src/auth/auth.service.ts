@@ -7,10 +7,10 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
+import { Prisma, UserEventType } from "@prisma/client";
 import { hash, verify } from "argon2";
 import { Response } from "express";
 import { PrismaService } from "src/prisma.service";
-import { UserEventType } from "@prisma/client";
 import { CreateUserDto } from "src/user/dto/create-user.dto";
 import { LoginDto } from "src/user/dto/login.dto";
 import { UserService } from "src/user/user.service";
@@ -55,7 +55,15 @@ export class AuthService {
     if (existingUserByEmail)
       throw new ConflictException("User with this email already exists");
 
-    const createdUser = await this.userService.create(dto);
+    let createdUser: Awaited<ReturnType<typeof this.userService.create>>;
+    try {
+      createdUser = await this.userService.create(dto);
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+        throw new ConflictException("User with this email or username already exists");
+      }
+      throw e;
+    }
     const {
       password: _,
       hashedRefreshToken: __,
@@ -106,14 +114,15 @@ export class AuthService {
     const refreshTokenName =
       this.configService.getOrThrow<string>("REFRESH_TOKEN_NAME");
     const domain = this.configService.get<string>("DOMAIN") || undefined;
-    const isProduction = this.configService.get("NODE_ENV") === "production";
+    const secure = this.shouldUseSecureCookies();
+    const sameSite = secure ? "none" : "lax";
 
     res.cookie(refreshTokenName, refreshToken, {
       httpOnly: true,
       domain,
       expires: expiresIn,
-      secure: isProduction,
-      sameSite: isProduction ? "none" : "lax",
+      secure,
+      sameSite,
     });
   }
 
@@ -121,14 +130,15 @@ export class AuthService {
     const refreshTokenName =
       this.configService.getOrThrow<string>("REFRESH_TOKEN_NAME");
     const domain = this.configService.get<string>("DOMAIN") || undefined;
-    const isProduction = this.configService.get("NODE_ENV") === "production";
+    const secure = this.shouldUseSecureCookies();
+    const sameSite = secure ? "none" : "lax";
 
     res.cookie(refreshTokenName, "", {
       httpOnly: true,
       domain,
       expires: new Date(0),
-      secure: isProduction,
-      sameSite: isProduction ? "none" : "lax",
+      secure,
+      sameSite,
     });
   }
 
@@ -222,6 +232,19 @@ export class AuthService {
       data: { revokedAt: new Date() },
     });
 
+    // Инвалидируем все активные access-токены пользователя.
+    // Per-session инвалидация невозможна без sessionId в JWT payload —
+    // отзыв одной сессии блокирует токены всех устройств до следующего рефреша.
+    const accessTtl = this.parseExpirySeconds(
+      this.configService.get("ACCESS_TOKEN_EXPIRES_IN") ?? "1h",
+    );
+    await this.redis.set(
+      `session:blacklist:${userId}`,
+      Date.now().toString(),
+      "EX",
+      accessTtl,
+    );
+
     return { success: true };
   }
 
@@ -231,12 +254,28 @@ export class AuthService {
       data: { revokedAt: new Date() },
     });
 
+    // Инвалидируем все активные access-токены пользователя
+    const accessTtl = this.parseExpirySeconds(
+      this.configService.get("ACCESS_TOKEN_EXPIRES_IN") ?? "1h",
+    );
+    await this.redis.set(
+      `session:blacklist:${userId}`,
+      Date.now().toString(),
+      "EX",
+      accessTtl,
+    );
+
     return { success: true };
   }
 
   private async validateUser(dto: LoginDto) {
     const user = await this.prisma.user.findFirst({
-      where: { username: dto.username },
+      where: {
+        OR: [
+          { username: dto.username },
+          { email: { equals: dto.username, mode: "insensitive" } },
+        ],
+      },
     });
 
     if (!user) throw new NotFoundException("The user not found");
@@ -254,6 +293,37 @@ export class AuthService {
     };
 
     return safeUser;
+  }
+
+  private shouldUseSecureCookies(): boolean {
+    if (this.configService.get("NODE_ENV") === "production") {
+      return true;
+    }
+
+    const domain = this.configService.get<string>("DOMAIN");
+    if (domain && domain.trim() !== "" && !this.isLocalDomain(domain)) {
+      return true;
+    }
+
+    const frontendUrl = this.configService.get<string>("FRONTEND_URL");
+    if (!frontendUrl) return false;
+
+    try {
+      const parsed = new URL(frontendUrl);
+      if (parsed.protocol === "https:") return true;
+      return !this.isLocalDomain(parsed.hostname);
+    } catch {
+      return false;
+    }
+  }
+
+  private isLocalDomain(host: string): boolean {
+    const normalized = host.toLowerCase();
+    return (
+      normalized === "localhost" ||
+      normalized === "127.0.0.1" ||
+      normalized === "::1"
+    );
   }
 
   private async issueTokens(userId: string) {

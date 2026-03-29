@@ -17,4 +17,11 @@ export const envValidationSchema = Joi.object({
   REFRESH_TOKEN_EXPIRES_IN: Joi.string().required(),
   EXPIRE_DAY_REFRESH_TOKEN: Joi.number().integer().min(1).default(7),
   REFRESH_TOKEN_NAME: Joi.string().min(3).required(),
+
+  BILLING_PROVIDER: Joi.string()
+    .valid("STRIPE", "PAYPAL", "PADDLE", "LEMONSQUEEZY", "MANUAL")
+    .default("MANUAL"),
+  ALLOW_MANUAL_BILLING_IN_PROD: Joi.string()
+    .valid("true", "false")
+    .default("false"),
 });

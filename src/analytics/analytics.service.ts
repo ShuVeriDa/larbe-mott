@@ -2,36 +2,94 @@ import { Injectable } from "@nestjs/common";
 import { UserEventType, WordStatus } from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
 
+const WEEK_LABELS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+
+export interface StreakDetails {
+  current: number;
+  record: number;
+  weekDays: { date: string; label: string; active: boolean; isToday: boolean }[];
+}
+
+export interface WordStats {
+  total: number;
+  new: number;
+  learning: number;
+  known: number;
+}
+
 @Injectable()
 export class AnalyticsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private dateKeyWithOffset(date: Date, offsetMinutes: number): string {
+    return new Date(date.getTime() + offsetMinutes * 60_000)
+      .toISOString()
+      .slice(0, 10);
+  }
+
   private utcDateKey(date: Date): string {
-    return date.toISOString().slice(0, 10);
+    return this.dateKeyWithOffset(date, 0);
   }
 
   private nowUtc(): Date {
     return new Date();
   }
 
+  private parseUtcOffsetMinutes(timezone: string | null | undefined): number {
+    if (!timezone) return 0;
+    const normalized = timezone.trim().toUpperCase();
+    const match = normalized.match(/^UTC([+-])(\d{1,2})(?::?(\d{2}))?$/);
+    if (!match) return 0;
+
+    const sign = match[1] === "+" ? 1 : -1;
+    const hours = Number.parseInt(match[2], 10);
+    const minutes = Number.parseInt(match[3] ?? "0", 10);
+
+    if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return 0;
+    if (hours > 14 || minutes > 59) return 0;
+
+    return sign * (hours * 60 + minutes);
+  }
+
+  private addDaysToDateKey(dateKey: string, days: number): string {
+    const d = new Date(`${dateKey}T00:00:00.000Z`);
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
+  }
+
+  private async resolveTimezoneOffsetMinutes(userId: string): Promise<number> {
+    const pref = await this.prisma.userNotificationPreferences.findUnique({
+      where: { userId },
+      select: { timezone: true },
+    });
+    return this.parseUtcOffsetMinutes(pref?.timezone);
+  }
+
   async getUserAnalytics(userId: string) {
-    const [wordStats, dueToday, textStats, streak, streakRecord, streakDays, activity] =
+    const offsetMinutes = await this.resolveTimezoneOffsetMinutes(userId);
+    const [wordStats, dueToday, textStats, streakDetails, activity] =
       await Promise.all([
         this.getWordStats(userId),
         this.getDueTodayCount(userId),
         this.getTextStats(userId),
-        this.getStreak(userId),
-        this.getStreakRecord(userId),
-        this.getStreakDays(userId),
+        this.getStreakDetails(userId, offsetMinutes),
         this.getActivityLast30Days(userId),
       ]);
 
-    return { words: wordStats, dueToday, texts: textStats, streak, streakRecord, streakDays, activity };
+    return {
+      words: wordStats,
+      dueToday,
+      texts: textStats,
+      streak: streakDetails.current,
+      streakRecord: streakDetails.record,
+      streakDays: streakDetails.weekDays,
+      activity,
+    };
   }
 
   // ─── words ───────────────────────────────────────────────────────────────────
 
-  private async getWordStats(userId: string) {
+  async getWordStats(userId: string): Promise<WordStats> {
     const grouped = await this.prisma.userWordProgress.groupBy({
       by: ["status"],
       where: { userId },
@@ -83,119 +141,100 @@ export class AnalyticsService {
 
   // ─── streak ──────────────────────────────────────────────────────────────────
 
-  private async getStreak(userId: string): Promise<number> {
-    const events = await this.prisma.userEvent.findMany({
-      where: { userId },
-      select: { createdAt: true },
-      orderBy: { createdAt: "desc" },
-    });
-
-    if (!events.length) return 0;
-
-    const uniqueDays = [
-      ...new Set(events.map((e) => this.utcDateKey(e.createdAt))),
-    ].sort().reverse();
-
-    const today = this.utcDateKey(this.nowUtc());
-    const yesterday = this.utcDateKey(new Date(Date.now() - 86_400_000));
-
-    // Streak must be alive: last activity today or yesterday
-    if (uniqueDays[0] !== today && uniqueDays[0] !== yesterday) return 0;
-
-    let streak = 0;
-    let expected = uniqueDays[0];
-
-    for (const day of uniqueDays) {
-      if (day === expected) {
-        streak++;
-        const d = new Date(expected);
-        d.setDate(d.getDate() - 1);
-        expected = d.toISOString().slice(0, 10);
-      } else {
-        break;
-      }
-    }
-
-    return streak;
-  }
-
   /**
-   * Максимальная серия дней за всё время.
+   * Вычисляет все streak-данные за два параллельных запроса:
+   * - current: текущая серия дней
+   * - record: рекорд за всё время
+   * - weekDays: активные дни текущей недели (Пн–Вс)
    */
-  private async getStreakRecord(userId: string): Promise<number> {
-    const events = await this.prisma.userEvent.findMany({
-      where: { userId },
-      select: { createdAt: true },
-      orderBy: { createdAt: "asc" },
-    });
-
-    if (!events.length) return 0;
-
-    const uniqueDays = [
-      ...new Set(events.map((e) => this.utcDateKey(e.createdAt))),
-    ].sort();
-
-    let record = 1;
-    let current = 1;
-
-    for (let i = 1; i < uniqueDays.length; i++) {
-      const prev = new Date(uniqueDays[i - 1]);
-      prev.setDate(prev.getDate() + 1);
-      const expectedNext = this.utcDateKey(prev);
-
-      if (uniqueDays[i] === expectedNext) {
-        current++;
-        if (current > record) record = current;
-      } else {
-        current = 1;
-      }
-    }
-
-    return record;
-  }
-
-  /**
-   * 7 дней текущей недели (Пн–Вс) с флагом активности.
-   * Возвращает: [{ date: "2026-03-23", label: "Пн", active: true, isToday: false }, ...]
-   */
-  private async getStreakDays(
-    userId: string,
-  ): Promise<{ date: string; label: string; active: boolean; isToday: boolean }[]> {
-    // Начало текущей недели (понедельник)
+  async getStreakDetails(userId: string, offsetMinutes?: number): Promise<StreakDetails> {
+    const tzOffsetMinutes =
+      offsetMinutes ?? (await this.resolveTimezoneOffsetMinutes(userId));
     const now = this.nowUtc();
-    const dayOfWeek = now.getUTCDay(); // 0=вс, 1=пн, ...
-    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-    const monday = new Date(now);
-    monday.setUTCDate(now.getUTCDate() + mondayOffset);
-    monday.setUTCHours(0, 0, 0, 0);
+    const today = this.dateKeyWithOffset(now, tzOffsetMinutes);
+    const yesterday = this.addDaysToDateKey(today, -1);
 
+    const shiftedNow = new Date(now.getTime() + tzOffsetMinutes * 60_000);
+
+    // Границы текущей недели (Пн–Вс) в локальном времени пользователя.
+    const dayOfWeek = shiftedNow.getUTCDay();
+    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const monday = new Date(shiftedNow);
+    monday.setUTCDate(shiftedNow.getUTCDate() + mondayOffset);
+    monday.setUTCHours(0, 0, 0, 0);
     const sunday = new Date(monday);
     sunday.setUTCDate(monday.getUTCDate() + 6);
     sunday.setUTCHours(23, 59, 59, 999);
 
-    const events = await this.prisma.userEvent.findMany({
-      where: { userId, createdAt: { gte: monday, lte: sunday } },
-      select: { createdAt: true },
-    });
+    // Convert local week bounds back to UTC for DB query.
+    const mondayUtc = new Date(monday.getTime() - tzOffsetMinutes * 60_000);
+    const sundayUtc = new Date(sunday.getTime() - tzOffsetMinutes * 60_000);
 
+    // Cap at 2 years — no streak can exceed this; avoids full-table scan for active users
+    const twoYearsAgo = new Date(now);
+    twoYearsAgo.setUTCFullYear(twoYearsAgo.getUTCFullYear() - 2);
+
+    const [allEvents, weekEvents] = await Promise.all([
+      this.prisma.userEvent.findMany({
+        where: { userId, createdAt: { gte: twoYearsAgo } },
+        select: { createdAt: true },
+        orderBy: { createdAt: "desc" },
+      }),
+      this.prisma.userEvent.findMany({
+        where: { userId, createdAt: { gte: mondayUtc, lte: sundayUtc } },
+        select: { createdAt: true },
+      }),
+    ]);
+
+    // Уникальные дни, от новых к старым
+    const uniqueDaysDesc = [
+      ...new Set(allEvents.map((e) => this.dateKeyWithOffset(e.createdAt, tzOffsetMinutes))),
+    ].sort().reverse();
+
+    // Текущий streak
+    let current = 0;
+    if (uniqueDaysDesc.length && (uniqueDaysDesc[0] === today || uniqueDaysDesc[0] === yesterday)) {
+      let expected = uniqueDaysDesc[0];
+      for (const day of uniqueDaysDesc) {
+        if (day === expected) {
+          current++;
+          expected = this.addDaysToDateKey(expected, -1);
+        } else {
+          break;
+        }
+      }
+    }
+
+    // Рекорд за всё время
+    const uniqueDaysAsc = [...uniqueDaysDesc].sort();
+    let record = uniqueDaysAsc.length > 0 ? 1 : 0;
+    let run = uniqueDaysAsc.length > 0 ? 1 : 0;
+    for (let i = 1; i < uniqueDaysAsc.length; i++) {
+      if (this.addDaysToDateKey(uniqueDaysAsc[i - 1], 1) === uniqueDaysAsc[i]) {
+        run++;
+        if (run > record) record = run;
+      } else {
+        run = 1;
+      }
+    }
+
+    // Дни текущей недели
     const activeDays = new Set(
-      events.map((e) => this.utcDateKey(e.createdAt)),
+      weekEvents.map((e) => this.dateKeyWithOffset(e.createdAt, tzOffsetMinutes)),
     );
-
-    const todayStr = this.utcDateKey(now);
-    const LABELS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
-
-    return Array.from({ length: 7 }, (_, i) => {
+    const weekDays = Array.from({ length: 7 }, (_, i) => {
       const d = new Date(monday);
       d.setUTCDate(monday.getUTCDate() + i);
-      const dateStr = this.utcDateKey(d);
+      const dateStr = d.toISOString().slice(0, 10);
       return {
         date: dateStr,
-        label: LABELS[i],
+        label: WEEK_LABELS[i],
         active: activeDays.has(dateStr),
-        isToday: dateStr === todayStr,
+        isToday: dateStr === today,
       };
     });
+
+    return { current, record, weekDays };
   }
 
   // ─── activity chart (last 30 days) ───────────────────────────────────────────

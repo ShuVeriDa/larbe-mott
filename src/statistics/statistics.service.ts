@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
-import { UserEventType } from "@prisma/client";
+import { Prisma, UserEventType } from "@prisma/client";
+import { AnalyticsService } from "src/analytics/analytics.service";
 import { PrismaService } from "src/prisma.service";
 import { StatPeriod } from "./dto/statistics-query.dto";
 
@@ -11,14 +12,16 @@ interface DateRange {
 }
 
 const MONTH_LABELS = ["Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"];
-const WEEK_LABELS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 const STREAK_MILESTONES = [3, 7, 14, 30];
 const READ_SESSION = "READ_SESSION" as UserEventType;
 const REVIEW_SESSION = "REVIEW_SESSION" as UserEventType;
 
 @Injectable()
 export class StatisticsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly analyticsService: AnalyticsService,
+  ) {}
 
   private utcDateKey(date: Date): string {
     return date.toISOString().slice(0, 10);
@@ -48,7 +51,7 @@ export class StatisticsService {
       this.getTextsRead(userId, range, period),
       this.getStreak(userId),
       this.getYearHeatmap(userId),
-      this.getWordStats(userId),
+      this.analyticsService.getWordStats(userId),
       this.getWordsPerDay(userId, range, period),
       this.getTextsProgress(userId),
       this.getAccuracy(userId, range, period),
@@ -123,30 +126,26 @@ export class StatisticsService {
   // ─── Header: reading time ────────────────────────────────────────────────────
 
   private async getReadingTime(userId: string, range: DateRange, period: StatPeriod) {
-    const events = await this.prisma.userEvent.findMany({
-      where: { userId, type: READ_SESSION, ...this.periodWhere(period, range) },
-      select: { metadata: true },
-    });
+    const sumMinutes = async (from: Date, to: Date): Promise<number> => {
+      const result = await this.prisma.$queryRaw<[{ seconds: string | null }]>`
+        SELECT SUM((metadata->>'durationSeconds')::float) AS seconds
+        FROM "UserEvent"
+        WHERE "userId" = ${userId}
+          AND type::text = 'READ_SESSION'
+          AND "createdAt" >= ${from}
+          AND "createdAt" <= ${to}
+      `;
+      return Math.round((parseFloat(result[0]?.seconds ?? "0") || 0) / 60);
+    };
 
-    const totalSeconds = events.reduce((sum, e) => {
-      const meta = e.metadata as { durationSeconds?: number } | null;
-      return sum + (meta?.durationSeconds ?? 0);
-    }, 0);
-    const total = Math.round(totalSeconds / 60);
+    const [total, prevOrNull] = await Promise.all([
+      sumMinutes(range.from, range.to),
+      period !== StatPeriod.ALL
+        ? sumMinutes(range.prevFrom, range.prevTo)
+        : Promise.resolve<number | null>(null),
+    ]);
 
-    let delta: number | null = null;
-    if (period !== StatPeriod.ALL) {
-      const prevEvents = await this.prisma.userEvent.findMany({
-        where: { userId, type: READ_SESSION, createdAt: { gte: range.prevFrom, lt: range.prevTo } },
-        select: { metadata: true },
-      });
-      const prevSeconds = prevEvents.reduce((sum, e) => {
-        const meta = e.metadata as { durationSeconds?: number } | null;
-        return sum + (meta?.durationSeconds ?? 0);
-      }, 0);
-      delta = total - Math.round(prevSeconds / 60);
-    }
-
+    const delta = prevOrNull !== null ? total - prevOrNull : null;
     return { total, delta };
   }
 
@@ -199,74 +198,11 @@ export class StatisticsService {
   }
 
   // ─── Streak ──────────────────────────────────────────────────────────────────
+  // Делегируем в AnalyticsService, добавляем только milestones
 
   private async getStreak(userId: string) {
-    const events = await this.prisma.userEvent.findMany({
-      where: { userId },
-      select: { createdAt: true },
-      orderBy: { createdAt: "desc" },
-    });
-
-    const uniqueDays = [...new Set(events.map((e) => this.utcDateKey(e.createdAt)))].sort().reverse();
-
-    const today = this.utcDateKey(new Date());
-    const yesterday = this.utcDateKey(new Date(Date.now() - 86_400_000));
-
-    // Current streak
-    let current = 0;
-    if (uniqueDays.length && (uniqueDays[0] === today || uniqueDays[0] === yesterday)) {
-      let expected = uniqueDays[0];
-      for (const day of uniqueDays) {
-        if (day === expected) {
-          current++;
-          const d = new Date(expected);
-          d.setDate(d.getDate() - 1);
-          expected = this.utcDateKey(d);
-        } else break;
-      }
-    }
-
-    // All-time record
-    let record = 0;
-    let runLen = 0;
-    const asc = [...uniqueDays].sort();
-    for (let i = 0; i < asc.length; i++) {
-      if (i === 0) {
-        runLen = 1;
-      } else {
-        const prev = new Date(asc[i - 1]);
-        prev.setDate(prev.getDate() + 1);
-        runLen = this.utcDateKey(prev) === asc[i] ? runLen + 1 : 1;
-      }
-      if (runLen > record) record = runLen;
-    }
-
-    // Current week (Mon–Sun)
-    const now = new Date();
-    const dow = now.getUTCDay();
-    const monday = new Date(now);
-    monday.setUTCDate(now.getUTCDate() + (dow === 0 ? -6 : 1 - dow));
-    monday.setUTCHours(0, 0, 0, 0);
-    const sunday = new Date(monday);
-    sunday.setUTCDate(monday.getUTCDate() + 6);
-    sunday.setUTCHours(23, 59, 59, 999);
-
-    const weekEvents = await this.prisma.userEvent.findMany({
-      where: { userId, createdAt: { gte: monday, lte: sunday } },
-      select: { createdAt: true },
-    });
-    const activeDays = new Set(weekEvents.map((e) => this.utcDateKey(e.createdAt)));
-    const todayStr = this.utcDateKey(now);
-
-    const weekDays = Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(monday);
-      d.setUTCDate(monday.getUTCDate() + i);
-      const dateStr = this.utcDateKey(d);
-      return { date: dateStr, label: WEEK_LABELS[i], active: activeDays.has(dateStr), isToday: dateStr === todayStr };
-    });
-
+    const { current, record, weekDays } = await this.analyticsService.getStreakDetails(userId);
     const milestones = STREAK_MILESTONES.map((days) => ({ days, reached: current >= days }));
-
     return { current, record, weekDays, milestones };
   }
 
@@ -316,26 +252,6 @@ export class StatisticsService {
     });
   }
 
-  // ─── Word stats ──────────────────────────────────────────────────────────────
-
-  private async getWordStats(userId: string) {
-    const grouped = await this.prisma.userWordProgress.groupBy({
-      by: ["status"],
-      where: { userId },
-      _count: { status: true },
-    });
-
-    const map = Object.fromEntries(grouped.map((g) => [g.status, g._count.status]));
-    const total = grouped.reduce((sum, g) => sum + g._count.status, 0);
-
-    return {
-      total,
-      known: map["KNOWN"] ?? 0,
-      learning: map["LEARNING"] ?? 0,
-      new: map["NEW"] ?? 0,
-    };
-  }
-
   // ─── Words per day ────────────────────────────────────────────────────────────
 
   private async getWordsPerDay(userId: string, range: DateRange, period: StatPeriod) {
@@ -382,30 +298,32 @@ export class StatisticsService {
     if (!progressRows.length) return [];
 
     const textIds = progressRows.map((r) => r.textId);
-    const versions = await this.prisma.textProcessingVersion.findMany({
-      where: { textId: { in: textIds } },
-      orderBy: { version: "desc" },
-      select: { id: true, textId: true },
-    });
-
-    const latestVersionByTextId = new Map<string, string>();
-    for (const v of versions) {
-      if (!latestVersionByTextId.has(v.textId)) latestVersionByTextId.set(v.textId, v.id);
-    }
-
-    const versionIds = [...latestVersionByTextId.values()];
-    const tokenCounts = await this.prisma.textToken.groupBy({
-      by: ["versionId"],
-      where: { versionId: { in: versionIds } },
-      _count: { id: true },
-    });
-    const countByVersionId = new Map(tokenCounts.map((c) => [c.versionId, c._count.id]));
+    const wordCountRows = await this.prisma.$queryRaw<
+      { textId: string; wordCount: number }[]
+    >(
+      Prisma.sql`
+        SELECT t.id AS "textId", COALESCE(COUNT(tt.id), 0)::int AS "wordCount"
+        FROM "Text" t
+        LEFT JOIN LATERAL (
+          SELECT tpv.id
+          FROM "TextProcessingVersion" tpv
+          WHERE tpv."textId" = t.id
+          ORDER BY tpv.version DESC
+          LIMIT 1
+        ) lv ON true
+        LEFT JOIN "TextToken" tt ON tt."versionId" = lv.id
+        WHERE t.id IN (${Prisma.join(textIds)})
+        GROUP BY t.id
+      `,
+    );
+    const wordCountByTextId = new Map(
+      wordCountRows.map((row) => [row.textId, Number(row.wordCount) || 0]),
+    );
 
     return progressRows.map((r) => {
-      const versionId = latestVersionByTextId.get(r.textId);
-      const wordCount = versionId ? (countByVersionId.get(versionId) ?? 0) : 0;
+      const wordCount = wordCountByTextId.get(r.textId) ?? 0;
       const progressPercent = Math.round(r.progressPercent);
-      const knownWords = Math.round((r.progressPercent / 100) * wordCount);
+      const knownWords = Math.round((progressPercent / 100) * wordCount);
 
       return {
         id: r.text.id,

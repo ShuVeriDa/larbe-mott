@@ -54,7 +54,7 @@ export class DeckService {
     const existing = await this.prisma.userDeckCard.findUnique({
       where: { userId_lemmaId: { userId, lemmaId } },
     });
-    if (existing) return existing;
+    if (existing) return { ...existing, shouldRefreshDeck: false };
 
     const lemma = await this.prisma.lemma.findUnique({ where: { id: lemmaId } });
     if (!lemma) throw new NotFoundException("Lemma not found");
@@ -64,7 +64,7 @@ export class DeckService {
     });
 
     await this.rebalance(userId);
-    return card;
+    return { ...card, shouldRefreshDeck: true };
   }
 
   async removeWord(userId: string, lemmaId: string) {
@@ -73,9 +73,10 @@ export class DeckService {
     });
     if (!existing) throw new NotFoundException("Card not found");
 
-    return this.prisma.userDeckCard.delete({
+    const removed = await this.prisma.userDeckCard.delete({
       where: { userId_lemmaId: { userId, lemmaId } },
     });
+    return { ...removed, shouldRefreshDeck: true };
   }
 
   // ─── rate card ────────────────────────────────────────────────────────────────
@@ -92,13 +93,14 @@ export class DeckService {
     if (!card) throw new NotFoundException("Card not found");
 
     if (result === "know") {
-      return this.prisma.userDeckCard.update({
+      const updated = await this.prisma.userDeckCard.update({
         where: { userId_lemmaId: { userId, lemmaId } },
         data: { movedAt: new Date() },
       });
+      return { ...updated, shouldRefreshDeck: true };
     }
 
-    return card;
+    return { ...card, shouldRefreshDeck: false };
   }
 
   // ─── daily words ─────────────────────────────────────────────────────────────
@@ -255,25 +257,46 @@ export class DeckService {
     if (count <= limit) return;
 
     const overflow = count - limit;
-    const oldest = await this.prisma.userDeckCard.findMany({
-      where: { userId, deckType: DeckType.RETIRED },
-      orderBy: { movedAt: "asc" },
-      take: overflow,
-      select: { id: true },
-    });
+    const [oldest, existingCounts] = await Promise.all([
+      this.prisma.userDeckCard.findMany({
+        where: { userId, deckType: DeckType.RETIRED },
+        orderBy: { movedAt: "asc" },
+        take: overflow,
+        select: { id: true },
+      }),
+      this.prisma.userDeckCard.groupBy({
+        by: ["deckNumber"],
+        where: { userId, deckType: DeckType.NUMBERED },
+        _count: { id: true },
+      }),
+    ]);
 
+    // Pre-build count map so we can assign deck numbers without per-card queries
+    const countByDeck = new Map<number, number>();
+    for (const g of existingCounts) {
+      if (g.deckNumber !== null) countByDeck.set(g.deckNumber, g._count.id);
+    }
+
+    // Assign cards to deck numbers, incrementing when a deck is full
+    const byDeck = new Map<number, string[]>();
     let deckNumber = 1;
     for (const card of oldest) {
-      const deckCount = await this.prisma.userDeckCard.count({
-        where: { userId, deckType: DeckType.NUMBERED, deckNumber },
-      });
-      if (deckCount >= limit) deckNumber++;
-
-      await this.prisma.userDeckCard.update({
-        where: { id: card.id },
-        data: { deckType: DeckType.NUMBERED, deckNumber, movedAt: new Date() },
-      });
+      while ((countByDeck.get(deckNumber) ?? 0) >= limit) deckNumber++;
+      if (!byDeck.has(deckNumber)) byDeck.set(deckNumber, []);
+      byDeck.get(deckNumber)!.push(card.id);
+      countByDeck.set(deckNumber, (countByDeck.get(deckNumber) ?? 0) + 1);
     }
+
+    // One updateMany per deck number instead of one update per card
+    const now = new Date();
+    await Promise.all(
+      [...byDeck.entries()].map(([deck, ids]) =>
+        this.prisma.userDeckCard.updateMany({
+          where: { id: { in: ids } },
+          data: { deckType: DeckType.NUMBERED, deckNumber: deck, movedAt: now },
+        }),
+      ),
+    );
   }
 
   // ─── numbered deck rotation ───────────────────────────────────────────────────

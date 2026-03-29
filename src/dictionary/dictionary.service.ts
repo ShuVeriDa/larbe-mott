@@ -1,10 +1,11 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma, UserEventType } from "@prisma/client";
+import { Prisma, SubscriptionStatus, UserEventType } from "@prisma/client";
 import { normalizeToken } from "src/markup-engine/tokenizer/tokenizer.utils";
 import { PrismaService } from "src/prisma.service";
 import { TokenService } from "src/token/token.service";
@@ -338,6 +339,26 @@ export class DictionaryService {
     dto: CreateDictionaryEntryDto,
     userId: string,
   ) {
+    // Enforce maxVocabularyWords plan limit
+    const [currentCount, subscription] = await Promise.all([
+      this.prismaService.userDictionaryEntry.count({ where: { userId } }),
+      this.prismaService.subscription.findFirst({
+        where: {
+          userId,
+          status: { in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING] },
+        },
+        include: { plan: true },
+        orderBy: { startDate: "desc" },
+      }),
+    ]);
+    const planLimits = subscription?.plan?.limits as Record<string, number> | null;
+    const maxVocabularyWords = planLimits?.maxVocabularyWords ?? 500;
+    if (currentCount >= maxVocabularyWords) {
+      throw new ForbiddenException(
+        `Vocabulary limit of ${maxVocabularyWords} words reached. Upgrade your plan to add more.`,
+      );
+    }
+
     const { tokenId, word, translation, folderId } = dto;
     let resolvedWord = word;
     let resolvedTranslation = translation;

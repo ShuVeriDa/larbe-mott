@@ -13,6 +13,7 @@ import { Language, Level } from "@prisma/client";
 import { Auth } from "src/auth/decorators/auth.decorator";
 import { OptionalAuth } from "src/auth/decorators/optional-auth.decorator";
 import { User } from "src/user/decorators/user.decorator";
+import { GetTextsResponseDto } from "./dto/get-texts-response.dto";
 import { TextService } from "./text.service";
 import type { TextProgressStatus, TextSortOrder } from "./text.service";
 
@@ -63,6 +64,7 @@ export class TextController {
   @ApiQuery({ name: "limit", required: false, description: "Items per page (default 20, max 50)" })
   @ApiOkResponse({
     description: "{ items: Text[], page, limit, counts: { total, new, inProgress, completed } }",
+    type: GetTextsResponseDto,
   })
   async getTexts(
     @Query("language") language?: Language | Language[],

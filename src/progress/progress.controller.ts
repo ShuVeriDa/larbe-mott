@@ -10,6 +10,7 @@ import {
 } from "@nestjs/swagger";
 import { Auth } from "src/auth/decorators/auth.decorator";
 import { RequiresPremium } from "src/auth/decorators/premium.decorator";
+import { AnalyticsService } from "src/analytics/analytics.service";
 import { User } from "src/user/decorators/user.decorator";
 import { PrismaService } from "src/prisma.service";
 import { TextProgressService } from "./text-progress/text-progress.service";
@@ -26,6 +27,7 @@ export class ProgressController {
     private readonly textProgress: TextProgressService,
     private readonly wordProgress: WordProgressService,
     private readonly prisma: PrismaService,
+    private readonly analyticsService: AnalyticsService,
   ) {}
 
   // ─── text ────────────────────────────────────────────────────────────────────
@@ -40,6 +42,12 @@ export class ProgressController {
     @User("id") userId: string,
   ) {
     const progress = await this.textProgress.calculateProgress(userId, textId);
+    // Keep UserTextProgress cache in sync so statistics/list views stay consistent
+    await this.prisma.userTextProgress.upsert({
+      where: { userId_textId: { userId, textId } },
+      update: { progressPercent: progress },
+      create: { userId, textId, progressPercent: progress },
+    });
     return { progress };
   }
 
@@ -58,7 +66,7 @@ export class ProgressController {
   async getReviewStats(@User("id") userId: string) {
     const now = new Date();
 
-    const [dueCount, learningCount, streakEvents] = await Promise.all([
+    const [dueCount, learningCount, streakDetails] = await Promise.all([
       this.prisma.userWordProgress.count({
         where: {
           userId,
@@ -69,16 +77,9 @@ export class ProgressController {
       this.prisma.userWordProgress.count({
         where: { userId, status: "LEARNING" },
       }),
-      this.prisma.userEvent.findMany({
-        where: { userId },
-        select: { createdAt: true },
-        orderBy: { createdAt: "desc" },
-      }),
+      this.analyticsService.getStreakDetails(userId),
     ]);
-
-    const streak = this.calcStreak(streakEvents.map((e) => e.createdAt));
-
-    return { dueCount, learningCount, streak };
+    return { dueCount, learningCount, streak: streakDetails.current };
   }
 
   // ─── review — статичный маршрут ВЫШЕ параметрического ────────────────────────
@@ -157,34 +158,4 @@ export class ProgressController {
     return this.wordProgress.getWordContexts(userId, lemmaId);
   }
 
-  // ─── helpers ─────────────────────────────────────────────────────────────────
-
-  private calcStreak(dates: Date[]): number {
-    if (!dates.length) return 0;
-
-    const uniqueDays = [
-      ...new Set(dates.map((d) => d.toISOString().slice(0, 10))),
-    ].sort().reverse();
-
-    const today = new Date().toISOString().slice(0, 10);
-    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
-
-    if (uniqueDays[0] !== today && uniqueDays[0] !== yesterday) return 0;
-
-    let streak = 0;
-    let expected = uniqueDays[0];
-
-    for (const day of uniqueDays) {
-      if (day === expected) {
-        streak++;
-        const d = new Date(expected);
-        d.setDate(d.getDate() - 1);
-        expected = d.toISOString().slice(0, 10);
-      } else {
-        break;
-      }
-    }
-
-    return streak;
-  }
 }

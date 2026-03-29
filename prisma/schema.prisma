@@ -523,6 +523,7 @@ model CouponRedemption {
   user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   payment  Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
 
+  @@unique([couponId, userId])
   @@index([couponId])
   @@index([userId])
   @@map("coupon_redemption")
@@ -866,6 +867,8 @@ model UserEvent {
 
   @@index([userId])
   @@index([type])
+  @@index([userId, createdAt])
+  @@index([userId, type, createdAt])
   @@map("user_event")
 }
 

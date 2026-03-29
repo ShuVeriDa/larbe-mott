@@ -1,4 +1,4 @@
-import { IsInt, IsString, IsUUID, Min } from "class-validator";
+import { IsInt, IsUUID, Max, Min } from "class-validator";
 import { ApiProperty } from "@nestjs/swagger";
 
 export class LogReadingDto {
@@ -9,5 +9,6 @@ export class LogReadingDto {
   @ApiProperty({ description: "Duration spent reading in seconds" })
   @IsInt()
   @Min(1)
+  @Max(86_400)
   durationSeconds: number;
 }

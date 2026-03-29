@@ -1,5 +1,5 @@
-import { Injectable } from "@nestjs/common";
-import { Language, UserEventType } from "@prisma/client";
+import { ForbiddenException, Injectable, Logger } from "@nestjs/common";
+import { Language, SubscriptionStatus, UserEventType } from "@prisma/client";
 import { DictionaryCacheService } from "src/markup-engine/dictionary-cache/dictionary-cache.service";
 import { DictionaryService } from "src/markup-engine/dictionary/dictionary.service";
 import { MorphologyService } from "src/markup-engine/morphology/morphology.service";
@@ -27,6 +27,8 @@ type LookupContext = {
  */
 @Injectable()
 export class WordLookupByWordService {
+  private readonly logger = new Logger(WordLookupByWordService.name);
+
   constructor(
     private prisma: PrismaService,
     private adminDictionary: DictionaryService,
@@ -43,28 +45,42 @@ export class WordLookupByWordService {
   ): Promise<WordLookupResult> {
     const normalized = normalizeToken(normalizedOrRaw);
     const language = await this.resolveUserLanguage(userId);
+    await this.enforceTranslationLimit(userId);
 
     // 1️⃣ Админский словарь
     const fromAdmin = await this.fromAdmin(normalized, language);
-    if (fromAdmin) return fromAdmin;
+    if (fromAdmin) {
+      this.recordTranslationUsage(userId, normalized, context, "admin");
+      return fromAdmin;
+    }
 
     // 2️⃣ Кэш (DictionaryCache)
     const fromCache = await this.fromCache(normalized);
-    if (fromCache) return fromCache;
+    if (fromCache) {
+      this.recordTranslationUsage(userId, normalized, context, "cache");
+      return fromCache;
+    }
 
     // 3️⃣ Онлайн словарь
     const fromOnline = await this.fromOnline(normalized, language);
-    if (fromOnline) return fromOnline;
+    if (fromOnline) {
+      this.recordTranslationUsage(userId, normalized, context, "online");
+      return fromOnline;
+    }
 
     // 4️⃣ Морфология
     const fromMorphology = await this.fromMorphology(normalized, language);
-    if (fromMorphology) return fromMorphology;
+    if (fromMorphology) {
+      this.recordTranslationUsage(userId, normalized, context, "morphology");
+      return fromMorphology;
+    }
 
     // Не найдено — тихо записываем в неизвестные (без задержки ответа)
     void this.unknownWordProcessor.recordFromLookup(normalized).catch(() => {});
 
     if (userId) {
-      void this.prisma.userEvent
+      this.runInBackground(
+        this.prisma.userEvent
         .create({
           data: {
             userId,
@@ -75,8 +91,9 @@ export class WordLookupByWordService {
               ...(context?.textId ? { textId: context.textId } : {}),
             },
           },
-        })
-        .catch(() => {});
+        }),
+        "recordFailLookup",
+      );
     }
 
     return { translation: null, tranAlt: null, grammar: null, baseForm: null };
@@ -182,5 +199,66 @@ export class WordLookupByWordService {
       grammar: lemma.partOfSpeech ?? null,
       baseForm: lemma.baseForm ?? null,
     };
+  }
+
+  private async enforceTranslationLimit(userId?: string): Promise<void> {
+    if (!userId) return;
+
+    const todayStart = new Date();
+    todayStart.setUTCHours(0, 0, 0, 0);
+
+    const [translationsToday, subscription] = await Promise.all([
+      this.prisma.userEvent.count({
+        where: { userId, type: UserEventType.CLICK_WORD, createdAt: { gte: todayStart } },
+      }),
+      this.prisma.subscription.findFirst({
+        where: {
+          userId,
+          status: { in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING] },
+        },
+        include: { plan: true },
+        orderBy: { startDate: "desc" },
+      }),
+    ]);
+
+    const planLimits = subscription?.plan?.limits as Record<string, number> | null;
+    const maxTranslationsPerDay = planLimits?.maxTranslationsPerDay ?? 50;
+    if (translationsToday >= maxTranslationsPerDay) {
+      throw new ForbiddenException(
+        `Daily translation limit of ${maxTranslationsPerDay} reached. Upgrade your plan for more.`,
+      );
+    }
+  }
+
+  private recordTranslationUsage(
+    userId: string | undefined,
+    normalized: string,
+    context: LookupContext | undefined,
+    source: "admin" | "cache" | "online" | "morphology",
+  ): void {
+    if (!userId) return;
+    this.runInBackground(
+      this.prisma.userEvent.create({
+        data: {
+          userId,
+          type: UserEventType.CLICK_WORD,
+          metadata: {
+            normalized,
+            source: `lookup_by_word:${source}`,
+            ...(context?.tokenId ? { tokenId: context.tokenId } : {}),
+            ...(context?.textId ? { textId: context.textId } : {}),
+          },
+        },
+      }),
+      "recordLookupByWordUsage",
+    );
+  }
+
+  private runInBackground(promise: Promise<unknown>, operation: string): void {
+    void promise.catch((error) => {
+      this.logger.warn(
+        `${operation} failed: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    });
   }
 }

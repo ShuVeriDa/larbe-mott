@@ -96,6 +96,7 @@ export class AuthController {
 
   @HttpCode(200)
   @Post("login/access-token")
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @ApiOperation({ summary: "Refresh access token using the refresh token" })
   @ApiOkResponse({
     description: "New access and refresh tokens have been issued",

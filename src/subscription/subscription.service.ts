@@ -4,12 +4,25 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { PaymentProvider, PaymentStatus, PlanType, SubscriptionStatus, UserEventType } from "@prisma/client";
+import { ConfigService } from "@nestjs/config";
+import {
+  CouponType,
+  PaymentProvider,
+  PaymentStatus,
+  PlanType,
+  Prisma,
+  SubscriptionEventType,
+  SubscriptionStatus,
+  UserEventType,
+} from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
 
 @Injectable()
 export class SubscriptionService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
+  ) {}
 
   async getActivePlans() {
     const plans = await this.prisma.plan.findMany({
@@ -81,6 +94,7 @@ export class SubscriptionService {
   }
 
   async subscribeToPlan(userId: string, planId: string) {
+    this.assertBillingModeSafeForCurrentEnv();
     const plan = await this.prisma.plan.findUnique({ where: { id: planId } });
     if (!plan || !plan.isActive) throw new NotFoundException("Plan not found or inactive");
 
@@ -98,12 +112,21 @@ export class SubscriptionService {
     // Пункт 3: понижение плана — сохраняем текущий endDate
     const isDowngrade =
       current?.plan != null && plan.priceCents < current.plan.priceCents;
+    const isUpgrade =
+      current?.plan != null && plan.priceCents > current.plan.priceCents;
 
     return this.prisma.$transaction(async (tx) => {
       if (current) {
         await tx.subscription.update({
           where: { id: current.id },
           data: { status: SubscriptionStatus.CANCELED, canceledAt: new Date() },
+        });
+        await tx.subscriptionEvent.create({
+          data: {
+            subscriptionId: current.id,
+            type: SubscriptionEventType.CANCELED,
+            metadata: { reason: "plan_change", toPlanCode: plan.code },
+          },
         });
       }
 
@@ -130,22 +153,90 @@ export class SubscriptionService {
         },
         include: { plan: true },
       });
+      await tx.subscriptionEvent.create({
+        data: {
+          subscriptionId: subscription.id,
+          type: isDowngrade
+            ? SubscriptionEventType.DOWNGRADED
+            : isUpgrade
+              ? SubscriptionEventType.UPGRADED
+              : SubscriptionEventType.SUBSCRIBED,
+          metadata: {
+            fromPlanCode: current?.plan?.code ?? null,
+            toPlanCode: plan.code,
+          },
+        },
+      });
 
-      // Пункт 4: запись платежа (только при апгрейде — при даунгрейде деньги не списываются)
+      // Запись платежа (только при апгрейде — при даунгрейде деньги не списываются)
+      let couponApplied:
+        | {
+            code: string;
+            type: CouponType;
+            amount: number;
+            discountCents: number;
+          }
+        | null = null;
+
       if (!isDowngrade) {
-        await tx.payment.create({
+        // Ищем неиспользованное погашение купона для этого пользователя
+        const pendingRedemption = await tx.couponRedemption.findFirst({
+          where: { userId, paymentId: null },
+          include: { coupon: true },
+          orderBy: { redeemedAt: "desc" },
+        });
+
+        let amountCents = plan.priceCents;
+
+        if (pendingRedemption) {
+          const { coupon } = pendingRedemption;
+
+          // Проверяем, применим ли купон к выбранному плану
+          const planApplicable =
+            coupon.applicablePlans.length === 0 ||
+            coupon.applicablePlans.includes(plan.code);
+
+          if (planApplicable) {
+            const beforeDiscount = amountCents;
+            if (coupon.type === CouponType.PERCENT) {
+              amountCents = Math.max(0, Math.round(amountCents * (1 - coupon.amount / 100)));
+            } else {
+              // FIXED — скидка в центах
+              amountCents = Math.max(0, amountCents - coupon.amount);
+            }
+            couponApplied = {
+              code: coupon.code,
+              type: coupon.type,
+              amount: coupon.amount,
+              discountCents: Math.max(0, beforeDiscount - amountCents),
+            };
+          }
+        }
+
+        const payment = await tx.payment.create({
           data: {
             userId,
             subscriptionId: subscription.id,
             provider: PaymentProvider.MANUAL,
             status: PaymentStatus.SUCCEEDED,
-            amountCents: plan.priceCents,
+            amountCents,
             currency: plan.currency,
           },
         });
+
+        // Привязываем погашение купона к платежу
+        if (pendingRedemption) {
+          await tx.couponRedemption.update({
+            where: { id: pendingRedemption.id },
+            data: { paymentId: payment.id },
+          });
+        }
       }
 
-      return subscription;
+      return {
+        ...subscription,
+        couponApplied,
+      };
     });
   }
 
@@ -160,10 +251,20 @@ export class SubscriptionService {
 
     if (!subscription) throw new NotFoundException("No active subscription found");
 
-    return this.prisma.subscription.update({
-      where: { id: subscription.id },
-      data: { status: SubscriptionStatus.CANCELED, canceledAt: new Date() },
-      include: { plan: true },
+    return this.prisma.$transaction(async (tx) => {
+      const canceled = await tx.subscription.update({
+        where: { id: subscription.id },
+        data: { status: SubscriptionStatus.CANCELED, canceledAt: new Date() },
+        include: { plan: true },
+      });
+      await tx.subscriptionEvent.create({
+        data: {
+          subscriptionId: subscription.id,
+          type: SubscriptionEventType.CANCELED,
+          metadata: { reason: "user_cancel" },
+        },
+      });
+      return canceled;
     });
   }
 
@@ -187,14 +288,54 @@ export class SubscriptionService {
     if (existing) throw new ConflictException("Promo code already redeemed");
 
     return this.prisma.$transaction(async (tx) => {
-      await tx.coupon.update({
-        where: { id: coupon.id },
+      const updateResult = await tx.coupon.updateMany({
+        where: {
+          id: coupon.id,
+          isActive: true,
+          ...(coupon.maxRedemptions !== null
+            ? { redeemedCount: { lt: coupon.maxRedemptions } }
+            : {}),
+        },
         data: { redeemedCount: { increment: 1 } },
       });
-      await tx.couponRedemption.create({
-        data: { couponId: coupon.id, userId },
-      });
-      return { type: coupon.type, amount: coupon.amount };
+      if (updateResult.count === 0) {
+        throw new BadRequestException("Promo code redemption limit reached");
+      }
+      try {
+        await tx.couponRedemption.create({
+          data: { couponId: coupon.id, userId },
+        });
+      } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+          throw new ConflictException("Promo code already redeemed");
+        }
+        throw e;
+      }
+      return {
+        type: coupon.type,
+        amount: coupon.amount,
+        appliesOn: "next_subscription_payment" as const,
+        requiresSubscriptionAction: true,
+      };
     });
+  }
+
+  private assertBillingModeSafeForCurrentEnv(): void {
+    const nodeEnv = this.configService.get<string>("NODE_ENV");
+    const allowManualInProd =
+      this.configService.get<string>("ALLOW_MANUAL_BILLING_IN_PROD") === "true";
+    const billingProvider = (
+      this.configService.get<string>("BILLING_PROVIDER") ?? PaymentProvider.MANUAL
+    ).toUpperCase();
+
+    if (
+      nodeEnv === "production" &&
+      billingProvider === PaymentProvider.MANUAL &&
+      !allowManualInProd
+    ) {
+      throw new BadRequestException(
+        "Manual billing is disabled in production. Configure payment provider integration first.",
+      );
+    }
   }
 }

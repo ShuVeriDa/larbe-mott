@@ -92,7 +92,9 @@ export class TextService {
           ? { title: "asc" }
           : orderBy === "oldest"
             ? { createdAt: "asc" }
-            : { createdAt: "desc" },
+            : orderBy === "level"
+              ? { level: "asc" }
+              : { createdAt: "desc" },
       }),
       this.prisma.text.count({ where }),
     ]);
@@ -180,17 +182,14 @@ export class TextService {
       items = items.filter((item) => item.progressStatus === status);
     }
 
-    // Сортировка по прогрессу, длине и уровню — постобработка
+    // Постсортировка для полей, недоступных в SQL-запросе:
+    // - "progress": progressPercent хранится в отдельной таблице (LEFT JOIN усложнит запрос)
+    // - "length": wordCount вычисляется из textToken и не хранится в Text
+    // "level" сортируется на стороне DB (enum A1<A2<B1… алфавитно корректен).
     if (orderBy === "progress" && userId) {
       items.sort((a, b) => b.progressPercent - a.progressPercent);
     } else if (orderBy === "length") {
       items.sort((a, b) => b.wordCount - a.wordCount);
-    } else if (orderBy === "level") {
-      items.sort((a, b) => {
-        const la = a.level ? (LEVEL_ORDER[a.level] ?? 99) : 99;
-        const lb = b.level ? (LEVEL_ORDER[b.level] ?? 99) : 99;
-        return la - lb;
-      });
     }
 
     // Счётчики по текущей выборке (до фильтра статуса, но с остальными фильтрами)

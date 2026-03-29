@@ -13,16 +13,24 @@ describe("SubscriptionService", () => {
     payment: { create: jest.fn(), findMany: jest.fn() },
     userEvent: { count: jest.fn() },
     userDictionaryEntry: { count: jest.fn() },
-    coupon: { findUnique: jest.fn(), update: jest.fn() },
+    coupon: { findUnique: jest.fn(), update: jest.fn(), updateMany: jest.fn() },
     couponRedemption: { findFirst: jest.fn(), create: jest.fn() },
     $transaction: jest.fn(),
+  };
+  const configService = {
+    get: jest.fn((key: string) => {
+      if (key === "NODE_ENV") return "test";
+      if (key === "ALLOW_MANUAL_BILLING_IN_PROD") return "false";
+      if (key === "BILLING_PROVIDER") return "MANUAL";
+      return undefined;
+    }),
   };
 
   let service: SubscriptionService;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new SubscriptionService(prisma as never);
+    service = new SubscriptionService(prisma as never, configService as never);
   });
 
   it("should reject subscription to FREE plan", async () => {
@@ -60,5 +68,33 @@ describe("SubscriptionService", () => {
 
     expect(result.groups).toHaveLength(1);
     expect(result.ungrouped).toHaveLength(1);
+  });
+
+  it("should return guidance payload on promo redeem", async () => {
+    prisma.coupon.findUnique.mockResolvedValue({
+      id: "c1",
+      code: "WELCOME",
+      isActive: true,
+      validFrom: null,
+      validUntil: null,
+      maxRedemptions: null,
+      redeemedCount: 0,
+      type: "PERCENT",
+      amount: 20,
+    });
+    prisma.couponRedemption.findFirst.mockResolvedValue(null);
+    prisma.$transaction.mockImplementation(async (cb: (tx: typeof prisma) => unknown) =>
+      cb(prisma as never));
+    prisma.coupon.updateMany.mockResolvedValue({ count: 1 });
+    prisma.couponRedemption.create.mockResolvedValue({ id: "r1" });
+
+    const result = await service.redeemCoupon("u1", "WELCOME");
+
+    expect(result).toEqual({
+      type: "PERCENT",
+      amount: 20,
+      appliesOn: "next_subscription_payment",
+      requiresSubscriptionAction: true,
+    });
   });
 });

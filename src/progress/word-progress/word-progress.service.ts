@@ -38,7 +38,7 @@ export class WordProgressService {
     }
 
     const nextReview = new Date();
-    nextReview.setDate(nextReview.getDate() + newInterval);
+    nextReview.setUTCDate(nextReview.getUTCDate() + newInterval);
 
     return { repetitions: newRep, easeFactor: newEF, interval: newInterval, nextReview };
   }
@@ -53,25 +53,28 @@ export class WordProgressService {
   // Вызывается при клике на слово (первое знакомство / активный просмотр)
   async registerClick(userId: string, lemmaId: string) {
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    today.setUTCHours(0, 0, 0, 0);
 
-    await this.prisma.userWordProgress.upsert({
-      where: { userId_lemmaId: { userId, lemmaId } },
-      update: {
-        lastSeen: new Date(),
-        status: "LEARNING",
-      },
-      create: {
-        userId,
-        lemmaId,
-        status: "LEARNING",
-        lastSeen: new Date(),
-        nextReview: today,
-        easeFactor: EF_DEFAULT,
-        interval: 0,
-        repetitions: 0,
-      },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.userWordProgress.upsert({
+        where: { userId_lemmaId: { userId, lemmaId } },
+        update: {
+          lastSeen: new Date(),
+          status: "LEARNING",
+        },
+        create: {
+          userId,
+          lemmaId,
+          status: "LEARNING",
+          lastSeen: new Date(),
+          nextReview: today,
+          easeFactor: EF_DEFAULT,
+          interval: 0,
+          repetitions: 0,
+        },
+      });
     });
+    await this.syncTextProgressForLemma(userId, lemmaId);
   }
 
   // Вызывается при открытии текста — пассивная встреча со словами
@@ -121,7 +124,7 @@ export class WordProgressService {
     });
     interval = this.applyFrequencyEffect(interval, uniqueTextsCount);
     nextReview = new Date();
-    nextReview.setDate(nextReview.getDate() + interval);
+    nextReview.setUTCDate(nextReview.getUTCDate() + interval);
 
     const newStatus =
       quality < 3
@@ -130,7 +133,7 @@ export class WordProgressService {
           ? "KNOWN"
           : "LEARNING";
 
-    return this.prisma.userWordProgress.upsert({
+    const result = await this.prisma.userWordProgress.upsert({
       where: { userId_lemmaId: { userId, lemmaId } },
       update: { repetitions, easeFactor, interval, nextReview, status: newStatus, lastSeen: new Date() },
       create: {
@@ -144,6 +147,9 @@ export class WordProgressService {
         lastSeen: new Date(),
       },
     });
+
+    await this.syncTextProgressForLemma(userId, lemmaId);
+    return result;
   }
 
   // Возвращает слова, запланированные к повторению сегодня
@@ -232,7 +238,7 @@ export class WordProgressService {
 
     if (status === "NEW") {
       // Сброс SM-2: слово возвращается в начало очереди
-      return this.prisma.userWordProgress.upsert({
+      const result = await this.prisma.userWordProgress.upsert({
         where: { userId_lemmaId: { userId, lemmaId } },
         update: {
           status: "NEW",
@@ -253,16 +259,21 @@ export class WordProgressService {
           lastSeen: now,
         },
       });
+      await this.syncTextProgressForLemma(userId, lemmaId);
+      return result;
     }
 
     if (status === "LEARNING") {
       const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      today.setUTCHours(0, 0, 0, 0);
       // Попадает в очередь повторения сегодня
-      return this.prisma.userWordProgress.upsert({
+      const result = await this.prisma.userWordProgress.upsert({
         where: { userId_lemmaId: { userId, lemmaId } },
         update: {
           status: "LEARNING",
+          repetitions: 0,
+          interval: 0,
+          easeFactor: EF_DEFAULT,
           nextReview: today,
           lastSeen: now,
         },
@@ -277,13 +288,15 @@ export class WordProgressService {
           lastSeen: now,
         },
       });
+      await this.syncTextProgressForLemma(userId, lemmaId);
+      return result;
     }
 
     // KNOWN: интервал 21 день, выбывает из очереди повторений
     const nextReview = new Date();
-    nextReview.setDate(nextReview.getDate() + KNOWN_INTERVAL);
+    nextReview.setUTCDate(nextReview.getUTCDate() + KNOWN_INTERVAL);
 
-    return this.prisma.userWordProgress.upsert({
+    const result = await this.prisma.userWordProgress.upsert({
       where: { userId_lemmaId: { userId, lemmaId } },
       update: {
         status: "KNOWN",
@@ -302,6 +315,8 @@ export class WordProgressService {
         lastSeen: now,
       },
     });
+    await this.syncTextProgressForLemma(userId, lemmaId);
+    return result;
   }
 
   // Возвращает все контексты для слова пользователя
@@ -317,5 +332,88 @@ export class WordProgressService {
         text: { select: { id: true, title: true, language: true } },
       },
     });
+  }
+
+  private async syncTextProgressForLemma(userId: string, lemmaId: string): Promise<void> {
+    const lemmaTokens = await this.prisma.tokenAnalysis.findMany({
+      where: { lemmaId, isPrimary: true },
+      select: { token: { select: { version: { select: { textId: true } } } } },
+    });
+    const touchedTextIds = [
+      ...new Set(
+        lemmaTokens
+          .map((row) => row.token.version.textId)
+          .filter((textId): textId is string => Boolean(textId)),
+      ),
+    ];
+    if (!touchedTextIds.length) return;
+
+    const trackedRows = await this.prisma.userTextProgress.findMany({
+      where: { userId, textId: { in: touchedTextIds } },
+      select: { textId: true },
+    });
+    if (!trackedRows.length) return;
+
+    const trackedTextIds = trackedRows.map((r) => r.textId);
+    const versions = await this.prisma.textProcessingVersion.findMany({
+      where: { textId: { in: trackedTextIds } },
+      orderBy: { version: "desc" },
+      select: { id: true, textId: true },
+    });
+    const latestVersionByTextId = new Map<string, string>();
+    for (const v of versions) {
+      if (!latestVersionByTextId.has(v.textId)) latestVersionByTextId.set(v.textId, v.id);
+    }
+
+    const versionIds = [...latestVersionByTextId.values()];
+    const analyses = versionIds.length
+      ? await this.prisma.tokenAnalysis.findMany({
+          where: {
+            isPrimary: true,
+            lemmaId: { not: null },
+            token: { versionId: { in: versionIds } },
+          },
+          select: { lemmaId: true, token: { select: { versionId: true } } },
+        })
+      : [];
+
+    const lemmaIdsByVersion = new Map<string, Set<string>>();
+    for (const row of analyses) {
+      if (!row.lemmaId) continue;
+      if (!lemmaIdsByVersion.has(row.token.versionId)) {
+        lemmaIdsByVersion.set(row.token.versionId, new Set());
+      }
+      lemmaIdsByVersion.get(row.token.versionId)!.add(row.lemmaId);
+    }
+
+    const allLemmaIds = [
+      ...new Set(
+        analyses
+          .map((row) => row.lemmaId)
+          .filter((id): id is string => id !== null),
+      ),
+    ];
+    const knownRows = allLemmaIds.length
+      ? await this.prisma.userWordProgress.findMany({
+          where: { userId, status: "KNOWN", lemmaId: { in: allLemmaIds } },
+          select: { lemmaId: true },
+        })
+      : [];
+    const knownLemmaIds = new Set(knownRows.map((row) => row.lemmaId));
+
+    await this.prisma.$transaction(
+      trackedTextIds.map((textId) => {
+        const versionId = latestVersionByTextId.get(textId);
+        const lemmaSet = versionId ? (lemmaIdsByVersion.get(versionId) ?? new Set<string>()) : new Set<string>();
+        const total = lemmaSet.size;
+        const known = [...lemmaSet].filter((id) => knownLemmaIds.has(id)).length;
+        const progressPercent = total === 0 ? 0 : (known / total) * 100;
+
+        return this.prisma.userTextProgress.update({
+          where: { userId_textId: { userId, textId } },
+          data: { progressPercent },
+        });
+      }),
+    );
   }
 }
