@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import axios from "axios";
 import { Language } from "@prisma/client";
 import { DikResponse, LookupResult } from "./online-dictionary.type";
@@ -15,6 +15,8 @@ const ONLINE_DICT_CONFIG: Partial<Record<Language, { url: string; lang: string }
 
 @Injectable()
 export class OnlineDictionaryService {
+  private readonly logger = new Logger(OnlineDictionaryService.name);
+
   // 🔥 in-memory cache: ключ = "${language}:${normalized}"
   private readonly cache = new Map<string, Promise<LookupResult>>();
 
@@ -81,7 +83,12 @@ export class OnlineDictionaryService {
       }
 
       return null;
-    } catch {
+    } catch (error) {
+      this.logger.warn(
+        `Online dictionary lookup failed for "${word}": ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
       return null;
     }
   }

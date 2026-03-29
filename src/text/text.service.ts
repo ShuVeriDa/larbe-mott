@@ -15,6 +15,8 @@ export interface GetTextsQuery {
   status?: TextProgressStatus;
   orderBy?: TextSortOrder;
   search?: string;
+  page?: number;
+  limit?: number;
 }
 
 const WORDS_PER_MINUTE = 200;
@@ -48,37 +50,60 @@ export class TextService {
    * Список опубликованных текстов с тегами, фильтрацией, сортировкой, прогрессом и счётчиками.
    */
   async getTexts(query: GetTextsQuery = {}, userId?: string) {
-    const { languages, levels, tagIds, status, orderBy = "newest", search } = query;
+    const {
+      languages,
+      levels,
+      tagIds,
+      status,
+      orderBy = "newest",
+      search,
+      page = 1,
+      limit = 20,
+    } = query;
+    const safeLimit = Math.min(50, Math.max(1, limit));
+    const safePage = Math.max(1, page);
+    const skip = (safePage - 1) * safeLimit;
+    const where = {
+      publishedAt: { not: null as null | Date },
+      ...(languages?.length ? { language: { in: languages } } : {}),
+      ...(levels?.length ? { level: { in: levels } } : {}),
+      ...(tagIds?.length
+        ? { tags: { some: { tagId: { in: tagIds } } } }
+        : {}),
+      ...(search
+        ? {
+            OR: [
+              { title: { contains: search, mode: "insensitive" as const } },
+              { author: { contains: search, mode: "insensitive" as const } },
+            ],
+          }
+        : {}),
+    };
 
-    const texts = await this.prisma.text.findMany({
-      where: {
-        publishedAt: { not: null },
-        ...(languages?.length ? { language: { in: languages } } : {}),
-        ...(levels?.length ? { level: { in: levels } } : {}),
-        ...(tagIds?.length
-          ? { tags: { some: { tagId: { in: tagIds } } } }
-          : {}),
-        ...(search
-          ? {
-              OR: [
-                { title: { contains: search, mode: "insensitive" } },
-                { author: { contains: search, mode: "insensitive" } },
-              ],
-            }
-          : {}),
-      },
-      include: {
-        tags: { include: { tag: { select: { id: true, name: true } } } },
-      },
-      orderBy: orderBy === "alpha"
-        ? { title: "asc" }
-        : orderBy === "oldest"
-        ? { createdAt: "asc" }
-        : { createdAt: "desc" },
-    });
+    const [texts, total] = await Promise.all([
+      this.prisma.text.findMany({
+        where,
+        include: {
+          tags: { include: { tag: { select: { id: true, name: true } } } },
+        },
+        skip,
+        take: safeLimit,
+        orderBy: orderBy === "alpha"
+          ? { title: "asc" }
+          : orderBy === "oldest"
+            ? { createdAt: "asc" }
+            : { createdAt: "desc" },
+      }),
+      this.prisma.text.count({ where }),
+    ]);
 
     if (!texts.length) {
-      return { items: [], counts: { total: 0, new: 0, inProgress: 0, completed: 0 } };
+      return {
+        items: [],
+        page: safePage,
+        limit: safeLimit,
+        counts: { total, new: 0, inProgress: 0, completed: 0 },
+      };
     }
 
     const ids = texts.map((t) => t.id);
@@ -170,7 +195,7 @@ export class TextService {
 
     // Счётчики по текущей выборке (до фильтра статуса, но с остальными фильтрами)
     const counts = {
-      total: items.length,
+      total,
       new: items.filter((i) => i.progressStatus === "NEW").length,
       inProgress: items.filter((i) => i.progressStatus === "IN_PROGRESS").length,
       completed: items.filter((i) => i.progressStatus === "COMPLETED").length,
@@ -179,7 +204,7 @@ export class TextService {
     // Убираем служебное поле tags из Prisma (TextTag[]), оставляем наш маппинг
     const result = items.map(({ tags, ...rest }) => ({ ...rest, tags }));
 
-    return { items: result, counts };
+    return { items: result, page: safePage, limit: safeLimit, counts };
   }
 
   /**

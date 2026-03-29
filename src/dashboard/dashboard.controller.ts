@@ -6,6 +6,7 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
+import { Auth } from "src/auth/decorators/auth.decorator";
 import { User } from "src/user/decorators/user.decorator";
 import { DashboardService } from "./dashboard.service";
 
@@ -16,6 +17,7 @@ import { DashboardService } from "./dashboard.service";
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
+  @Auth()
   @Get("me")
   @ApiOperation({
     summary: "Get dashboard data",

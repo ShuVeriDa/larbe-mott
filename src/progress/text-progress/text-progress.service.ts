@@ -6,25 +6,26 @@ export class TextProgressService {
   constructor(private prisma: PrismaService) {}
 
   async calculateProgress(userId: string, textId: string) {
-    const tokens = await this.prisma.textToken.findMany({
-      where: {
-        version: { textId },
-      },
-      select: {
-        analyses: {
-          select: {
-            lemmaId: true,
-          },
-        },
-      },
+    const latestVersion = await this.prisma.textProcessingVersion.findFirst({
+      where: { textId },
+      orderBy: { version: "desc" },
+      select: { id: true },
     });
+    if (!latestVersion) return 0;
 
-    const lemmaIds = new Set<string>();
-
-    for (const token of tokens) {
-      const lemma = token.analyses[0]?.lemmaId;
-      if (lemma) lemmaIds.add(lemma);
-    }
+    const primaryAnalyses = await this.prisma.tokenAnalysis.findMany({
+      where: {
+        isPrimary: true,
+        lemmaId: { not: null },
+        token: { versionId: latestVersion.id },
+      },
+      select: { lemmaId: true },
+    });
+    const lemmaIds = new Set(
+      primaryAnalyses
+        .map((analysis) => analysis.lemmaId)
+        .filter((lemmaId): lemmaId is string => lemmaId !== null),
+    );
 
     const total = lemmaIds.size;
 

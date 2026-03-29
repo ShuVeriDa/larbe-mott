@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { Language, MorphRuleType, Prisma } from "@prisma/client";
@@ -22,6 +23,8 @@ import { UpdateMorphologyRuleDto } from "./dto/update-morphology-rule.dto";
 
 @Injectable()
 export class AdminMorphologyService {
+  private readonly logger = new Logger(AdminMorphologyService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly morphology: MorphologyService,
@@ -401,7 +404,12 @@ export class AdminMorphologyService {
           });
           created++;
         }
-      } catch {
+      } catch (error) {
+        this.logger.warn(
+          `Failed to import morphology rule on row ${i + 1} (${suffix}): ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
         errors.push(`Row ${i + 1}: failed to save rule "${suffix}"`);
         skipped++;
       }

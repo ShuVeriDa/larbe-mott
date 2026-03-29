@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from "@nestjs/common";
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query } from "@nestjs/common";
 import {
   ApiBearerAuth,
   ApiOkResponse,
@@ -36,7 +36,7 @@ export class ProgressController {
   @ApiParam({ name: "id", description: "Text ID (UUID)" })
   @ApiOkResponse({ description: "Object with progress: number 0..100 (percentage)." })
   async getTextProgress(
-    @Param("id") textId: string,
+    @Param("id", ParseUUIDPipe) textId: string,
     @User("id") userId: string,
   ) {
     const progress = await this.textProgress.calculateProgress(userId, textId);
@@ -108,7 +108,7 @@ export class ProgressController {
   @ApiParam({ name: "lemmaId", description: "Lemma ID" })
   @ApiOkResponse({ description: "Updated word progress record." })
   async submitReview(
-    @Param("lemmaId") lemmaId: string,
+    @Param("lemmaId", ParseUUIDPipe) lemmaId: string,
     @User("id") userId: string,
     @Body() dto: SubmitReviewDto,
   ) {
@@ -135,7 +135,7 @@ export class ProgressController {
   @ApiParam({ name: "lemmaId", description: "Lemma ID" })
   @ApiOkResponse({ description: "Updated word progress record." })
   async setWordStatus(
-    @Param("lemmaId") lemmaId: string,
+    @Param("lemmaId", ParseUUIDPipe) lemmaId: string,
     @User("id") userId: string,
     @Body() dto: SetWordStatusDto,
   ) {
@@ -151,7 +151,7 @@ export class ProgressController {
   @ApiParam({ name: "lemmaId", description: "Lemma ID" })
   @ApiOkResponse({ description: "List of context entries with snippet and source text." })
   async getWordContexts(
-    @Param("lemmaId") lemmaId: string,
+    @Param("lemmaId", ParseUUIDPipe) lemmaId: string,
     @User("id") userId: string,
   ) {
     return this.wordProgress.getWordContexts(userId, lemmaId);

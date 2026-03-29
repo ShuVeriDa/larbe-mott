@@ -6,6 +6,7 @@ import {
   Get,
   HttpCode,
   Param,
+  ParseUUIDPipe,
   Patch,
 } from "@nestjs/common";
 import {
@@ -44,7 +45,7 @@ export class UserController {
   })
   @ApiOkResponse({ description: "Returns user profile data" })
   async getUserById(
-    @Param("id") userId: string,
+    @Param("id", ParseUUIDPipe) userId: string,
     @User("id") currentUserId: string,
   ) {
     const isAdmin = await this.permissionsService.hasPermission(

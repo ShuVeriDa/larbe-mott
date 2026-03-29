@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -41,7 +42,7 @@ export class FeedbackController {
   @ApiOperation({ summary: "Get thread with all messages" })
   getThread(
     @User("id") userId: string,
-    @Param("threadId") threadId: string,
+    @Param("threadId", ParseUUIDPipe) threadId: string,
   ) {
     return this.feedbackService.getThread(userId, threadId);
   }
@@ -51,7 +52,7 @@ export class FeedbackController {
   @ApiOperation({ summary: "Mark all admin messages in thread as read" })
   markAsRead(
     @User("id") userId: string,
-    @Param("threadId") threadId: string,
+    @Param("threadId", ParseUUIDPipe) threadId: string,
   ) {
     return this.feedbackService.markAsRead(userId, threadId);
   }
@@ -60,7 +61,7 @@ export class FeedbackController {
   @ApiOperation({ summary: "Add message to thread (mini-chat)" })
   addMessage(
     @User("id") userId: string,
-    @Param("threadId") threadId: string,
+    @Param("threadId", ParseUUIDPipe) threadId: string,
     @Body() dto: AddMessageDto,
   ) {
     return this.feedbackService.addMessage(userId, threadId, dto);
@@ -79,7 +80,7 @@ export class FeedbackController {
   @ApiOperation({ summary: "Delete reaction" })
   deleteReaction(
     @User("id") userId: string,
-    @Param("reactionId") reactionId: string,
+    @Param("reactionId", ParseUUIDPipe) reactionId: string,
   ) {
     return this.feedbackService.deleteReaction(userId, reactionId);
   }

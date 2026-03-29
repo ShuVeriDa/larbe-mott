@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   HttpCode,
+  ParseUUIDPipe,
   Param,
   Post,
   Req,
@@ -153,7 +154,7 @@ export class AuthController {
   @ApiOperation({ summary: "Revoke a specific session" })
   @ApiOkResponse({ description: "Session revoked successfully" })
   async revokeSession(
-    @Param("id") sessionId: string,
+    @Param("id", ParseUUIDPipe) sessionId: string,
     @User("id") userId: string,
   ) {
     return this.authService.revokeSession(sessionId, userId);

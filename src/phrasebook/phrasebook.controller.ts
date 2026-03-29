@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  ParseUUIDPipe,
   Post,
   Query,
 } from "@nestjs/common";
@@ -106,7 +107,7 @@ export class PhrasebookController {
   @ApiNotFoundResponse({ description: "Phrase not found" })
   async toggleSave(
     @User("id") userId: string,
-    @Param("phraseId") phraseId: string,
+    @Param("phraseId", ParseUUIDPipe) phraseId: string,
   ) {
     return this.phrasebookService.toggleSave(userId, phraseId);
   }

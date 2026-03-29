@@ -20,6 +20,10 @@ const REVIEW_SESSION = "REVIEW_SESSION" as UserEventType;
 export class StatisticsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private utcDateKey(date: Date): string {
+    return date.toISOString().slice(0, 10);
+  }
+
   // ─── Main entry point ────────────────────────────────────────────────────────
 
   async getUserStatistics(userId: string, period: StatPeriod) {
@@ -78,13 +82,13 @@ export class StatisticsService {
     const days = period === StatPeriod.WEEK ? 7 : period === StatPeriod.MONTH ? 30 : 365;
 
     const from = new Date(now);
-    from.setDate(from.getDate() - days);
-    from.setHours(0, 0, 0, 0);
+    from.setUTCDate(from.getUTCDate() - days);
+    from.setUTCHours(0, 0, 0, 0);
 
     const prevTo = new Date(from);
     const prevFrom = new Date(from);
-    prevFrom.setDate(prevFrom.getDate() - days);
-    prevFrom.setHours(0, 0, 0, 0);
+    prevFrom.setUTCDate(prevFrom.getUTCDate() - days);
+    prevFrom.setUTCHours(0, 0, 0, 0);
 
     return { from, to, prevFrom, prevTo };
   }
@@ -203,10 +207,10 @@ export class StatisticsService {
       orderBy: { createdAt: "desc" },
     });
 
-    const uniqueDays = [...new Set(events.map((e) => e.createdAt.toISOString().slice(0, 10)))].sort().reverse();
+    const uniqueDays = [...new Set(events.map((e) => this.utcDateKey(e.createdAt)))].sort().reverse();
 
-    const today = new Date().toISOString().slice(0, 10);
-    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    const today = this.utcDateKey(new Date());
+    const yesterday = this.utcDateKey(new Date(Date.now() - 86_400_000));
 
     // Current streak
     let current = 0;
@@ -217,7 +221,7 @@ export class StatisticsService {
           current++;
           const d = new Date(expected);
           d.setDate(d.getDate() - 1);
-          expected = d.toISOString().slice(0, 10);
+          expected = this.utcDateKey(d);
         } else break;
       }
     }
@@ -232,32 +236,32 @@ export class StatisticsService {
       } else {
         const prev = new Date(asc[i - 1]);
         prev.setDate(prev.getDate() + 1);
-        runLen = prev.toISOString().slice(0, 10) === asc[i] ? runLen + 1 : 1;
+        runLen = this.utcDateKey(prev) === asc[i] ? runLen + 1 : 1;
       }
       if (runLen > record) record = runLen;
     }
 
     // Current week (Mon–Sun)
     const now = new Date();
-    const dow = now.getDay();
+    const dow = now.getUTCDay();
     const monday = new Date(now);
-    monday.setDate(now.getDate() + (dow === 0 ? -6 : 1 - dow));
-    monday.setHours(0, 0, 0, 0);
+    monday.setUTCDate(now.getUTCDate() + (dow === 0 ? -6 : 1 - dow));
+    monday.setUTCHours(0, 0, 0, 0);
     const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    sunday.setHours(23, 59, 59, 999);
+    sunday.setUTCDate(monday.getUTCDate() + 6);
+    sunday.setUTCHours(23, 59, 59, 999);
 
     const weekEvents = await this.prisma.userEvent.findMany({
       where: { userId, createdAt: { gte: monday, lte: sunday } },
       select: { createdAt: true },
     });
-    const activeDays = new Set(weekEvents.map((e) => e.createdAt.toISOString().slice(0, 10)));
-    const todayStr = now.toISOString().slice(0, 10);
+    const activeDays = new Set(weekEvents.map((e) => this.utcDateKey(e.createdAt)));
+    const todayStr = this.utcDateKey(now);
 
     const weekDays = Array.from({ length: 7 }, (_, i) => {
       const d = new Date(monday);
-      d.setDate(monday.getDate() + i);
-      const dateStr = d.toISOString().slice(0, 10);
+      d.setUTCDate(monday.getUTCDate() + i);
+      const dateStr = this.utcDateKey(d);
       return { date: dateStr, label: WEEK_LABELS[i], active: activeDays.has(dateStr), isToday: dateStr === todayStr };
     });
 
@@ -270,8 +274,8 @@ export class StatisticsService {
 
   private async getYearHeatmap(userId: string) {
     const from = new Date();
-    from.setFullYear(from.getFullYear() - 1);
-    from.setHours(0, 0, 0, 0);
+    from.setUTCFullYear(from.getUTCFullYear() - 1);
+    from.setUTCHours(0, 0, 0, 0);
 
     const events = await this.prisma.userEvent.findMany({
       where: {
@@ -284,7 +288,7 @@ export class StatisticsService {
 
     const countByDay: Record<string, number> = {};
     for (const e of events) {
-      const day = e.createdAt.toISOString().slice(0, 10);
+      const day = this.utcDateKey(e.createdAt);
       countByDay[day] = (countByDay[day] ?? 0) + 1;
     }
 
@@ -358,8 +362,8 @@ export class StatisticsService {
     const count = Math.min(daysBack, 365);
     return Array.from({ length: count }, (_, i) => {
       const d = new Date();
-      d.setDate(d.getDate() - (count - 1 - i));
-      const day = d.toISOString().slice(0, 10);
+      d.setUTCDate(d.getUTCDate() - (count - 1 - i));
+      const day = this.utcDateKey(d);
       return { date: day, count: countByDay[day] ?? 0 };
     });
   }
@@ -489,7 +493,7 @@ export class StatisticsService {
     const addDayOrder: string[] = [];
     for (const e of events) {
       if (e.type !== UserEventType.ADD_TO_DICTIONARY) continue;
-      const day = e.createdAt.toISOString().slice(0, 10);
+      const day = this.utcDateKey(e.createdAt);
       if (!addByDay.has(day)) addDayOrder.push(day);
       addByDay.set(day, (addByDay.get(day) ?? 0) + 1);
     }
@@ -504,7 +508,7 @@ export class StatisticsService {
 
       if (e.type === UserEventType.OPEN_TEXT) {
         const textId = meta?.textId as string | undefined;
-        const day = e.createdAt.toISOString().slice(0, 10);
+        const day = this.utcDateKey(e.createdAt);
         const key = `${textId}:${day}`;
         if (seenOpenText.has(key)) continue;
         seenOpenText.add(key);
@@ -519,7 +523,7 @@ export class StatisticsService {
           icon: "text",
         });
       } else if (e.type === UserEventType.ADD_TO_DICTIONARY) {
-        const day = e.createdAt.toISOString().slice(0, 10);
+        const day = this.utcDateKey(e.createdAt);
         if (seenAddDay.has(day)) continue;
         seenAddDay.add(day);
 

@@ -20,7 +20,15 @@ export class DictionaryService {
   ) {}
 
   async getUserDictionaryEntries(userId: string, query: GetDictionaryEntriesDto = {}) {
-    const { status, cefrLevel, folderId, noFolder, sort = DictionarySort.ADDED } = query;
+    const {
+      status,
+      cefrLevel,
+      folderId,
+      noFolder,
+      sort = DictionarySort.ADDED,
+      page = 1,
+      limit = 20,
+    } = query;
 
     const where: Prisma.UserDictionaryEntryWhereInput = { userId };
     if (status) where.learningLevel = status;
@@ -32,51 +40,59 @@ export class DictionaryService {
     }
 
     const orderBy = this.buildOrderBy(sort);
+    const safeLimit = Math.min(50, Math.max(1, limit));
+    const safePage = Math.max(1, page);
+    const skip = (safePage - 1) * safeLimit;
 
-    const entries = await this.prismaService.userDictionaryEntry.findMany({
-      where,
-      orderBy,
-      include: {
-        folder: { select: { id: true, name: true } },
-        lemma: {
-          select: {
-            id: true,
-            baseForm: true,
-            partOfSpeech: true,
-            morphForms: { select: { form: true, grammarTag: true } },
-            headwords: {
-              select: {
-                entry: {
-                  select: {
-                    senses: {
-                      orderBy: { order: "asc" },
-                      take: 3,
-                      select: {
-                        definition: true,
-                        examples: {
-                          take: 2,
-                          select: { text: true, translation: true },
+    const [entries, total] = await Promise.all([
+      this.prismaService.userDictionaryEntry.findMany({
+        where,
+        orderBy,
+        skip,
+        take: safeLimit,
+        include: {
+          folder: { select: { id: true, name: true } },
+          lemma: {
+            select: {
+              id: true,
+              baseForm: true,
+              partOfSpeech: true,
+              morphForms: { select: { form: true, grammarTag: true } },
+              headwords: {
+                select: {
+                  entry: {
+                    select: {
+                      senses: {
+                        orderBy: { order: "asc" },
+                        take: 3,
+                        select: {
+                          definition: true,
+                          examples: {
+                            take: 2,
+                            select: { text: true, translation: true },
+                          },
                         },
                       },
                     },
                   },
                 },
               },
-            },
-            wordContexts: {
-              where: { userId },
-              take: 1,
-              orderBy: { seenAt: "desc" },
-              select: {
-                textId: true,
-                snippet: true,
-                text: { select: { title: true } },
+              wordContexts: {
+                where: { userId },
+                take: 1,
+                orderBy: { seenAt: "desc" },
+                select: {
+                  textId: true,
+                  snippet: true,
+                  text: { select: { title: true } },
+                },
               },
             },
           },
         },
-      },
-    });
+      }),
+      this.prismaService.userDictionaryEntry.count({ where }),
+    ]);
 
     // Attach nextReview from UserWordProgress for entries that have a lemmaId
     const lemmaIds = entries
@@ -118,7 +134,7 @@ export class DictionaryService {
       );
     }
 
-    return mapped;
+    return { items: mapped, total, page: safePage, limit: safeLimit };
   }
 
   private buildOrderBy(
@@ -293,7 +309,8 @@ export class DictionaryService {
       this.prismaService.userWordProgress.count({
         where: {
           userId,
-          nextReview: { lte: now },
+          status: { not: "KNOWN" },
+          OR: [{ nextReview: null }, { nextReview: { lte: now } }],
         },
       }),
     ]);
@@ -452,7 +469,8 @@ export class DictionaryService {
     const progresses = await this.prismaService.userWordProgress.findMany({
       where: {
         userId,
-        nextReview: { lte: now },
+        status: { not: "KNOWN" },
+        OR: [{ nextReview: null }, { nextReview: { lte: now } }],
       },
       orderBy: { nextReview: "asc" },
       select: {

@@ -6,6 +6,14 @@ import { PrismaService } from "src/prisma.service";
 export class AnalyticsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  private utcDateKey(date: Date): string {
+    return date.toISOString().slice(0, 10);
+  }
+
+  private nowUtc(): Date {
+    return new Date();
+  }
+
   async getUserAnalytics(userId: string) {
     const [wordStats, dueToday, textStats, streak, streakRecord, streakDays, activity] =
       await Promise.all([
@@ -44,8 +52,13 @@ export class AnalyticsService {
   }
 
   private async getDueTodayCount(userId: string): Promise<number> {
+    const now = this.nowUtc();
     return this.prisma.userWordProgress.count({
-      where: { userId, nextReview: { lte: new Date() } },
+      where: {
+        userId,
+        status: { not: WordStatus.KNOWN },
+        OR: [{ nextReview: null }, { nextReview: { lte: now } }],
+      },
     });
   }
 
@@ -80,13 +93,11 @@ export class AnalyticsService {
     if (!events.length) return 0;
 
     const uniqueDays = [
-      ...new Set(events.map((e) => e.createdAt.toISOString().slice(0, 10))),
+      ...new Set(events.map((e) => this.utcDateKey(e.createdAt))),
     ].sort().reverse();
 
-    const today = new Date().toISOString().slice(0, 10);
-    const yesterday = new Date(Date.now() - 86_400_000)
-      .toISOString()
-      .slice(0, 10);
+    const today = this.utcDateKey(this.nowUtc());
+    const yesterday = this.utcDateKey(new Date(Date.now() - 86_400_000));
 
     // Streak must be alive: last activity today or yesterday
     if (uniqueDays[0] !== today && uniqueDays[0] !== yesterday) return 0;
@@ -121,7 +132,7 @@ export class AnalyticsService {
     if (!events.length) return 0;
 
     const uniqueDays = [
-      ...new Set(events.map((e) => e.createdAt.toISOString().slice(0, 10))),
+      ...new Set(events.map((e) => this.utcDateKey(e.createdAt))),
     ].sort();
 
     let record = 1;
@@ -130,7 +141,7 @@ export class AnalyticsService {
     for (let i = 1; i < uniqueDays.length; i++) {
       const prev = new Date(uniqueDays[i - 1]);
       prev.setDate(prev.getDate() + 1);
-      const expectedNext = prev.toISOString().slice(0, 10);
+      const expectedNext = this.utcDateKey(prev);
 
       if (uniqueDays[i] === expectedNext) {
         current++;
@@ -151,16 +162,16 @@ export class AnalyticsService {
     userId: string,
   ): Promise<{ date: string; label: string; active: boolean; isToday: boolean }[]> {
     // Начало текущей недели (понедельник)
-    const now = new Date();
-    const dayOfWeek = now.getDay(); // 0=вс, 1=пн, ...
+    const now = this.nowUtc();
+    const dayOfWeek = now.getUTCDay(); // 0=вс, 1=пн, ...
     const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
     const monday = new Date(now);
-    monday.setDate(now.getDate() + mondayOffset);
-    monday.setHours(0, 0, 0, 0);
+    monday.setUTCDate(now.getUTCDate() + mondayOffset);
+    monday.setUTCHours(0, 0, 0, 0);
 
     const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    sunday.setHours(23, 59, 59, 999);
+    sunday.setUTCDate(monday.getUTCDate() + 6);
+    sunday.setUTCHours(23, 59, 59, 999);
 
     const events = await this.prisma.userEvent.findMany({
       where: { userId, createdAt: { gte: monday, lte: sunday } },
@@ -168,16 +179,16 @@ export class AnalyticsService {
     });
 
     const activeDays = new Set(
-      events.map((e) => e.createdAt.toISOString().slice(0, 10)),
+      events.map((e) => this.utcDateKey(e.createdAt)),
     );
 
-    const todayStr = now.toISOString().slice(0, 10);
+    const todayStr = this.utcDateKey(now);
     const LABELS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
 
     return Array.from({ length: 7 }, (_, i) => {
       const d = new Date(monday);
-      d.setDate(monday.getDate() + i);
-      const dateStr = d.toISOString().slice(0, 10);
+      d.setUTCDate(monday.getUTCDate() + i);
+      const dateStr = this.utcDateKey(d);
       return {
         date: dateStr,
         label: LABELS[i],
@@ -193,8 +204,8 @@ export class AnalyticsService {
     userId: string,
   ): Promise<{ date: string; count: number }[]> {
     const from = new Date();
-    from.setDate(from.getDate() - 29);
-    from.setHours(0, 0, 0, 0);
+    from.setUTCDate(from.getUTCDate() - 29);
+    from.setUTCHours(0, 0, 0, 0);
 
     const events = await this.prisma.userEvent.findMany({
       where: {
@@ -209,15 +220,15 @@ export class AnalyticsService {
 
     const counts: Record<string, number> = {};
     for (const e of events) {
-      const day = e.createdAt.toISOString().slice(0, 10);
+      const day = this.utcDateKey(e.createdAt);
       counts[day] = (counts[day] ?? 0) + 1;
     }
 
     const result: { date: string; count: number }[] = [];
     for (let i = 29; i >= 0; i--) {
       const d = new Date();
-      d.setDate(d.getDate() - i);
-      const day = d.toISOString().slice(0, 10);
+      d.setUTCDate(d.getUTCDate() - i);
+      const day = this.utcDateKey(d);
       result.push({ date: day, count: counts[day] ?? 0 });
     }
 

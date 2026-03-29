@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from "@nestjs/common";
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post } from "@nestjs/common";
 import {
   ApiBearerAuth,
   ApiBody,
@@ -52,7 +52,7 @@ export class WordsController {
   })
   @ApiParam({ name: "lemmaId", description: "Lemma ID" })
   @ApiOkResponse({ description: "Список сниппетов с указанием источника." })
-  async getExamples(@Param("lemmaId") lemmaId: string) {
+  async getExamples(@Param("lemmaId", ParseUUIDPipe) lemmaId: string) {
     return this.wordExamplesService.getExamples(lemmaId);
   }
 

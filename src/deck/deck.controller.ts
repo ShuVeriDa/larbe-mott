@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post } from "@nestjs/common";
 import {
   ApiBearerAuth,
   ApiOkResponse,
@@ -58,7 +58,7 @@ export class DeckController {
   @ApiParam({ name: "lemmaId", description: "Lemma ID" })
   @ApiOkResponse({ description: "Created or existing deck card." })
   async addWord(
-    @Param("lemmaId") lemmaId: string,
+    @Param("lemmaId", ParseUUIDPipe) lemmaId: string,
     @User("id") userId: string,
   ) {
     return this.deck.addWord(userId, lemmaId);
@@ -73,7 +73,7 @@ export class DeckController {
   @ApiParam({ name: "lemmaId", description: "Lemma ID" })
   @ApiOkResponse({ description: "Deletion result." })
   async removeWord(
-    @Param("lemmaId") lemmaId: string,
+    @Param("lemmaId", ParseUUIDPipe) lemmaId: string,
     @User("id") userId: string,
   ) {
     return this.deck.removeWord(userId, lemmaId);
@@ -91,7 +91,7 @@ export class DeckController {
   @ApiParam({ name: "lemmaId", description: "Lemma ID" })
   @ApiOkResponse({ description: "Updated deck card." })
   async rateCard(
-    @Param("lemmaId") lemmaId: string,
+    @Param("lemmaId", ParseUUIDPipe) lemmaId: string,
     @User("id") userId: string,
     @Body() dto: RateCardDto,
   ) {

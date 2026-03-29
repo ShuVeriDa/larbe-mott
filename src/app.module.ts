@@ -10,9 +10,11 @@ import { DashboardModule } from "./dashboard/dashboard.module";
 import { AuthModule } from "./auth/auth.module";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { LoggingInterceptor } from "./common/interceptors/logging.interceptor";
+import { ObservabilityModule } from "./common/observability/observability.module";
 import { DeckModule } from "./deck/deck.module";
 import { DictionaryModule } from "./dictionary/dictionary.module";
 import { FeedbackModule } from "./feedback/feedback.module";
+import { HealthModule } from "./health/health.module";
 import { PhrasebookModule } from "./phrasebook/phrasebook.module";
 import { SettingsModule } from "./settings/settings.module";
 import { StatisticsModule } from "./statistics/statistics.module";
@@ -26,10 +28,17 @@ import { TextModule } from "./text/text.module";
 import { TokenModule } from "./token/token.module";
 import { UserModule } from "./user/user.module";
 import { WordsModule } from "./words/words.module";
+import { envValidationSchema } from "./config/env.validation";
 
 @Module({
   imports: [
-    ConfigModule.forRoot(),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      validationSchema: envValidationSchema,
+      validationOptions: {
+        abortEarly: false,
+      },
+    }),
     WinstonModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -37,6 +46,7 @@ import { WordsModule } from "./words/words.module";
         createWinstonOptions(config.get("NODE_ENV")),
     }),
     RedisModule,
+    ObservabilityModule,
     ThrottlerModule.forRootAsync({
       imports: [RedisModule],
       inject: [RedisService],
@@ -62,6 +72,7 @@ import { WordsModule } from "./words/words.module";
     PhrasebookModule,
     SettingsModule,
     StatisticsModule,
+    HealthModule,
   ],
   controllers: [],
   providers: [

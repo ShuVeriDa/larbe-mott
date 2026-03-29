@@ -1,4 +1,4 @@
-import { Controller, Delete, Get, Param, Post, Query } from "@nestjs/common";
+import { Controller, Delete, Get, Param, ParseIntPipe, ParseUUIDPipe, Post, Query } from "@nestjs/common";
 import {
   ApiBearerAuth,
   ApiNotFoundResponse,
@@ -59,8 +59,10 @@ export class TextController {
     description: "Sort order. Default: newest. 'level' sorts A1→C2.",
   })
   @ApiQuery({ name: "search", required: false, description: "Search by title or author" })
+  @ApiQuery({ name: "page", required: false, description: "Page number (default 1)" })
+  @ApiQuery({ name: "limit", required: false, description: "Items per page (default 20, max 50)" })
   @ApiOkResponse({
-    description: "{ items: Text[], counts: { total, new, inProgress, completed } }",
+    description: "{ items: Text[], page, limit, counts: { total, new, inProgress, completed } }",
   })
   async getTexts(
     @Query("language") language?: Language | Language[],
@@ -69,15 +71,32 @@ export class TextController {
     @Query("status") status?: TextProgressStatus,
     @Query("orderBy") orderBy?: TextSortOrder,
     @Query("search") search?: string,
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
     @User("id") userId?: string,
   ) {
     const languages = language ? (Array.isArray(language) ? language : [language]) : [];
     const levels = level ? (Array.isArray(level) ? level : [level]) : [];
     const tagIds = tagId ? (Array.isArray(tagId) ? tagId : [tagId]) : [];
-    return this.textService.getTexts({ languages, levels, tagIds, status, orderBy, search }, userId);
+    const parsedPage = Number.parseInt(page ?? "", 10);
+    const parsedLimit = Number.parseInt(limit ?? "", 10);
+    return this.textService.getTexts(
+      {
+        languages,
+        levels,
+        tagIds,
+        status,
+        orderBy,
+        search,
+        page: Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1,
+        limit: Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : 20,
+      },
+      userId,
+    );
   }
 
   @Get("continue-reading")
+  @Auth()
   @ApiOperation({
     summary: "Continue reading list",
     description:
@@ -104,11 +123,22 @@ export class TextController {
   })
   @ApiNotFoundResponse({ description: "Text or page not found." })
   async getPage(
-    @Param("id") textId: string,
-    @Param("pageNumber") pageNumber: string,
+    @Param("id", ParseUUIDPipe) textId: string,
+    @Param("pageNumber", ParseIntPipe) pageNumber: number,
     @User("id") userId: string | undefined,
   ) {
-    return this.textService.getPage(textId, parseInt(pageNumber, 10), userId);
+    return this.textService.getPage(textId, pageNumber, userId);
+  }
+
+  @Get("bookmarks")
+  @Auth()
+  @ApiOperation({
+    summary: "My bookmarks",
+    description: "Returns texts bookmarked by the authenticated user, sorted by bookmark date.",
+  })
+  @ApiOkResponse({ description: "Array of bookmarked texts with progress info." })
+  async getBookmarks(@User("id") userId: string) {
+    return this.textService.getBookmarks(userId);
   }
 
   @Get(":id")
@@ -123,19 +153,11 @@ export class TextController {
   @ApiParam({ name: "id", description: "Unique text identifier (UUID)" })
   @ApiOkResponse({ description: "Text with metadata, pages and tags." })
   @ApiNotFoundResponse({ description: "Text with the given ID was not found." })
-  async getTextById(@Param("id") textId: string, @User("id") userId: string | undefined) {
+  async getTextById(
+    @Param("id", ParseUUIDPipe) textId: string,
+    @User("id") userId: string | undefined,
+  ) {
     return this.textService.getTextById(textId, userId);
-  }
-
-  @Get("bookmarks")
-  @Auth()
-  @ApiOperation({
-    summary: "My bookmarks",
-    description: "Returns texts bookmarked by the authenticated user, sorted by bookmark date.",
-  })
-  @ApiOkResponse({ description: "Array of bookmarked texts with progress info." })
-  async getBookmarks(@User("id") userId: string) {
-    return this.textService.getBookmarks(userId);
   }
 
   @Post(":id/bookmark")
@@ -146,7 +168,7 @@ export class TextController {
   })
   @ApiParam({ name: "id", description: "Text ID (UUID)" })
   @ApiOkResponse({ description: "{ bookmarked: true } or { bookmarked: false }" })
-  async toggleBookmark(@Param("id") textId: string, @User("id") userId: string) {
+  async toggleBookmark(@Param("id", ParseUUIDPipe) textId: string, @User("id") userId: string) {
     return this.textService.toggleBookmark(textId, userId);
   }
 
@@ -161,7 +183,10 @@ export class TextController {
   @ApiParam({ name: "id", description: "Text ID (UUID)" })
   @ApiOkResponse({ description: "Array of related texts with wordCount, readingTime, totalPages." })
   @ApiNotFoundResponse({ description: "Text with the given ID was not found." })
-  async getRelatedTexts(@Param("id") textId: string, @User("id") userId: string | undefined) {
+  async getRelatedTexts(
+    @Param("id", ParseUUIDPipe) textId: string,
+    @User("id") userId: string | undefined,
+  ) {
     return this.textService.getRelatedTexts(textId, userId);
   }
 }

@@ -479,9 +479,14 @@ export class AdminBillingService {
     ]);
 
     const totalCount = thisMonthPayments.length;
-    const revenueCents = thisMonthPayments
-      .filter((p) => p.status === PaymentStatus.SUCCEEDED)
-      .reduce((sum, p) => sum + p.amountCents - p.refundedCents, 0);
+    const succeededPayments = thisMonthPayments.filter(
+      (p) => p.status === PaymentStatus.SUCCEEDED,
+    );
+    const succeededCount = succeededPayments.length;
+    const revenueCents = succeededPayments.reduce(
+      (sum, p) => sum + p.amountCents - p.refundedCents,
+      0,
+    );
 
     const lastMonthRevenueCents = lastMonthRevenue._sum.amountCents ?? 0;
     const revenueGrowth =
@@ -491,7 +496,8 @@ export class AdminBillingService {
 
     const refundCount = refunds.length;
     const refundCents = refunds.reduce((sum, r) => sum + r.refundedCents, 0);
-    const avgTicketCents = totalCount > 0 ? Math.round(revenueCents / totalCount) : 0;
+    const avgTicketCents =
+      succeededCount > 0 ? Math.round(revenueCents / succeededCount) : 0;
 
     return {
       revenueCents,

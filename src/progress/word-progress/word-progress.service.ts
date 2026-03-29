@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "src/prisma.service";
 
 const EF_DEFAULT = 2.5;
@@ -7,6 +7,8 @@ const KNOWN_INTERVAL = 21; // дней до автоматического пе�
 
 @Injectable()
 export class WordProgressService {
+  private readonly logger = new Logger(WordProgressService.name);
+
   constructor(private prisma: PrismaService) {}
 
   // SM-2: возвращает новые значения после ответа качества quality (0-5)
@@ -200,8 +202,13 @@ export class WordProgressService {
           });
           snippet = neighbors.map((t) => t.original).join(" ").trim();
         }
-      } catch {
-        // контекст необязателен — игнорируем ошибки
+      } catch (error) {
+        // Контекст не критичен для бизнес-потока, но ошибка полезна для диагностики.
+        this.logger.debug(
+          `Failed to build context snippet for lemma ${lemmaId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
       }
     }
 
@@ -210,8 +217,12 @@ export class WordProgressService {
         data: [{ userId, lemmaId, textId, word, snippet }],
         skipDuplicates: true,
       });
-    } catch {
-      // игнорируем ошибки дедупликации
+    } catch (error) {
+      this.logger.warn(
+        `Failed to persist word context for lemma ${lemmaId}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
     }
   }
 

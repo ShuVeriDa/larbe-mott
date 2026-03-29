@@ -9,18 +9,23 @@ import {
 import type { LoggerService } from "@nestjs/common";
 import type { Request, Response } from "express";
 import { WINSTON_MODULE_NEST_PROVIDER } from "nest-winston";
+import type { CorrelationRequest } from "../middleware/correlation-id.middleware";
+import { ObservabilityService } from "../observability/observability.service";
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
   constructor(
     @Inject(WINSTON_MODULE_NEST_PROVIDER)
     private readonly logger: LoggerService,
+    private readonly observability: ObservabilityService,
   ) {}
 
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
-    const req = ctx.getRequest<Request>();
+    const req = ctx.getRequest<CorrelationRequest>();
     const res = ctx.getResponse<Response>();
+    const correlationId = req.correlationId ?? "unknown";
+    const start = req.requestStartMs ?? Date.now();
 
     const status =
       exception instanceof HttpException
@@ -34,22 +39,24 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     if (status >= 500) {
       this.logger.error(
-        `${req.method} ${req.url} ${status} — ${message}`,
+        `[${correlationId}] ${req.method} ${req.url} ${status} — ${message}`,
         exception instanceof Error ? exception.stack : undefined,
         "HTTP",
       );
     } else {
       this.logger.warn(
-        `${req.method} ${req.url} ${status} — ${message}`,
+        `[${correlationId}] ${req.method} ${req.url} ${status} — ${message}`,
         "HTTP",
       );
     }
+    this.observability.recordRequest(req.method, req.url, status, Date.now() - start);
 
     res.status(status).json({
       statusCode: status,
       message,
       timestamp: new Date().toISOString(),
       path: req.url,
+      correlationId,
     });
   }
 }

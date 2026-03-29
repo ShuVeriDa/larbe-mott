@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -94,7 +95,7 @@ export class DictionaryController {
   @ApiOkResponse({ description: "Dictionary folder" })
   @ApiNotFoundResponse({ description: "Dictionary folder not found" })
   async getDictionaryFolder(
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @User("id") userId: string,
   ) {
     return await this.foldersService.getUserDictionaryFolder(id, userId);
@@ -122,7 +123,7 @@ export class DictionaryController {
   @ApiOkResponse({ description: "Dictionary entry detail" })
   @ApiNotFoundResponse({ description: "Dictionary entry not found" })
   async getDictionaryEntry(
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @User("id") userId: string,
   ) {
     return await this.dictionaryService.getUserDictionaryEntryDetail(id, userId);
@@ -142,25 +143,6 @@ export class DictionaryController {
     return await this.dictionaryService.createUserDictionaryEntry(dto, userId);
   }
 
-  @Patch(":id")
-  @Auth()
-  @ApiOperation({
-    summary: "Update a dictionary entry",
-    description: "Update a dictionary entry for the authenticated user",
-  })
-  @ApiOkResponse({ description: "Dictionary entry updated" })
-  async updateDictionaryEntry(
-    @Param("id") id: string,
-    @Body() dto: UpdateDictionaryEntryDto,
-    @User("id") userId: string,
-  ) {
-    return await this.dictionaryService.updateUserDictionaryEntry(
-      dto,
-      id,
-      userId,
-    );
-  }
-
   @Patch("folders/:id")
   @RequiresPremium()
   @ApiOperation({
@@ -169,7 +151,7 @@ export class DictionaryController {
   })
   @ApiOkResponse({ description: "Dictionary folder updated" })
   async updateDictionaryFolder(
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @Body() dto: UpdateDictionaryFolderDto,
     @User("id") userId: string,
   ) {
@@ -194,18 +176,20 @@ export class DictionaryController {
     return await this.foldersService.createUserDictionaryFolder(dto, userId);
   }
 
-  @Delete(":id")
+  @Patch(":id")
   @Auth()
   @ApiOperation({
-    summary: "Delete a dictionary entry",
-    description: "Delete a dictionary entry for the authenticated user",
+    summary: "Update a dictionary entry",
+    description: "Update a dictionary entry for the authenticated user",
   })
-  @ApiOkResponse({ description: "Dictionary entry deleted" })
-  async deleteDictionaryEntry(
-    @Param("id") id: string,
+  @ApiOkResponse({ description: "Dictionary entry updated" })
+  async updateDictionaryEntry(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Body() dto: UpdateDictionaryEntryDto,
     @User("id") userId: string,
   ) {
-    return await this.dictionaryService.deleteUserDictionaryEntryById(
+    return await this.dictionaryService.updateUserDictionaryEntry(
+      dto,
       id,
       userId,
     );
@@ -219,9 +203,26 @@ export class DictionaryController {
   })
   @ApiOkResponse({ description: "Dictionary folder deleted" })
   async deleteDictionaryFolder(
-    @Param("id") id: string,
+    @Param("id", ParseUUIDPipe) id: string,
     @User("id") userId: string,
   ) {
     return await this.foldersService.deleteUserDictionaryFolderById(id, userId);
+  }
+
+  @Delete(":id")
+  @Auth()
+  @ApiOperation({
+    summary: "Delete a dictionary entry",
+    description: "Delete a dictionary entry for the authenticated user",
+  })
+  @ApiOkResponse({ description: "Dictionary entry deleted" })
+  async deleteDictionaryEntry(
+    @Param("id", ParseUUIDPipe) id: string,
+    @User("id") userId: string,
+  ) {
+    return await this.dictionaryService.deleteUserDictionaryEntryById(
+      id,
+      userId,
+    );
   }
 }
