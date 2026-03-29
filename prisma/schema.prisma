@@ -48,6 +48,34 @@ enum PermissionCode {
   CAN_MANAGE_FEEDBACK
 }
 
+enum FeatureFlagCategory {
+  FUNCTIONAL
+  EXPERIMENTS
+  TECHNICAL
+  MONETIZATION
+}
+
+enum FeatureFlagEnvironment {
+  PROD
+  STAGE
+  DEV
+}
+
+enum FeatureFlagHistoryEventType {
+  FLAG_CREATED
+  FLAG_UPDATED
+  FLAG_DELETED
+  GLOBAL_ENABLED
+  GLOBAL_DISABLED
+  ROLLOUT_CHANGED
+  ENVIRONMENTS_CHANGED
+  OVERRIDE_ADDED
+  OVERRIDE_UPDATED
+  OVERRIDE_REMOVED
+  FLAG_DUPLICATED
+  FLAGS_IMPORTED
+}
+
 //////////////////////////////////////////////////////
 // BILLING / MONETIZATION
 //////////////////////////////////////////////////////
@@ -262,6 +290,10 @@ model User {
   couponRedemptions CouponRedemption[]
   sessions UserSession[]
   featureFlags UserFeatureFlag[]
+  setFeatureFlagOverrides UserFeatureFlag[] @relation("UserFeatureFlagSetter")
+  createdFeatureFlags FeatureFlag[] @relation("FeatureFlagCreatedBy")
+  updatedFeatureFlags FeatureFlag[] @relation("FeatureFlagUpdatedBy")
+  featureFlagHistoryEvents FeatureFlagHistory[] @relation("FeatureFlagHistoryActor")
 
   feedbackThreads   FeedbackThread[]   @relation("UserFeedbackThreads")
   feedbackReactions FeedbackReaction[] @relation("UserFeedbackReactions")
@@ -287,13 +319,24 @@ model FeatureFlag {
   key         String   @unique
   description String?
   isEnabled   Boolean  @default(false)
+  category    FeatureFlagCategory @default(FUNCTIONAL)
+  environments FeatureFlagEnvironment[] @default([PROD, STAGE, DEV])
+  rolloutPercent Int @default(100)
+  createdById String?
+  updatedById String?
+  deletedAt   DateTime?
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  createdBy User? @relation("FeatureFlagCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy User? @relation("FeatureFlagUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   userOverrides UserFeatureFlag[]
+  historyEvents FeatureFlagHistory[]
 
   @@index([isEnabled])
+  @@index([category])
+  @@index([deletedAt])
   @@map("feature_flag")
 }
 
@@ -302,15 +345,41 @@ model UserFeatureFlag {
   userId        String
   featureFlagId String
   isEnabled     Boolean
+  reason        String?
+  setById       String?
 
   createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   featureFlag   FeatureFlag @relation(fields: [featureFlagId], references: [id], onDelete: Cascade)
+  setBy         User?       @relation("UserFeatureFlagSetter", fields: [setById], references: [id], onDelete: SetNull)
 
   @@unique([userId, featureFlagId])
   @@index([featureFlagId])
+  @@index([setById])
+  @@index([updatedAt])
   @@map("user_feature_flag")
+}
+
+model FeatureFlagHistory {
+  id        String                      @id @default(uuid())
+  flagId    String?
+  flagKey   String
+  eventType FeatureFlagHistoryEventType
+  details   Json?
+  actorId   String?
+  createdAt DateTime                    @default(now())
+
+  flag      FeatureFlag? @relation(fields: [flagId], references: [id], onDelete: SetNull)
+  actor     User?        @relation("FeatureFlagHistoryActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([flagId])
+  @@index([flagKey])
+  @@index([eventType])
+  @@index([actorId])
+  @@index([createdAt])
+  @@map("feature_flag_history")
 }
 
 model UserSession {

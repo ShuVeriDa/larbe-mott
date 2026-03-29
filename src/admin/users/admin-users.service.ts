@@ -760,9 +760,12 @@ export class AdminUsersService {
     if (!existing) throw new NotFoundException("User not found");
 
     const [allFlags, userOverrides] = await Promise.all([
-      this.prisma.featureFlag.findMany({ orderBy: { key: "asc" } }),
+      this.prisma.featureFlag.findMany({
+        where: { deletedAt: null },
+        orderBy: { key: "asc" },
+      }),
       this.prisma.userFeatureFlag.findMany({
-        where: { userId },
+        where: { userId, featureFlag: { deletedAt: null } },
         select: { featureFlagId: true, isEnabled: true },
       }),
     ]);
@@ -791,7 +794,7 @@ export class AdminUsersService {
     if (!user) throw new NotFoundException("User not found");
 
     const flag = await this.prisma.featureFlag.findUnique({ where: { id: flagId } });
-    if (!flag) throw new NotFoundException("Feature flag not found");
+    if (!flag || flag.deletedAt) throw new NotFoundException("Feature flag not found");
 
     await this.prisma.userFeatureFlag.upsert({
       where: { userId_featureFlagId: { userId, featureFlagId: flagId } },
