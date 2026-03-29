@@ -5,7 +5,10 @@ import { AdminPermission } from "src/auth/decorators/admin-permission.decorator"
 import { User } from "src/user/decorators/user.decorator";
 import { AdminFeedbackService } from "./admin-feedback.service";
 import { AdminReplyDto } from "./dto/admin-reply.dto";
+import { AssignFeedbackDto } from "./dto/assign-feedback.dto";
 import { FetchAdminFeedbackDto } from "./dto/fetch-admin-feedback.dto";
+import { TransferFeedbackDto } from "./dto/transfer-feedback.dto";
+import { UpdateFeedbackPriorityDto } from "./dto/update-priority.dto";
 import { UpdateFeedbackStatusDto } from "./dto/update-status.dto";
 
 @ApiTags("admin/feedback")
@@ -37,7 +40,7 @@ export class AdminFeedbackController {
 
   @Patch(":threadId/status")
   @AdminPermission(PermissionCode.CAN_MANAGE_FEEDBACK)
-  @ApiOperation({ summary: "Change thread status (new → in_progress → resolved)" })
+  @ApiOperation({ summary: "Change thread status" })
   updateStatus(
     @Param("threadId") threadId: string,
     @Body() dto: UpdateFeedbackStatusDto,
@@ -45,14 +48,55 @@ export class AdminFeedbackController {
     return this.adminFeedbackService.updateStatus(threadId, dto);
   }
 
+  @Patch(":threadId/priority")
+  @AdminPermission(PermissionCode.CAN_MANAGE_FEEDBACK)
+  @ApiOperation({ summary: "Change thread priority" })
+  updatePriority(
+    @Param("threadId") threadId: string,
+    @Body() dto: UpdateFeedbackPriorityDto,
+  ) {
+    return this.adminFeedbackService.updatePriority(threadId, dto);
+  }
+
+  @Patch(":threadId/assignee")
+  @AdminPermission(PermissionCode.CAN_MANAGE_FEEDBACK)
+  @ApiOperation({ summary: "Assign/unassign thread to admin" })
+  updateAssignee(
+    @User("id") adminId: string,
+    @Param("threadId") threadId: string,
+    @Body() dto: AssignFeedbackDto,
+  ) {
+    return this.adminFeedbackService.updateAssignee(adminId, threadId, dto);
+  }
+
+  @Patch(":threadId/read")
+  @AdminPermission(PermissionCode.CAN_MANAGE_FEEDBACK)
+  @ApiOperation({ summary: "Mark all user messages in thread as read by admin" })
+  markAsReadByAdmin(@Param("threadId") threadId: string) {
+    return this.adminFeedbackService.markAsReadByAdmin(threadId);
+  }
+
   @Post(":threadId/messages")
   @AdminPermission(PermissionCode.CAN_MANAGE_FEEDBACK)
-  @ApiOperation({ summary: "Reply to user (sets status to IN_PROGRESS)" })
+  @ApiOperation({
+    summary: "Reply to user or add internal note (reply sets status to ANSWERED)",
+  })
   reply(
     @User("id") adminId: string,
     @Param("threadId") threadId: string,
     @Body() dto: AdminReplyDto,
   ) {
     return this.adminFeedbackService.reply(adminId, threadId, dto);
+  }
+
+  @Post(":threadId/transfer")
+  @AdminPermission(PermissionCode.CAN_MANAGE_FEEDBACK)
+  @ApiOperation({ summary: "Transfer thread to another admin" })
+  transfer(
+    @User("id") adminId: string,
+    @Param("threadId") threadId: string,
+    @Body() dto: TransferFeedbackDto,
+  ) {
+    return this.adminFeedbackService.transfer(adminId, threadId, dto);
   }
 }

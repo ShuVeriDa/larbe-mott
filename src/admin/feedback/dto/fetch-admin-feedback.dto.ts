@@ -1,7 +1,17 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from "class-validator";
-import { FeedbackStatus, FeedbackType } from "@prisma/client";
+import {
+  FeedbackPriority,
+  FeedbackStatus,
+  FeedbackType,
+} from "@prisma/client";
+
+export enum AdminFeedbackTab {
+  OPEN = "OPEN",
+  ALL = "ALL",
+  CLOSED = "CLOSED",
+}
 
 export class FetchAdminFeedbackDto {
   @ApiPropertyOptional({ enum: FeedbackType })
@@ -14,10 +24,32 @@ export class FetchAdminFeedbackDto {
   @IsEnum(FeedbackStatus)
   status?: FeedbackStatus;
 
+  @ApiPropertyOptional({ enum: FeedbackPriority })
+  @IsOptional()
+  @IsEnum(FeedbackPriority)
+  priority?: FeedbackPriority;
+
   @ApiPropertyOptional({ description: "Filter by userId" })
   @IsOptional()
   @IsString()
   userId?: string;
+
+  @ApiPropertyOptional({ description: "Filter by assignee admin id" })
+  @IsOptional()
+  @IsString()
+  assigneeAdminId?: string;
+
+  @ApiPropertyOptional({ enum: AdminFeedbackTab, default: AdminFeedbackTab.ALL })
+  @IsOptional()
+  @IsEnum(AdminFeedbackTab)
+  tab?: AdminFeedbackTab = AdminFeedbackTab.ALL;
+
+  @ApiPropertyOptional({
+    description: "Search in ticket number, title, user fields and messages",
+  })
+  @IsOptional()
+  @IsString()
+  search?: string;
 
   @ApiPropertyOptional({ default: 1 })
   @IsOptional()

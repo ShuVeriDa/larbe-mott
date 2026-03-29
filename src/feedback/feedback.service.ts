@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { FeedbackAuthorType } from "@prisma/client";
+import { FeedbackAuthorType, FeedbackStatus } from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
 import { AddMessageDto } from "./dto/add-message.dto";
 import { CreateFeedbackDto } from "./dto/create-feedback.dto";
@@ -146,13 +146,31 @@ export class FeedbackService {
     });
     if (!thread) throw new NotFoundException("Thread not found");
 
-    return this.prisma.feedbackMessage.create({
-      data: {
-        threadId,
-        authorType: FeedbackAuthorType.USER,
-        authorId: userId,
-        body: dto.body,
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const message = await tx.feedbackMessage.create({
+        data: {
+          threadId,
+          authorType: FeedbackAuthorType.USER,
+          authorId: userId,
+          body: dto.body,
+          isReadByAdmin: false,
+        },
+      });
+
+      if (
+        thread.status === FeedbackStatus.ANSWERED ||
+        thread.status === FeedbackStatus.RESOLVED
+      ) {
+        await tx.feedbackThread.update({
+          where: { id: threadId },
+          data: {
+            status: FeedbackStatus.NEW,
+            closedAt: null,
+          },
+        });
+      }
+
+      return message;
     });
   }
 

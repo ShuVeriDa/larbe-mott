@@ -296,6 +296,8 @@ model User {
   featureFlagHistoryEvents FeatureFlagHistory[] @relation("FeatureFlagHistoryActor")
 
   feedbackThreads   FeedbackThread[]   @relation("UserFeedbackThreads")
+  assignedFeedbackThreads FeedbackThread[] @relation("FeedbackThreadAssignee")
+  delegatedFeedbackThreads FeedbackThread[] @relation("FeedbackThreadAssignedBy")
   feedbackReactions FeedbackReaction[] @relation("UserFeedbackReactions")
 
   bookmarks         UserTextBookmark[]
@@ -1359,6 +1361,13 @@ enum FeedbackStatus {
   RESOLVED
 }
 
+enum FeedbackPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
 enum FeedbackContextType {
   WORD
   SENTENCE
@@ -1376,12 +1385,23 @@ enum FeedbackAuthorType {
   ADMIN
 }
 
+enum FeedbackMessageType {
+  PUBLIC_REPLY
+  INTERNAL_NOTE
+}
+
 model FeedbackThread {
-  id     String         @id @default(uuid())
-  userId String
-  type   FeedbackType
-  status FeedbackStatus @default(NEW)
-  title  String?
+  id           String           @id @default(uuid())
+  ticketNumber Int              @unique @default(autoincrement())
+  userId       String
+  type         FeedbackType
+  status       FeedbackStatus   @default(NEW)
+  priority     FeedbackPriority @default(MEDIUM)
+  title        String?
+
+  assigneeAdminId   String?
+  assignedByAdminId String?
+  assignedAt        DateTime?
 
   // Context snapshot — what the user was looking at
   contextType     FeedbackContextType?
@@ -1394,32 +1414,42 @@ model FeedbackThread {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  closedAt  DateTime?
 
-  user     User   @relation("UserFeedbackThreads", fields: [userId], references: [id], onDelete: Cascade)
-  lemma    Lemma? @relation("LemmaFeedbackThreads", fields: [contextLemmaId], references: [id], onDelete: SetNull)
-  text     Text?  @relation("TextFeedbackThreads", fields: [contextTextId], references: [id], onDelete: SetNull)
+  user             User   @relation("UserFeedbackThreads", fields: [userId], references: [id], onDelete: Cascade)
+  assigneeAdmin    User?  @relation("FeedbackThreadAssignee", fields: [assigneeAdminId], references: [id], onDelete: SetNull)
+  assignedByAdmin  User?  @relation("FeedbackThreadAssignedBy", fields: [assignedByAdminId], references: [id], onDelete: SetNull)
+  lemma            Lemma? @relation("LemmaFeedbackThreads", fields: [contextLemmaId], references: [id], onDelete: SetNull)
+  text             Text?  @relation("TextFeedbackThreads", fields: [contextTextId], references: [id], onDelete: SetNull)
   messages FeedbackMessage[]
 
   @@index([userId])
   @@index([status])
   @@index([type])
+  @@index([priority])
+  @@index([assigneeAdminId])
   @@index([createdAt])
+  @@index([updatedAt])
   @@map("feedback_thread")
 }
 
 model FeedbackMessage {
-  id         String             @id @default(uuid())
-  threadId   String
-  authorType FeedbackAuthorType
-  authorId   String
-  body       String             @db.Text
-  isReadByUser Boolean          @default(false)
+  id            String              @id @default(uuid())
+  threadId      String
+  authorType    FeedbackAuthorType
+  messageType   FeedbackMessageType @default(PUBLIC_REPLY)
+  authorId      String
+  body          String              @db.Text
+  isReadByUser  Boolean             @default(false)
+  isReadByAdmin Boolean             @default(false)
 
   createdAt DateTime @default(now())
 
   thread FeedbackThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
 
   @@index([threadId])
+  @@index([threadId, isReadByAdmin])
+  @@index([threadId, isReadByUser])
   @@map("feedback_message")
 }
 
