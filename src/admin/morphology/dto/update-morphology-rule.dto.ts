@@ -8,6 +8,26 @@ export class UpdateMorphologyRuleDto {
   @IsString()
   suffix?: string;
 
+  @ApiPropertyOptional({ description: "String to append to the stem to reconstruct the lemma" })
+  @IsOptional()
+  @IsString()
+  add?: string;
+
+  @ApiPropertyOptional({ description: "Part of speech: NOUN, VERB, ADJ, ADV, PRON" })
+  @IsOptional()
+  @IsString()
+  pos?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isRegex?: boolean;
+
   @ApiPropertyOptional({ enum: MorphRuleType })
   @IsOptional()
   @IsEnum(MorphRuleType)

@@ -3,11 +3,31 @@ import { Language, MorphRuleType } from "@prisma/client";
 import { IsBoolean, IsEnum, IsInt, IsOptional, IsString } from "class-validator";
 
 export class CreateMorphologyRuleDto {
-  @ApiProperty({ description: "Suffix to strip (e.g. \"ан\", \"аш\")" })
+  @ApiProperty({ description: "Suffix/pattern to match (e.g. \"нас\", \"^[а-яА-Я]+ну$\")" })
   @IsString()
   suffix: string;
 
-  @ApiProperty({ enum: MorphRuleType, description: "Rule type: NOUN_CASE | PLURAL | VERB_PAST" })
+  @ApiPropertyOptional({ description: "String to append to the stem to reconstruct the lemma (empty = stem as-is)" })
+  @IsOptional()
+  @IsString()
+  add?: string;
+
+  @ApiPropertyOptional({ description: "Part of speech: NOUN, VERB, ADJ, ADV, PRON" })
+  @IsOptional()
+  @IsString()
+  pos?: string;
+
+  @ApiPropertyOptional({ description: "Human-readable description" })
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @ApiPropertyOptional({ description: "Whether suffix is a regex pattern", default: false })
+  @IsOptional()
+  @IsBoolean()
+  isRegex?: boolean;
+
+  @ApiProperty({ enum: MorphRuleType, description: "Rule type: NOUN_CASE | PLURAL | VERB_PAST | SUFFIX | ENDING | PREFIX | REGEX" })
   @IsEnum(MorphRuleType)
   type: MorphRuleType;
 

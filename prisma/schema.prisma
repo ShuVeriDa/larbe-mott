@@ -148,6 +148,10 @@ enum MorphRuleType {
   NOUN_CASE
   PLURAL
   VERB_PAST
+  SUFFIX
+  ENDING
+  PREFIX
+  REGEX
 }
 
 enum UserStatus {
@@ -628,19 +632,26 @@ model Lemma {
 //////////////////////////////////////////////////////
 
 model MorphologyRule {
-  id        String       @id @default(uuid())
+  id          String        @id @default(uuid())
 
-  suffix    String
-  type      MorphRuleType
-  language  Language     @default(CHE)
-  priority  Int          @default(0)
-  isActive  Boolean      @default(true)
+  suffix      String
+  add         String?
+  pos         String?
+  description String?
+  isRegex     Boolean       @default(false)
+  matchCount  Int           @default(0)
 
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
+  type        MorphRuleType
+  language    Language      @default(CHE)
+  priority    Int           @default(0)
+  isActive    Boolean       @default(true)
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
 
   @@unique([suffix, type, language])
   @@index([type, isActive, language])
+  @@index([isActive, language])
   @@map("morphology_rule")
 }
 

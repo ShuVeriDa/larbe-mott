@@ -43,7 +43,13 @@ export class MorphologyRuleEngine implements OnModuleInit {
     for (const lang of Object.values(Language)) {
       const langRules = rules.filter((r) => r.language === lang);
       const fromDb: RuleSet = {
-        nounCases: langRules.filter((r) => r.type === MorphRuleType.NOUN_CASE).map((r) => r.suffix),
+        nounCases: langRules
+          .filter((r) =>
+            r.type === MorphRuleType.NOUN_CASE ||
+            r.type === MorphRuleType.SUFFIX ||
+            r.type === MorphRuleType.ENDING,
+          )
+          .map((r) => r.suffix),
         pluralSuffix: langRules.filter((r) => r.type === MorphRuleType.PLURAL).map((r) => r.suffix),
         verbPast: langRules.filter((r) => r.type === MorphRuleType.VERB_PAST).map((r) => r.suffix),
       };
