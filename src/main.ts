@@ -16,7 +16,9 @@ import { correlationIdMiddleware } from "./common/middleware/correlation-id.midd
 async function bootstrap() {
   dotenv.config();
 
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, { logger: false });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    logger: false,
+  });
 
   // Ensure uploads directory exists and serve static files
   const uploadsDir = join(process.cwd(), "uploads");
@@ -36,11 +38,12 @@ async function bootstrap() {
   app.use(helmet());
   app.use(correlationIdMiddleware);
   app.setGlobalPrefix("api");
-  app.enableVersioning({
-    type: VersioningType.HEADER,
-    header: "x-api-version",
-    defaultVersion: "1",
-  });
+  // TEMP: disable API versioning for all routes.
+  // app.enableVersioning({
+  //   type: VersioningType.HEADER,
+  //   header: "x-api-version",
+  //   defaultVersion: "1",
+  // });
   app.use(cookieParser());
   app.enableCors({
     origin: [frontendUrl],
@@ -122,9 +125,6 @@ async function bootstrap() {
   await app.listen(port);
 
   const logger = app.get(WINSTON_MODULE_NEST_PROVIDER);
-  logger.log(
-    `Application is running on http://localhost:${port}`,
-    "Bootstrap",
-  );
+  logger.log(`Application is running on http://localhost:${port}`, "Bootstrap");
 }
 bootstrap();

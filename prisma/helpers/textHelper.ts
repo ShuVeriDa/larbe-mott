@@ -56,5 +56,5 @@ export const createText = async () => {
 
   await processText(text.id);
 
-  return text;
+  console.log(`✅  Text created: ${text.id}`);
 };

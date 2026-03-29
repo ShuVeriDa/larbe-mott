@@ -411,7 +411,14 @@
         ],
         "responses": {
           "200": {
-            "description": "{ items: Text[], page, limit, counts: { total, new, inProgress, completed } }"
+            "description": "{ items: Text[], page, limit, counts: { total, new, inProgress, completed } }",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetTextsResponseDto"
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing or invalid bearer token"
@@ -904,6 +911,33 @@
         ]
       }
     },
+    "/api/analytics/me": {
+      "get": {
+        "description": "Returns word stats, streak, due-today count, text progress, and a 30-day activity chart. Requires Premium subscription.",
+        "operationId": "AnalyticsController_getMyAnalytics",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "words (total/new/learning/known), dueToday, texts (opened/avgProgress), streak (days), activity (date + count per day)"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "SUBSCRIPTION_REQUIRED — no Premium subscription, or SUBSCRIPTION_EXPIRED — subscription lapsed"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get personal learning analytics",
+        "tags": [
+          "analytics"
+        ]
+      }
+    },
     "/api/words/lookup": {
       "post": {
         "description": "По клику в тексте: фронт передаёт tokenId. Возвращает translation, grammar, baseForm из кэша/БД.",
@@ -1001,6 +1035,40 @@
           }
         ],
         "summary": "Получить перевод по строке слова (цепочка на запросе)",
+        "tags": [
+          "words"
+        ]
+      }
+    },
+    "/api/words/parts-of-speech/analyze": {
+      "post": {
+        "description": "Возвращает для каждого токена основную часть речи и альтернативные кандидаты. Использует словарь лемм/форм и эвристики по чеченской грамматике.",
+        "operationId": "WordsController_analyzePartsOfSpeech",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnalyzePosDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "text, totalTokens, analyzedWords, tokens[] with POS candidates"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Определить части речи (Къамелан дакъош) в тексте",
         "tags": [
           "words"
         ]
@@ -11135,7 +11203,7 @@
         },
         "responses": {
           "200": {
-            "description": "New subscription with plan info"
+            "description": "New subscription with plan info. Includes couponApplied when a redeemed promo was used."
           },
           "401": {
             "description": "Missing or invalid bearer token"
@@ -11197,7 +11265,7 @@
         },
         "responses": {
           "200": {
-            "description": "Coupon redeemed, returns discount type and amount"
+            "description": "Coupon redeemed. Returns discount details and indicates it will be applied to the next subscription payment."
           },
           "400": {
             "description": "Promo code expired or limit reached"
@@ -11220,33 +11288,6 @@
         "summary": "Redeem a promo code",
         "tags": [
           "subscription"
-        ]
-      }
-    },
-    "/api/analytics/me": {
-      "get": {
-        "description": "Returns word stats, streak, due-today count, text progress, and a 30-day activity chart. Requires Premium subscription.",
-        "operationId": "AnalyticsController_getMyAnalytics",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "words (total/new/learning/known), dueToday, texts (opened/avgProgress), streak (days), activity (date + count per day)"
-          },
-          "401": {
-            "description": "Missing or invalid bearer token"
-          },
-          "403": {
-            "description": "SUBSCRIPTION_REQUIRED — no Premium subscription, or SUBSCRIPTION_EXPIRED — subscription lapsed"
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Get personal learning analytics",
-        "tags": [
-          "analytics"
         ]
       }
     },
@@ -12468,7 +12509,8 @@
         "type": "object",
         "properties": {
           "username": {
-            "type": "string"
+            "type": "string",
+            "description": "Username or email"
           },
           "password": {
             "type": "string"
@@ -12504,6 +12546,159 @@
           "name",
           "surname",
           "phone"
+        ]
+      },
+      "TextTagDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ]
+      },
+      "TextListItemDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "object",
+            "nullable": true
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "CHE",
+              "RU",
+              "AR",
+              "EN"
+            ]
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "A1",
+              "A2",
+              "B1",
+              "B2",
+              "C1",
+              "C2"
+            ],
+            "nullable": true
+          },
+          "author": {
+            "type": "object",
+            "nullable": true
+          },
+          "imageUrl": {
+            "type": "object",
+            "nullable": true
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TextTagDto"
+            }
+          },
+          "wordCount": {
+            "type": "number"
+          },
+          "readingTime": {
+            "type": "number"
+          },
+          "progressPercent": {
+            "type": "number"
+          },
+          "progressStatus": {
+            "type": "string",
+            "enum": [
+              "NEW",
+              "IN_PROGRESS",
+              "COMPLETED"
+            ]
+          },
+          "lastOpened": {
+            "type": "object",
+            "nullable": true
+          },
+          "isNew": {
+            "type": "boolean"
+          },
+          "isFavorite": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "language",
+          "tags",
+          "wordCount",
+          "readingTime",
+          "progressPercent",
+          "progressStatus",
+          "isNew",
+          "isFavorite"
+        ]
+      },
+      "TextsListCountsDto": {
+        "type": "object",
+        "properties": {
+          "total": {
+            "type": "number"
+          },
+          "new": {
+            "type": "number"
+          },
+          "inProgress": {
+            "type": "number"
+          },
+          "completed": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "total",
+          "new",
+          "inProgress",
+          "completed"
+        ]
+      },
+      "GetTextsResponseDto": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TextListItemDto"
+            }
+          },
+          "page": {
+            "type": "number"
+          },
+          "limit": {
+            "type": "number"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/TextsListCountsDto"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "limit",
+          "counts"
         ]
       },
       "SubmitReviewDto": {
@@ -12555,6 +12750,19 @@
       "WordLookupByWordDto": {
         "type": "object",
         "properties": {}
+      },
+      "AnalyzePosDto": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Chechen text to analyze",
+            "example": "Со тахана дешар доьшу."
+          }
+        },
+        "required": [
+          "text"
+        ]
       },
       "CreateDictionaryEntryDto": {
         "type": "object",

@@ -1,4 +1,15 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  VERSION_NEUTRAL,
+  Version,
+} from "@nestjs/common";
 import {
   ApiBearerAuth,
   ApiBody,
@@ -11,10 +22,13 @@ import {
 import { Auth } from "src/auth/decorators/auth.decorator";
 import { OptionalAuth } from "src/auth/decorators/optional-auth.decorator";
 import { User } from "src/user/decorators/user.decorator";
+import { AnalyzePosDto } from "./dto/analyze-pos.dto";
 import { WordLookupByWordDto } from "./dto/lookup-by-word.dto";
 import { WordLookupDto } from "./dto/lookup.dto";
 import { WordExamplesService } from "./word-examples.service";
 import { WordLookupByWordService } from "./word-lookup-by-word.service";
+import type { AnalyzePosResult } from "./word-pos.service";
+import { WordPosService } from "./word-pos.service";
 import { WordsService } from "./words.service";
 
 @ApiTags("words")
@@ -26,6 +40,7 @@ export class WordsController {
     private readonly wordsService: WordsService,
     private readonly wordLookupByWordService: WordLookupByWordService,
     private readonly wordExamplesService: WordExamplesService,
+    private readonly wordPosService: WordPosService,
   ) {}
 
   @Post("lookup")
@@ -37,9 +52,13 @@ export class WordsController {
   })
   @ApiBody({ type: WordLookupDto })
   @ApiOkResponse({
-    description: "lemmaId, translation, tranAlt, grammar, baseForm, forms[], tags[], examples[], userStatus, inDictionary, dictionaryEntryId",
+    description:
+      "lemmaId, translation, tranAlt, grammar, baseForm, forms[], tags[], examples[], userStatus, inDictionary, dictionaryEntryId",
   })
-  async lookup(@Body() dto: WordLookupDto, @User("id") userId: string | undefined) {
+  async lookup(
+    @Body() dto: WordLookupDto,
+    @User("id") userId: string | undefined,
+  ) {
     return this.wordsService.lookup(dto.tokenId, userId);
   }
 
@@ -72,5 +91,26 @@ export class WordsController {
     @User("id") userId: string,
   ) {
     return this.wordLookupByWordService.lookup(dto.normalized, userId);
+  }
+
+  @Post("parts-of-speech/analyze")
+  @HttpCode(HttpStatus.OK)
+  @Version(VERSION_NEUTRAL)
+  @OptionalAuth()
+  @ApiOperation({
+    summary: "Определить части речи (Къамелан дакъош) в тексте",
+    description:
+      "Возвращает для каждого токена основную часть речи и альтернативные кандидаты. " +
+      "Использует словарь лемм/форм и эвристики по чеченской грамматике.",
+  })
+  @ApiBody({ type: AnalyzePosDto })
+  @ApiOkResponse({
+    description:
+      "text, totalTokens, analyzedWords, tokens[] with POS candidates",
+  })
+  async analyzePartsOfSpeech(
+    @Body() dto: AnalyzePosDto,
+  ): Promise<AnalyzePosResult> {
+    return this.wordPosService.analyzeText(dto.text);
   }
 }
