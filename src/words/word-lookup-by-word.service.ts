@@ -16,6 +16,11 @@ export type WordLookupResult = {
   baseForm: string | null;
 };
 
+type LookupContext = {
+  tokenId?: string;
+  textId?: string;
+};
+
 /**
  * Цепочка поиска по строке слова в момент запроса (ЭТАП 15, сценарий B).
  * Порядок: админский словарь → кэш → онлайн → морфология.
@@ -34,6 +39,7 @@ export class WordLookupByWordService {
   async lookup(
     normalizedOrRaw: string,
     userId?: string,
+    context?: LookupContext,
   ): Promise<WordLookupResult> {
     const normalized = normalizeToken(normalizedOrRaw);
     const language = await this.resolveUserLanguage(userId);
@@ -65,6 +71,8 @@ export class WordLookupByWordService {
             type: UserEventType.FAIL_LOOKUP,
             metadata: {
               normalized,
+              ...(context?.tokenId ? { tokenId: context.tokenId } : {}),
+              ...(context?.textId ? { textId: context.textId } : {}),
             },
           },
         })

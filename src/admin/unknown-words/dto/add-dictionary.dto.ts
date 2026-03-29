@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { Language } from "@prisma/client";
-import { IsArray, IsOptional, IsString, Matches } from "class-validator";
+import { Language, Level } from "@prisma/client";
+import { IsArray, IsEnum, IsOptional, IsString, Matches } from "class-validator";
 
 export class AddToDictionaryDto {
   @ApiProperty({
@@ -15,9 +15,18 @@ export class AddToDictionaryDto {
   )
   language: Language;
 
-  @ApiProperty({ description: "Translation text", example: "car" })
+  @ApiProperty({ description: "Translation text", example: "книга" })
   @IsString()
   translation: string;
+
+  @ApiPropertyOptional({
+    description:
+      "Headword (lemma form). If omitted, the unknown word's surface form is used.",
+    example: "дош",
+  })
+  @IsOptional()
+  @IsString()
+  headword?: string;
 
   @ApiPropertyOptional({
     description: "Part of speech",
@@ -26,6 +35,14 @@ export class AddToDictionaryDto {
   @IsOptional()
   @IsString()
   partOfSpeech?: string;
+
+  @ApiPropertyOptional({
+    description: "CEFR level",
+    enum: Level,
+  })
+  @IsOptional()
+  @IsEnum(Level)
+  level?: Level;
 
   @ApiPropertyOptional({ description: "Notes" })
   @IsOptional()

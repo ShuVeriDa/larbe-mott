@@ -325,6 +325,7 @@ export class DictionaryService {
     let resolvedWord = word;
     let resolvedTranslation = translation;
     let lemmaId: string | null = null;
+    let textId: string | null = null;
 
     if (tokenId) {
       const tokenInfo = await this.tokenService.getTokenInfo(tokenId, userId);
@@ -332,6 +333,7 @@ export class DictionaryService {
       resolvedTranslation =
         tokenInfo.translation ?? resolvedTranslation ?? "";
       lemmaId = tokenInfo.lemmaId ?? null;
+      textId = tokenInfo.textId ?? null;
       if (!resolvedWord || !resolvedTranslation) {
         throw new BadRequestException(
           "Token has no word or translation; provide word and translation in body",
@@ -379,6 +381,7 @@ export class DictionaryService {
           metadata: {
             entryId: entry.id,
             lemmaId,
+            ...(textId ? { textId } : {}),
           },
         },
       });

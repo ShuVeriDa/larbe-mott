@@ -1,7 +1,38 @@
-import { ApiProperty } from "@nestjs/swagger";
-import { IsBoolean } from "class-validator";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { Type } from "class-transformer";
+import { IsBoolean, IsInt, IsOptional, Min } from "class-validator";
 
 export class PlanLimits {
+  // ─── Числовые лимиты (-1 = безлимит) ─────────────────────────────────────────
+
+  @ApiPropertyOptional({ description: "Переводов в день (-1 = безлимит)", example: 50 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(-1)
+  translationsPerDay?: number;
+
+  @ApiPropertyOptional({ description: "Слов в личном словаре (-1 = безлимит)", example: 500 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(-1)
+  wordsInDictionary?: number;
+
+  @ApiPropertyOptional({ description: "Доступных текстов (-1 = безлимит)", example: 20 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(-1)
+  availableTexts?: number;
+
+  @ApiPropertyOptional({ description: "Дней хранения статистики (-1 = безлимит)", example: -1 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(-1)
+  statisticsDays?: number;
+
   // ─── Чтение ──────────────────────────────────────────────────────────────────
 
   @ApiProperty({ description: "Чтение текстов", example: true })
@@ -46,6 +77,13 @@ export class PlanLimits {
   spaceRepetition: boolean;
 
   @ApiProperty({
+    description: "Деки зазубривания (флэш-карточки)",
+    example: false,
+  })
+  @IsBoolean()
+  hasFlashcards: boolean;
+
+  @ApiProperty({
     description: "Контексты слов — фрагменты текстов, где встречалось слово",
     example: false,
   })
@@ -60,4 +98,20 @@ export class PlanLimits {
   })
   @IsBoolean()
   analytics: boolean;
+
+  @ApiProperty({
+    description: "Расширенная аналитика",
+    example: false,
+  })
+  @IsBoolean()
+  hasAdvancedAnalytics: boolean;
+
+  // ─── Поддержка ───────────────────────────────────────────────────────────────
+
+  @ApiProperty({
+    description: "Приоритетная поддержка",
+    example: false,
+  })
+  @IsBoolean()
+  hasPrioritySupport: boolean;
 }

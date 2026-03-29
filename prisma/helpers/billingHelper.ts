@@ -21,19 +21,28 @@ export async function seedPlans() {
       interval: null,
       isActive: true,
       limits: {
+        // Числовые лимиты
+        translationsPerDay: 50,
+        wordsInDictionary: 500,
+        availableTexts: 20,
+        statisticsDays: -1,
         // Чтение
-        readTexts: true,         // Чтение текстов
-        wordTranslation: true,   // Перевод слов по клику
-        tokenAnalysis: true,     // Грамматика / базовая форма слова
+        readTexts: true,
+        wordTranslation: true,
+        tokenAnalysis: true,
         // Словарь
-        personalDictionary: true,   // Личный словарь (добавление слов)
-        dictionaryFolders: false,   // Папки в словаре
+        personalDictionary: true,
+        dictionaryFolders: false,
         // Прогресс
-        textProgress: true,         // Прогресс чтения текстов (%)
-        spaceRepetition: false,     // Интервальные повторения (SM-2)
-        wordContexts: false,        // Контексты слов (фрагменты из текстов)
+        textProgress: true,
+        spaceRepetition: false,
+        hasFlashcards: false,
+        wordContexts: false,
         // Аналитика
-        analytics: false,           // Личная аналитика и статистика
+        analytics: false,
+        hasAdvancedAnalytics: false,
+        // Поддержка
+        hasPrioritySupport: false,
       } satisfies PlanLimits,
     },
     {
@@ -45,19 +54,28 @@ export async function seedPlans() {
       interval: "month",
       isActive: true,
       limits: {
+        // Числовые лимиты
+        translationsPerDay: -1,
+        wordsInDictionary: -1,
+        availableTexts: -1,
+        statisticsDays: -1,
         // Чтение
-        readTexts: true,         // Чтение текстов
-        wordTranslation: true,   // Перевод слов по клику
-        tokenAnalysis: true,     // Грамматика / базовая форма слова
+        readTexts: true,
+        wordTranslation: true,
+        tokenAnalysis: true,
         // Словарь
-        personalDictionary: true,   // Личный словарь (добавление слов)
-        dictionaryFolders: true,    // Папки в словаре
+        personalDictionary: true,
+        dictionaryFolders: true,
         // Прогресс
-        textProgress: true,         // Прогресс чтения текстов (%)
-        spaceRepetition: true,      // Интервальные повторения (SM-2)
-        wordContexts: true,         // Контексты слов (фрагменты из текстов)
+        textProgress: true,
+        spaceRepetition: true,
+        hasFlashcards: true,
+        wordContexts: true,
         // Аналитика
-        analytics: true,            // Личная аналитика и статистика
+        analytics: true,
+        hasAdvancedAnalytics: true,
+        // Поддержка
+        hasPrioritySupport: true,
       } satisfies PlanLimits,
     },
   ] as const;

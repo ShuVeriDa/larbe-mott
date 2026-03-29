@@ -15,42 +15,55 @@ export class UserAnalyticsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getUserLearningStats(userId: string): Promise<UserLearningStatsDto> {
-    const [textsRead, wordsKnown, wordsLearning, levelProgressRaw, events] =
-      await Promise.all([
-        this.prisma.userTextProgress.count({
-          where: { userId, progressPercent: { gt: 0 } },
-        }),
-        this.prisma.userWordProgress.count({
-          where: { userId, status: WordStatus.KNOWN },
-        }),
-        this.prisma.userWordProgress.count({
-          where: { userId, status: WordStatus.LEARNING },
-        }),
-        this.prisma.userTextProgress.findMany({
-          where: { userId, progressPercent: { gt: 0 } },
-          select: {
-            text: {
-              select: {
-                level: true,
-              },
+    const [
+      textsRead,
+      wordsKnown,
+      wordsLearning,
+      dictionaryWordsCount,
+      dictionaryFoldersCount,
+      failLookupCount,
+      levelProgressRaw,
+      events,
+    ] = await Promise.all([
+      this.prisma.userTextProgress.count({
+        where: { userId, progressPercent: { gt: 0 } },
+      }),
+      this.prisma.userWordProgress.count({
+        where: { userId, status: WordStatus.KNOWN },
+      }),
+      this.prisma.userWordProgress.count({
+        where: { userId, status: WordStatus.LEARNING },
+      }),
+      this.prisma.userDictionaryEntry.count({ where: { userId } }),
+      this.prisma.userDictionaryFolder.count({ where: { userId } }),
+      this.prisma.userEvent.count({
+        where: { userId, type: UserEventType.FAIL_LOOKUP } as Prisma.UserEventWhereInput,
+      }),
+      this.prisma.userTextProgress.findMany({
+        where: { userId, progressPercent: { gt: 0 } },
+        select: {
+          text: {
+            select: {
+              level: true,
             },
           },
-        }),
-        this.prisma.userEvent.findMany({
-          where: {
-            userId,
-            type: {
-              in: [
-                UserEventType.START_SESSION,
-                UserEventType.OPEN_TEXT,
-                UserEventType.CLICK_WORD,
-                UserEventType.ADD_TO_DICTIONARY,
-              ],
-            },
-          } as Prisma.UserEventWhereInput,
-          orderBy: { createdAt: "asc" },
-        }),
-      ]);
+        },
+      }),
+      this.prisma.userEvent.findMany({
+        where: {
+          userId,
+          type: {
+            in: [
+              UserEventType.START_SESSION,
+              UserEventType.OPEN_TEXT,
+              UserEventType.CLICK_WORD,
+              UserEventType.ADD_TO_DICTIONARY,
+            ],
+          },
+        } as Prisma.UserEventWhereInput,
+        orderBy: { createdAt: "asc" },
+      }),
+    ]);
 
     const levelProgress = this.buildLevelProgress(levelProgressRaw);
     const streakDays = this.calculateStreak(events);
@@ -60,6 +73,9 @@ export class UserAnalyticsService {
       textsRead,
       wordsKnown,
       wordsLearning,
+      dictionaryWordsCount,
+      dictionaryFoldersCount,
+      failLookupCount,
       streakDays,
       totalStudyMinutes,
       levelProgress,

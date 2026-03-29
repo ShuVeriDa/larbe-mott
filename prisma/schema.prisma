@@ -87,6 +87,19 @@ enum CouponType {
   FIXED
 }
 
+enum SubscriptionEventType {
+  SUBSCRIBED
+  RENEWED
+  UPGRADED
+  DOWNGRADED
+  CANCELED
+  REFUNDED
+  TRIAL_STARTED
+  TRIAL_ENDED
+  EXTENDED
+  PLAN_CHANGED
+}
+
 enum Language {
   CHE
   RU
@@ -122,6 +135,13 @@ enum WordStatus {
   NEW
   LEARNING
   KNOWN
+}
+
+enum UnknownWordStatus {
+  PENDING
+  ADDED_TO_DICTIONARY
+  LINKED_TO_LEMMA
+  DELETED
 }
 
 enum DeckType {
@@ -355,6 +375,7 @@ model Subscription {
   user          User @relation(fields: [userId], references: [id], onDelete: Cascade)
   plan          Plan @relation(fields: [planId], references: [id], onDelete: Restrict)
   payments      Payment[]
+  events        SubscriptionEvent[]
 
   @@index([userId])
   @@index([planId])
@@ -392,21 +413,28 @@ model Payment {
 model Coupon {
   id             String     @id @default(uuid())
   code           String     @unique
+  name           String?    // human-readable label e.g. "Запуск платформы"
   type           CouponType
   amount         Int        // percent OR cents depending on type
 
-  maxRedemptions Int?
-  redeemedCount  Int        @default(0)
+  maxRedemptions  Int?
+  redeemedCount   Int       @default(0)
 
-  validFrom      DateTime?
-  validUntil     DateTime?
+  validFrom       DateTime?
+  validUntil      DateTime?
 
-  isActive       Boolean    @default(true)
+  applicablePlans String[]  // plan codes this coupon applies to, [] = all plans
 
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  maxPerUser      Int?      // max redemptions per single user (null = unlimited)
+  newUsersOnly    Boolean   @default(false) // only new users (no prior paid subscription)
+  isStackable     Boolean   @default(false) // can be combined with other coupons
 
-  redemptions    CouponRedemption[]
+  isActive        Boolean   @default(true)
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  redemptions     CouponRedemption[]
 
   @@index([isActive])
   @@map("coupon")
@@ -427,6 +455,21 @@ model CouponRedemption {
   @@index([couponId])
   @@index([userId])
   @@map("coupon_redemption")
+}
+
+model SubscriptionEvent {
+  id             String                @id @default(uuid())
+  subscriptionId String
+  type           SubscriptionEventType
+  metadata       Json?                 // e.g. { fromPlan, toPlan, extendDays, reason }
+
+  createdAt      DateTime              @default(now())
+
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId])
+  @@index([createdAt])
+  @@map("subscription_event")
 }
 
 model Role {
@@ -715,15 +758,18 @@ model Example {
 //////////////////////////////////////////////////////
 
 model UnknownWord {
-  id          String   @id @default(uuid())
+  id          String            @id @default(uuid())
 
   word        String
   normalized  String
 
-  seenCount   Int      @default(1)
+  seenCount   Int               @default(1)
 
-  firstSeen   DateTime @default(now())
-  lastSeen    DateTime @default(now())
+  status      UnknownWordStatus @default(PENDING)
+  resolvedAt  DateTime?
+
+  firstSeen   DateTime          @default(now())
+  lastSeen    DateTime          @default(now())
 
   lastTokenId String?
   lastTextId  String?

@@ -25,6 +25,27 @@ export class UserLearningStatsDto {
   wordsLearning: number;
 
   @ApiProperty({
+    description: "Total words saved to user's personal dictionary (UserDictionaryEntry count)",
+    example: 1247,
+  })
+  @IsInt()
+  dictionaryWordsCount: number;
+
+  @ApiProperty({
+    description: "Total folders in user's personal dictionary",
+    example: 3,
+  })
+  @IsInt()
+  dictionaryFoldersCount: number;
+
+  @ApiProperty({
+    description: "Total FAIL_LOOKUP events: words the user tapped that were not found in the dictionary",
+    example: 312,
+  })
+  @IsInt()
+  failLookupCount: number;
+
+  @ApiProperty({
     description: "Current learning streak in days (consecutive days with activity)",
     example: 7,
   })

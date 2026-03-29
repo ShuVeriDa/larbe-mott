@@ -40,7 +40,8 @@
       "Bash(npx nest:*)",
       "Bash(npm run:*)",
       "Bash(find f:/programming/mott-larbe/mott-larbe-backend -name *dictionary* -type f)",
-      "Bash(grep -E \"\\\\.\\(ts|js\\)$\")"
+      "Bash(grep -E \"\\\\.\\(ts|js\\)$\")",
+      "Bash(find f:programmingmott-larbemott-larbe-backendsrcbilling -type f -name *.ts)"
     ]
   }
 }

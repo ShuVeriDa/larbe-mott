@@ -1,6 +1,7 @@
-import { ApiProperty } from "@nestjs/swagger";
-import { Language, Level, UserStatus } from "@prisma/client";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { Language, Level, PlanType, RoleName, UserStatus } from "@prisma/client";
 import {
+  IsArray,
   IsDate,
   IsEmail,
   IsEnum,
@@ -30,11 +31,27 @@ export class AdminUserListItemDto {
   @IsString()
   surname: string;
 
-  @ApiProperty({ description: "User status" })
+  @ApiProperty({ description: "User status", enum: UserStatus })
   @IsEnum(UserStatus)
   status: UserStatus;
 
   @ApiProperty({
+    description: "Assigned RBAC roles",
+    type: [String],
+    enum: RoleName,
+    example: ["LEARNER", "CONTENT"],
+  })
+  @IsArray()
+  roles: RoleName[];
+
+  @ApiPropertyOptional({
+    description: "Active subscription plan type. null means FREE (no active subscription).",
+    enum: PlanType,
+    nullable: true,
+  })
+  plan: PlanType | null;
+
+  @ApiPropertyOptional({
     description: "Interface / learning language",
     enum: Language,
     nullable: true,
@@ -43,7 +60,7 @@ export class AdminUserListItemDto {
   @IsOptional()
   language: Language | null;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: "User language level",
     enum: Level,
     nullable: true,
@@ -53,12 +70,12 @@ export class AdminUserListItemDto {
   level: Level | null;
 
   @ApiProperty({
-    description: "User creation date (signup)",
+    description: "Registration date",
     type: String,
     format: "date-time",
   })
   @IsDate()
-  createdAt: Date;
+  signupAt: Date;
 
   @ApiProperty({
     description: "Last activity date",
@@ -70,25 +87,13 @@ export class AdminUserListItemDto {
   @IsOptional()
   lastActiveAt: Date | null;
 
-  @ApiProperty({
-    description: "Total number of texts with any progress for this user",
-  })
+  @ApiPropertyOptional({ description: "Texts with any reading progress" })
   @IsInt()
   @IsOptional()
   textsRead?: number;
 
-  @ApiProperty({
-    description: "Total number of words marked as KNOWN for this user",
-  })
+  @ApiPropertyOptional({ description: "Words marked as KNOWN" })
   @IsInt()
   @IsOptional()
   wordsKnown?: number;
-
-  @ApiProperty({
-    description:
-      "Subscriptions info placeholder (to be replaced with real subscriptions model later)",
-    nullable: true,
-  })
-  @IsOptional()
-  subscriptions?: unknown | null;
 }

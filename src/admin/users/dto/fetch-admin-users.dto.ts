@@ -1,8 +1,9 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { Language, Level, RoleName, UserStatus } from "@prisma/client";
+import { Language, Level, PlanType, RoleName, UserStatus } from "@prisma/client";
 import { Type } from "class-transformer";
 import {
   IsEnum,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
@@ -10,6 +11,20 @@ import {
   Max,
   Min,
 } from "class-validator";
+
+export enum UsersSort {
+  SIGNUP_DESC = "signup_desc",
+  ACTIVITY_DESC = "activity_desc",
+  NAME_ASC = "name_asc",
+}
+
+export enum UsersTab {
+  ALL = "all",
+  ACTIVE = "active",
+  BLOCKED = "blocked",
+  FROZEN = "frozen",
+  DELETED = "deleted",
+}
 
 export class FetchAdminUsersDto {
   @ApiPropertyOptional({
@@ -21,26 +36,17 @@ export class FetchAdminUsersDto {
   @IsString()
   q?: string;
 
-  @ApiPropertyOptional({
-    description: "Exact user email",
-    example: "john.doe@example.com",
-  })
+  @ApiPropertyOptional({ description: "Exact user email" })
   @IsOptional()
   @IsString()
   email?: string;
 
-  @ApiPropertyOptional({
-    description: "Exact username",
-    example: "johndoe",
-  })
+  @ApiPropertyOptional({ description: "Exact username" })
   @IsOptional()
   @IsString()
   username?: string;
 
-  @ApiPropertyOptional({
-    description: "User ID (UUID)",
-    example: "b4a2c5e4-5f1b-4d5e-9b6c-7a8f9e0d1c2b",
-  })
+  @ApiPropertyOptional({ description: "User ID (UUID)" })
   @IsOptional()
   @IsUUID()
   id?: string;
@@ -62,7 +68,8 @@ export class FetchAdminUsersDto {
   level?: Level;
 
   @ApiPropertyOptional({
-    description: "Filter by user status",
+    description:
+      "Filter by user status. Ignored when tab is provided. Default (no tab, no status): excludes DELETED.",
     enum: UserStatus,
   })
   @IsOptional()
@@ -70,7 +77,7 @@ export class FetchAdminUsersDto {
   status?: UserStatus;
 
   @ApiPropertyOptional({
-    description: "Filter by RBAC role (RoleName)",
+    description: "Filter by RBAC role",
     enum: RoleName,
   })
   @IsOptional()
@@ -78,23 +85,53 @@ export class FetchAdminUsersDto {
   role?: RoleName;
 
   @ApiPropertyOptional({
-    description: "Page number (1-based)",
-    default: 1,
+    description:
+      "Filter by active subscription plan. FREE matches users with no active paid subscription.",
+    enum: PlanType,
   })
+  @IsOptional()
+  @IsEnum(PlanType)
+  plan?: PlanType;
+
+  @ApiPropertyOptional({
+    description:
+      "Tab filter — overrides status param. 'all' includes DELETED users.",
+    enum: UsersTab,
+  })
+  @IsOptional()
+  @IsEnum(UsersTab)
+  tab?: UsersTab;
+
+  @ApiPropertyOptional({
+    description: "Sort order",
+    enum: UsersSort,
+    default: UsersSort.SIGNUP_DESC,
+  })
+  @IsOptional()
+  @IsEnum(UsersSort)
+  sort?: UsersSort = UsersSort.SIGNUP_DESC;
+
+  @ApiPropertyOptional({
+    description: "Export format (used by /export endpoint)",
+    enum: ["json", "csv"],
+    default: "json",
+  })
+  @IsOptional()
+  @IsIn(["json", "csv"])
+  format?: "json" | "csv";
+
+  @ApiPropertyOptional({ description: "Page number (1-based)", default: 1 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
   page?: number = 1;
 
-  @ApiPropertyOptional({
-    description: "Items per page (1–100)",
-    default: 20,
-  })
+  @ApiPropertyOptional({ description: "Items per page (1–100)", default: 25 })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
   @Max(100)
-  limit?: number = 20;
+  limit?: number = 25;
 }

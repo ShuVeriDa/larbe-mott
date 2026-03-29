@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { CouponType } from "@prisma/client";
 import { Type } from "class-transformer";
 import {
+  IsArray,
   IsBoolean,
   IsDateString,
   IsEnum,
@@ -12,9 +13,14 @@ import {
 } from "class-validator";
 
 export class CreateCouponDto {
-  @ApiProperty({ description: "Coupon code", example: "WELCOME50" })
+  @ApiProperty({ description: "Coupon code (uppercase)", example: "LAUNCH20" })
   @IsString()
   code: string;
+
+  @ApiPropertyOptional({ description: "Human-readable label", example: "Запуск платформы" })
+  @IsOptional()
+  @IsString()
+  name?: string;
 
   @ApiProperty({ description: "Coupon type", enum: CouponType })
   @IsEnum(CouponType)
@@ -22,7 +28,7 @@ export class CreateCouponDto {
 
   @ApiProperty({
     description: "Discount value (percent for PERCENT, cents for FIXED)",
-    example: 50,
+    example: 20,
   })
   @Type(() => Number)
   @IsInt()
@@ -49,9 +55,44 @@ export class CreateCouponDto {
   @IsDateString()
   validUntil?: string;
 
+  @ApiPropertyOptional({
+    description: "Plan codes this coupon applies to ([] = all plans)",
+    example: ["PRO", "PREMIUM"],
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  applicablePlans?: string[];
+
+  @ApiPropertyOptional({
+    description: "Max redemptions per single user (null = unlimited)",
+    example: 1,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  maxPerUser?: number | null;
+
+  @ApiPropertyOptional({
+    description: "Only new users (no prior paid subscription)",
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  newUsersOnly?: boolean;
+
+  @ApiPropertyOptional({
+    description: "Can be stacked with other coupons",
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  isStackable?: boolean;
+
   @ApiPropertyOptional({ description: "Whether coupon is active", default: true })
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
 }
-

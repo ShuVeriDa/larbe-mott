@@ -1,6 +1,8 @@
-import { ApiProperty } from "@nestjs/swagger";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Language, Level, UserStatus } from "@prisma/client";
 import { IsDate, IsEmail, IsEnum, IsOptional, IsString } from "class-validator";
+import { UserRoleItemDto } from "./user-role-item.dto";
+import { UserSubscriptionCurrentDto } from "./user-subscription-response.dto";
 import { UserLearningStatsDto } from "./user-learning-stats.dto";
 
 export class AdminUserDetailsDto {
@@ -24,7 +26,12 @@ export class AdminUserDetailsDto {
   @IsString()
   surname: string;
 
-  @ApiProperty({ description: "User status" })
+  @ApiPropertyOptional({ description: "Phone number", nullable: true })
+  @IsString()
+  @IsOptional()
+  phone: string | null;
+
+  @ApiProperty({ description: "User status", enum: UserStatus })
   @IsEnum(UserStatus)
   status: UserStatus;
 
@@ -47,12 +54,12 @@ export class AdminUserDetailsDto {
   level: Level | null;
 
   @ApiProperty({
-    description: "User creation date (signup)",
+    description: "Registration date (signupAt)",
     type: String,
     format: "date-time",
   })
   @IsDate()
-  createdAt: Date;
+  signupAt: Date;
 
   @ApiProperty({
     description: "Last activity date",
@@ -63,6 +70,19 @@ export class AdminUserDetailsDto {
   @IsDate()
   @IsOptional()
   lastActiveAt: Date | null;
+
+  @ApiProperty({
+    description: "Assigned RBAC roles with assignment date",
+    type: [UserRoleItemDto],
+  })
+  roles: UserRoleItemDto[];
+
+  @ApiPropertyOptional({
+    description: "Current active subscription, null if none",
+    type: UserSubscriptionCurrentDto,
+    nullable: true,
+  })
+  subscription: UserSubscriptionCurrentDto | null;
 
   @ApiProperty({
     description: "Aggregated learning statistics for this user",
