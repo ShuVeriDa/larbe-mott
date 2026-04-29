@@ -41,6 +41,12 @@ interface LevelDistributionItem {
   percent: number;
 }
 
+interface PrefetchedEvent {
+  userId: string;
+  metadata: Prisma.JsonValue | null;
+  createdAt: Date;
+}
+
 const LEVEL_ORDER: Level[] = [
   Level.A1,
   Level.A2,
@@ -60,11 +66,7 @@ const LEVEL_LABELS: Record<Level, string> = {
 };
 
 const HEATMAP_DAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
-const INTERESTING_EVENT_TYPES = [
-  UserEventType.OPEN_TEXT,
-  UserEventType.ADD_TO_DICTIONARY,
-  UserEventType.FAIL_LOOKUP,
-] as const;
+const STREAK_LOOKBACK_DAYS = 90;
 
 @Injectable()
 export class AdminAnalyticsService {
@@ -73,20 +75,52 @@ export class AdminAnalyticsService {
   async getOverview(query: FetchAdminAnalyticsDto) {
     const bounds = this.resolvePeriod(query);
 
-    const [kpis, levelDistribution, activityHeatmap, eventsChart, topActiveUsers, topUnknownWords, readingFunnel, sm2Stats, difficultTexts, popularTexts, insight] =
-      await Promise.all([
-        this.getKpis(bounds),
-        this.getLevelDistribution(bounds),
-        this.getActivityHeatmap(bounds),
-        this.getEventsChart(bounds),
-        this.getTopActiveUsers(bounds, query.topUsersLimit ?? 5),
-        this.getTopUnknownWords(query.topUnknownWordsLimit ?? 8),
-        this.getReadingFunnel(bounds),
-        this.getSm2Stats(bounds),
-        this.getDifficultTexts(bounds, query.difficultBy ?? DifficultTextsTab.FAIL, query.difficultLimit ?? 6),
-        this.getPopularTexts(bounds, query.popularBy ?? PopularTextsTab.OPENS, query.popularLimit ?? 7),
-        this.getInsight(bounds),
-      ]);
+    // Single prefetch of UserEvent rows for the current period — reused by
+    // KPI sessions, heatmap, events chart, difficult/popular tabs, insight,
+    // and top unknown words. This replaces several duplicate findMany calls.
+    const [openEvents, addEvents, failEvents] = await Promise.all([
+      this.fetchEvents(UserEventType.OPEN_TEXT, bounds.from, bounds.to),
+      this.fetchEvents(UserEventType.ADD_TO_DICTIONARY, bounds.from, bounds.to),
+      this.fetchEvents(UserEventType.FAIL_LOOKUP, bounds.from, bounds.to),
+    ]);
+
+    const [
+      kpis,
+      levelDistribution,
+      activityHeatmap,
+      eventsChart,
+      topActiveUsers,
+      topUnknownWords,
+      readingFunnel,
+      sm2Stats,
+      difficultTexts,
+      popularTexts,
+      insight,
+    ] = await Promise.all([
+      this.getKpis(bounds, openEvents, addEvents, failEvents),
+      this.getLevelDistribution(openEvents),
+      Promise.resolve(this.getActivityHeatmap(bounds, openEvents)),
+      Promise.resolve(this.getEventsChart(bounds, openEvents, addEvents, failEvents)),
+      this.getTopActiveUsers(bounds, query.topUsersLimit ?? 5, openEvents, addEvents, failEvents),
+      this.getTopUnknownWords(failEvents, query.topUnknownWordsLimit ?? 8),
+      this.getReadingFunnel(bounds, openEvents),
+      this.getSm2Stats(bounds),
+      this.getDifficultTexts(
+        bounds,
+        query.difficultBy ?? DifficultTextsTab.FAIL,
+        query.difficultLimit ?? 6,
+        openEvents,
+        failEvents,
+      ),
+      this.getPopularTexts(
+        bounds,
+        query.popularBy ?? PopularTextsTab.OPENS,
+        query.popularLimit ?? 7,
+        openEvents,
+        addEvents,
+      ),
+      this.getInsight(openEvents, failEvents),
+    ]);
 
     return {
       filters: {
@@ -138,10 +172,16 @@ export class AdminAnalyticsService {
       tz: "UTC",
     };
     const bounds = this.resolvePeriod(query);
+    const [openEvents, failEvents] = await Promise.all([
+      this.fetchEvents(UserEventType.OPEN_TEXT, bounds.from, bounds.to),
+      this.fetchEvents(UserEventType.FAIL_LOOKUP, bounds.from, bounds.to),
+    ]);
     const result = await this.getDifficultTexts(
       bounds,
       DifficultTextsTab.FAIL,
       opts.limit ?? 50,
+      openEvents,
+      failEvents,
     );
 
     return result.items.map((item) => ({
@@ -158,13 +198,11 @@ export class AdminAnalyticsService {
     };
     const bounds = this.resolvePeriod(query);
 
-    const events = await this.prisma.userEvent.findMany({
-      where: {
-        type: UserEventType.OPEN_TEXT,
-        createdAt: { gte: bounds.from, lte: bounds.to },
-      },
-      select: { metadata: true },
-    });
+    const events = await this.fetchEvents(
+      UserEventType.OPEN_TEXT,
+      bounds.from,
+      bounds.to,
+    );
 
     const textIdCounts = new Map<string, number>();
     for (const event of events) {
@@ -199,12 +237,53 @@ export class AdminAnalyticsService {
     tab: DifficultTextsTab,
   ) {
     const bounds = this.resolvePeriod(query);
-    return this.getDifficultTexts(bounds, tab, query.difficultLimit ?? 6);
+    const limit = query.difficultLimit ?? 6;
+
+    if (tab === DifficultTextsTab.ABANDON) {
+      // Abandon tab uses UserTextProgress, not events — pass empty arrays.
+      return this.getDifficultTexts(bounds, tab, limit, [], []);
+    }
+
+    if (tab === DifficultTextsTab.UNKNOWN_PERCENT) {
+      const [openEvents, failEvents] = await Promise.all([
+        this.fetchEvents(UserEventType.OPEN_TEXT, bounds.from, bounds.to),
+        this.fetchEvents(UserEventType.FAIL_LOOKUP, bounds.from, bounds.to),
+      ]);
+      return this.getDifficultTexts(bounds, tab, limit, openEvents, failEvents);
+    }
+
+    const failEvents = await this.fetchEvents(
+      UserEventType.FAIL_LOOKUP,
+      bounds.from,
+      bounds.to,
+    );
+    return this.getDifficultTexts(bounds, tab, limit, [], failEvents);
   }
 
   async getPopularTextsEndpoint(query: FetchAdminAnalyticsDto, tab: PopularTextsTab) {
     const bounds = this.resolvePeriod(query);
-    return this.getPopularTexts(bounds, tab, query.popularLimit ?? 7);
+    const limit = query.popularLimit ?? 7;
+
+    if (tab === PopularTextsTab.COMPLETE) {
+      // Completions tab uses UserTextProgress, not events — pass empty arrays.
+      return this.getPopularTexts(bounds, tab, limit, [], []);
+    }
+
+    if (tab === PopularTextsTab.SAVED) {
+      const addEvents = await this.fetchEvents(
+        UserEventType.ADD_TO_DICTIONARY,
+        bounds.from,
+        bounds.to,
+      );
+      return this.getPopularTexts(bounds, tab, limit, [], addEvents);
+    }
+
+    const openEvents = await this.fetchEvents(
+      UserEventType.OPEN_TEXT,
+      bounds.from,
+      bounds.to,
+    );
+    return this.getPopularTexts(bounds, tab, limit, openEvents, []);
   }
 
   private resolvePeriod(query: FetchAdminAnalyticsDto): PeriodBounds {
@@ -257,52 +336,69 @@ export class AdminAnalyticsService {
     };
   }
 
-  private async getKpis(bounds: PeriodBounds) {
-    const [readingNow, readingPrev, wordsNow, wordsPrev, unknownNow, unknownPrev, progressNow, progressPrev] =
-      await Promise.all([
-        this.prisma.userEvent.count({
-          where: this.eventWhere(UserEventType.OPEN_TEXT, bounds.from, bounds.to),
-        }),
-        this.prisma.userEvent.count({
-          where: this.eventWhere(UserEventType.OPEN_TEXT, bounds.prevFrom, bounds.prevTo),
-        }),
-        this.prisma.userEvent.count({
-          where: this.eventWhere(UserEventType.ADD_TO_DICTIONARY, bounds.from, bounds.to),
-        }),
-        this.prisma.userEvent.count({
-          where: this.eventWhere(
-            UserEventType.ADD_TO_DICTIONARY,
-            bounds.prevFrom,
-            bounds.prevTo,
-          ),
-        }),
-        this.prisma.userEvent.count({
-          where: this.eventWhere(UserEventType.FAIL_LOOKUP, bounds.from, bounds.to),
-        }),
-        this.prisma.userEvent.count({
-          where: this.eventWhere(UserEventType.FAIL_LOOKUP, bounds.prevFrom, bounds.prevTo),
-        }),
-        this.prisma.userTextProgress.findMany({
-          where: { lastOpened: { gte: bounds.from, lte: bounds.to } },
-          select: { progressPercent: true },
-        }),
-        this.prisma.userTextProgress.findMany({
-          where: { lastOpened: { gte: bounds.prevFrom, lte: bounds.prevTo } },
-          select: { progressPercent: true },
-        }),
-      ]);
+  private fetchEvents(
+    type: UserEventType,
+    from: Date,
+    to: Date,
+  ): Promise<PrefetchedEvent[]> {
+    return this.prisma.userEvent.findMany({
+      where: { type, createdAt: { gte: from, lte: to } },
+      select: { userId: true, metadata: true, createdAt: true },
+    });
+  }
+
+  private async getKpis(
+    bounds: PeriodBounds,
+    openEvents: PrefetchedEvent[],
+    addEvents: PrefetchedEvent[],
+    failEvents: PrefetchedEvent[],
+  ) {
+    // "Сессия чтения" = unique (userId, textId, day) — open of one text by
+    // one user on one day. This matches statistics.service deduplication
+    // logic and is meaningfully different from "raw OPEN_TEXT count".
+    const sessionsNow = this.countReadingSessions(openEvents, bounds.tz);
+
+    const [
+      sessionsPrevEvents,
+      wordsPrev,
+      unknownPrev,
+      progressNow,
+      progressPrev,
+    ] = await Promise.all([
+      this.fetchEvents(UserEventType.OPEN_TEXT, bounds.prevFrom, bounds.prevTo),
+      this.prisma.userEvent.count({
+        where: this.eventWhere(
+          UserEventType.ADD_TO_DICTIONARY,
+          bounds.prevFrom,
+          bounds.prevTo,
+        ),
+      }),
+      this.prisma.userEvent.count({
+        where: this.eventWhere(UserEventType.FAIL_LOOKUP, bounds.prevFrom, bounds.prevTo),
+      }),
+      this.prisma.userTextProgress.findMany({
+        where: { lastOpened: { gte: bounds.from, lte: bounds.to } },
+        select: { progressPercent: true },
+      }),
+      this.prisma.userTextProgress.findMany({
+        where: { lastOpened: { gte: bounds.prevFrom, lte: bounds.prevTo } },
+        select: { progressPercent: true },
+      }),
+    ]);
+
+    const sessionsPrev = this.countReadingSessions(sessionsPrevEvents, bounds.tz);
 
     const completionNow = this.avgPercent(progressNow.map((item) => item.progressPercent));
     const completionPrev = this.avgPercent(progressPrev.map((item) => item.progressPercent));
 
     return {
       items: [
-        this.kpiItem("reading_sessions", "Сессий чтения", readingNow, readingPrev, "count"),
-        this.kpiItem("words_saved", "Слов в словарь", wordsNow, wordsPrev, "count"),
+        this.kpiItem("reading_sessions", "Сессий чтения", sessionsNow, sessionsPrev, "count"),
+        this.kpiItem("words_saved", "Слов в словарь", addEvents.length, wordsPrev, "count"),
         this.kpiItem(
           "unknown_words",
           "Неизвестных слов",
-          unknownNow,
+          failEvents.length,
           unknownPrev,
           "count",
         ),
@@ -317,13 +413,19 @@ export class AdminAnalyticsService {
     };
   }
 
-  private async getLevelDistribution(bounds: PeriodBounds) {
-    const events = await this.prisma.userEvent.findMany({
-      where: this.eventWhere(UserEventType.OPEN_TEXT, bounds.from, bounds.to),
-      select: { userId: true },
-    });
+  private countReadingSessions(events: PrefetchedEvent[], tz: string): number {
+    const seen = new Set<string>();
+    for (const event of events) {
+      const textId = this.getMetadataString(event.metadata, "textId");
+      if (!textId) continue;
+      const dayKey = this.formatDateKey(event.createdAt, tz);
+      seen.add(`${event.userId}|${textId}|${dayKey}`);
+    }
+    return seen.size;
+  }
 
-    const userIds = [...new Set(events.map((event) => event.userId))];
+  private async getLevelDistribution(openEvents: PrefetchedEvent[]) {
+    const userIds = [...new Set(openEvents.map((event) => event.userId))];
     if (!userIds.length) {
       return { totalUsers: 0, items: [] as LevelDistributionItem[] };
     }
@@ -357,14 +459,9 @@ export class AdminAnalyticsService {
     };
   }
 
-  private async getActivityHeatmap(bounds: PeriodBounds) {
-    const events = await this.prisma.userEvent.findMany({
-      where: this.eventWhere(UserEventType.OPEN_TEXT, bounds.from, bounds.to),
-      select: { createdAt: true },
-    });
-
+  private getActivityHeatmap(bounds: PeriodBounds, openEvents: PrefetchedEvent[]) {
     const raw: number[][] = Array.from({ length: 24 }, () => Array(7).fill(0));
-    for (const event of events) {
+    for (const event of openEvents) {
       const hour = this.getHourInTimezone(event.createdAt, bounds.tz);
       const dayIndex = this.getDayIndexInTimezone(event.createdAt, bounds.tz);
       raw[hour][dayIndex] += 1;
@@ -385,15 +482,12 @@ export class AdminAnalyticsService {
     };
   }
 
-  private async getEventsChart(bounds: PeriodBounds) {
-    const events = await this.prisma.userEvent.findMany({
-      where: {
-        type: { in: [...INTERESTING_EVENT_TYPES] },
-        createdAt: { gte: bounds.from, lte: bounds.to },
-      },
-      select: { type: true, createdAt: true },
-    });
-
+  private getEventsChart(
+    bounds: PeriodBounds,
+    openEvents: PrefetchedEvent[],
+    addEvents: PrefetchedEvent[],
+    failEvents: PrefetchedEvent[],
+  ) {
     const dateKeys = this.enumerateDateKeys(bounds.from, bounds.to, bounds.tz);
     const indexByDate = new Map(dateKeys.map((key, idx) => [key, idx]));
 
@@ -401,84 +495,144 @@ export class AdminAnalyticsService {
     const addToDict = new Array<number>(dateKeys.length).fill(0);
     const failLookup = new Array<number>(dateKeys.length).fill(0);
 
-    for (const event of events) {
-      const key = this.formatDateKey(event.createdAt, bounds.tz);
-      const idx = indexByDate.get(key);
-      if (idx === undefined) continue;
+    const fill = (events: PrefetchedEvent[], target: number[]) => {
+      for (const event of events) {
+        const key = this.formatDateKey(event.createdAt, bounds.tz);
+        const idx = indexByDate.get(key);
+        if (idx === undefined) continue;
+        target[idx] += 1;
+      }
+    };
 
-      if (event.type === UserEventType.OPEN_TEXT) openText[idx] += 1;
-      if (event.type === UserEventType.ADD_TO_DICTIONARY) addToDict[idx] += 1;
-      if (event.type === UserEventType.FAIL_LOOKUP) failLookup[idx] += 1;
-    }
+    fill(openEvents, openText);
+    fill(addEvents, addToDict);
+    fill(failEvents, failLookup);
 
     return {
       labels: dateKeys,
-      series: {
-        openText,
-        addToDict,
-        failLookup,
-      },
+      series: { openText, addToDict, failLookup },
       totals: {
-        openText: openText.reduce((sum, n) => sum + n, 0),
-        addToDict: addToDict.reduce((sum, n) => sum + n, 0),
-        failLookup: failLookup.reduce((sum, n) => sum + n, 0),
+        openText: openEvents.length,
+        addToDict: addEvents.length,
+        failLookup: failEvents.length,
       },
     };
   }
 
-  private async getTopActiveUsers(bounds: PeriodBounds, limit: number) {
-    const grouped = await this.prisma.userEvent.groupBy({
-      by: ["userId"],
-      where: {
-        type: { in: [...INTERESTING_EVENT_TYPES] },
-        createdAt: { gte: bounds.from, lte: bounds.to },
-      },
-      _count: { _all: true },
-      orderBy: { _count: { userId: "desc" } },
-      take: limit,
-    });
+  private async getTopActiveUsers(
+    bounds: PeriodBounds,
+    limit: number,
+    openEvents: PrefetchedEvent[],
+    addEvents: PrefetchedEvent[],
+    failEvents: PrefetchedEvent[],
+  ) {
+    // Aggregate event counts per user across the three event types in memory
+    // (we already have all three arrays prefetched).
+    const counts = new Map<string, number>();
+    for (const event of openEvents) {
+      counts.set(event.userId, (counts.get(event.userId) ?? 0) + 1);
+    }
+    for (const event of addEvents) {
+      counts.set(event.userId, (counts.get(event.userId) ?? 0) + 1);
+    }
+    for (const event of failEvents) {
+      counts.set(event.userId, (counts.get(event.userId) ?? 0) + 1);
+    }
 
-    const userIds = grouped.map((item) => item.userId);
-    if (!userIds.length) return [];
+    const top = [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, limit);
 
-    const [users, allUserEvents] = await Promise.all([
+    if (!top.length) return [];
+
+    const userIds = top.map(([userId]) => userId);
+
+    // Streak fetch: bounded to STREAK_LOOKBACK_DAYS counted backwards from
+    // bounds.to so historical periods produce meaningful streaks (anchor =
+    // end of analytics window, not "today").
+    const streakAnchor = bounds.to;
+    const streakWindowFrom = new Date(
+      streakAnchor.getTime() - STREAK_LOOKBACK_DAYS * 86_400_000,
+    );
+
+    const [users, recentEvents] = await Promise.all([
       this.prisma.user.findMany({
         where: { id: { in: userIds } },
         select: { id: true, name: true, surname: true, level: true },
       }),
       this.prisma.userEvent.findMany({
-        where: { userId: { in: userIds } },
+        where: {
+          userId: { in: userIds },
+          createdAt: { gte: streakWindowFrom, lte: streakAnchor },
+        },
         select: { userId: true, createdAt: true },
-        orderBy: { createdAt: "desc" },
       }),
     ]);
 
     const userMap = new Map(users.map((u) => [u.id, u]));
     const eventsByUser = new Map<string, Date[]>();
-    for (const event of allUserEvents) {
+    for (const event of recentEvents) {
       const list = eventsByUser.get(event.userId) ?? [];
       list.push(event.createdAt);
       eventsByUser.set(event.userId, list);
     }
 
-    return grouped.map((item) => {
-      const user = userMap.get(item.userId);
+    return top.map(([userId, eventsCount]) => {
+      const user = userMap.get(userId);
       const fullName = user
         ? `${user.name} ${user.surname}`.trim()
-        : `Пользователь ${item.userId.slice(0, 6)}`;
+        : `Пользователь ${userId.slice(0, 6)}`;
 
       return {
-        userId: item.userId,
+        userId,
         fullName,
         initials: this.initials(fullName),
         level: user?.level ?? null,
-        streakDays: this.computeStreakDays(eventsByUser.get(item.userId) ?? []),
-        eventsCount: item._count._all,
+        streakDays: this.computeStreakDays(
+          eventsByUser.get(userId) ?? [],
+          streakAnchor,
+        ),
+        eventsCount,
       };
     });
   }
 
-  private async getTopUnknownWords(limit: number) {
+  private async getTopUnknownWords(failEvents: PrefetchedEvent[], limit: number) {
+    // Period-bounded ranking: count FAIL_LOOKUP events grouped by
+    // metadata.normalized. Falls back to the global UnknownWord.seenCount
+    // ranking only if the period yielded no events.
+    const counts = new Map<string, number>();
+    for (const event of failEvents) {
+      const normalized = this.getMetadataString(event.metadata, "normalized");
+      if (!normalized) continue;
+      counts.set(normalized, (counts.get(normalized) ?? 0) + 1);
+    }
+
+    if (counts.size > 0) {
+      const sorted = [...counts.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, limit);
+      const maxCount = sorted[0]?.[1] ?? 0;
+
+      // Look up the original (non-normalized) display word from UnknownWord
+      // when available so the UI shows the actual chechen surface form.
+      const normalizedKeys = sorted.map(([normalized]) => normalized);
+      const lookups = await this.prisma.unknownWord.findMany({
+        where: { normalized: { in: normalizedKeys } },
+        select: { normalized: true, word: true },
+      });
+      const wordByNormalized = new Map(
+        lookups.map((row) => [row.normalized, row.word]),
+      );
+
+      return sorted.map(([normalized, count], idx) => ({
+        rank: idx + 1,
+        word: wordByNormalized.get(normalized) || normalized,
+        count,
+        percentOfTop: maxCount > 0 ? Math.round((count / maxCount) * 100) : 0,
+      }));
+    }
+
     const items = await this.prisma.unknownWord.findMany({
       orderBy: [{ seenCount: "desc" }, { lastSeen: "desc" }],
       take: limit,
@@ -494,16 +648,13 @@ export class AdminAnalyticsService {
     }));
   }
 
-  private async getReadingFunnel(bounds: PeriodBounds) {
-    const [openedEventsCount, progressRows] = await Promise.all([
-      this.prisma.userEvent.count({
-        where: this.eventWhere(UserEventType.OPEN_TEXT, bounds.from, bounds.to),
-      }),
-      this.prisma.userTextProgress.findMany({
-        where: { lastOpened: { gte: bounds.from, lte: bounds.to } },
-        select: { progressPercent: true },
-      }),
-    ]);
+  private async getReadingFunnel(bounds: PeriodBounds, openEvents: PrefetchedEvent[]) {
+    const progressRows = await this.prisma.userTextProgress.findMany({
+      where: { lastOpened: { gte: bounds.from, lte: bounds.to } },
+      select: { progressPercent: true },
+    });
+
+    const openedEventsCount = openEvents.length;
 
     // Keep funnel percentages on one denominator for consistent conversion rates.
     const base = progressRows.length;
@@ -579,50 +730,33 @@ export class AdminAnalyticsService {
     bounds: PeriodBounds,
     tab: DifficultTextsTab,
     limit: number,
+    openEvents: PrefetchedEvent[],
+    failEvents: PrefetchedEvent[],
   ) {
     if (tab === DifficultTextsTab.UNKNOWN_PERCENT) {
-      return this.getDifficultByUnknownPercent(bounds, limit);
+      return this.getDifficultByUnknownPercent(openEvents, failEvents, limit);
     }
     if (tab === DifficultTextsTab.ABANDON) {
       return this.getDifficultByAbandon(bounds, limit);
     }
-    return this.getDifficultByFailLookup(bounds, limit);
+    return this.getDifficultByFailLookup(failEvents, limit);
   }
 
-  private async getDifficultByFailLookup(bounds: PeriodBounds, limit: number) {
-    const events = await this.prisma.userEvent.findMany({
-      where: this.eventWhere(UserEventType.FAIL_LOOKUP, bounds.from, bounds.to),
-      select: { metadata: true },
-    });
-
-    const counts = new Map<string, number>();
-    for (const event of events) {
-      const textId = this.getMetadataString(event.metadata, "textId");
-      if (!textId) continue;
-      counts.set(textId, (counts.get(textId) ?? 0) + 1);
-    }
-
+  private getDifficultByFailLookup(failEvents: PrefetchedEvent[], limit: number) {
     return this.buildTextMetricList({
       metricLabel: "FAIL/период",
       metricKind: DifficultTextsTab.FAIL,
-      valuesByTextId: counts,
+      valuesByTextId: this.countByTextId(failEvents),
       limit,
       largerIsWorse: true,
     });
   }
 
-  private async getDifficultByUnknownPercent(bounds: PeriodBounds, limit: number) {
-    const [openEvents, failEvents] = await Promise.all([
-      this.prisma.userEvent.findMany({
-        where: this.eventWhere(UserEventType.OPEN_TEXT, bounds.from, bounds.to),
-        select: { metadata: true },
-      }),
-      this.prisma.userEvent.findMany({
-        where: this.eventWhere(UserEventType.FAIL_LOOKUP, bounds.from, bounds.to),
-        select: { metadata: true },
-      }),
-    ]);
-
+  private getDifficultByUnknownPercent(
+    openEvents: PrefetchedEvent[],
+    failEvents: PrefetchedEvent[],
+    limit: number,
+  ) {
     const opensByText = this.countByTextId(openEvents);
     const failByText = this.countByTextId(failEvents);
 
@@ -673,26 +807,27 @@ export class AdminAnalyticsService {
     });
   }
 
-  private async getPopularTexts(bounds: PeriodBounds, tab: PopularTextsTab, limit: number) {
+  private async getPopularTexts(
+    bounds: PeriodBounds,
+    tab: PopularTextsTab,
+    limit: number,
+    openEvents: PrefetchedEvent[],
+    addEvents: PrefetchedEvent[],
+  ) {
     if (tab === PopularTextsTab.COMPLETE) {
       return this.getPopularByCompletions(bounds, limit);
     }
     if (tab === PopularTextsTab.SAVED) {
-      return this.getPopularBySavedWords(bounds, limit);
+      return this.getPopularBySavedWords(bounds, addEvents, limit);
     }
-    return this.getPopularByOpens(bounds, limit);
+    return this.getPopularByOpens(openEvents, limit);
   }
 
-  private async getPopularByOpens(bounds: PeriodBounds, limit: number) {
-    const events = await this.prisma.userEvent.findMany({
-      where: this.eventWhere(UserEventType.OPEN_TEXT, bounds.from, bounds.to),
-      select: { metadata: true },
-    });
-
+  private getPopularByOpens(openEvents: PrefetchedEvent[], limit: number) {
     return this.buildPopularTextsList({
       tab: PopularTextsTab.OPENS,
       metricLabel: "Открытий",
-      valuesByTextId: this.countByTextId(events),
+      valuesByTextId: this.countByTextId(openEvents),
       limit,
     });
   }
@@ -719,16 +854,15 @@ export class AdminAnalyticsService {
     });
   }
 
-  private async getPopularBySavedWords(bounds: PeriodBounds, limit: number) {
-    const events = await this.prisma.userEvent.findMany({
-      where: this.eventWhere(UserEventType.ADD_TO_DICTIONARY, bounds.from, bounds.to),
-      select: { userId: true, metadata: true, createdAt: true },
-    });
-
+  private async getPopularBySavedWords(
+    bounds: PeriodBounds,
+    addEvents: PrefetchedEvent[],
+    limit: number,
+  ) {
     const direct = new Map<string, number>();
     const unresolvedEvents: { pairKey: string; createdAt: Date }[] = [];
 
-    for (const event of events) {
+    for (const event of addEvents) {
       const textId = this.getMetadataString(event.metadata, "textId");
       if (textId) {
         direct.set(textId, (direct.get(textId) ?? 0) + 1);
@@ -897,18 +1031,10 @@ export class AdminAnalyticsService {
     );
   }
 
-  private async getInsight(bounds: PeriodBounds) {
-    const [openEvents, failEvents] = await Promise.all([
-      this.prisma.userEvent.findMany({
-        where: this.eventWhere(UserEventType.OPEN_TEXT, bounds.from, bounds.to),
-        select: { metadata: true },
-      }),
-      this.prisma.userEvent.findMany({
-        where: this.eventWhere(UserEventType.FAIL_LOOKUP, bounds.from, bounds.to),
-        select: { metadata: true },
-      }),
-    ]);
-
+  private async getInsight(
+    openEvents: PrefetchedEvent[],
+    failEvents: PrefetchedEvent[],
+  ) {
     const openByText = this.countByTextId(openEvents);
     const failByText = this.countByTextId(failEvents);
     const textIds = [...new Set([...openByText.keys(), ...failByText.keys()])];
@@ -1125,15 +1251,20 @@ export class AdminAnalyticsService {
     return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
   }
 
-  private computeStreakDays(dates: Date[]): number {
+  private computeStreakDays(dates: Date[], anchor: Date): number {
     if (!dates.length) return 0;
     const uniqueDays = [
       ...new Set(dates.map((d) => d.toISOString().slice(0, 10))),
     ].sort((a, b) => b.localeCompare(a));
 
-    const today = new Date().toISOString().slice(0, 10);
-    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
-    if (uniqueDays[0] !== today && uniqueDays[0] !== yesterday) return 0;
+    const anchorDay = anchor.toISOString().slice(0, 10);
+    const dayBeforeAnchor = new Date(anchor.getTime() - 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+
+    // Streak must include the anchor day or the day immediately before it,
+    // otherwise the user is "off" relative to the analytics window's end.
+    if (uniqueDays[0] !== anchorDay && uniqueDays[0] !== dayBeforeAnchor) return 0;
 
     let streak = 0;
     let expected = uniqueDays[0];
@@ -1217,4 +1348,3 @@ export class AdminAnalyticsService {
       .join("\n");
   }
 }
-

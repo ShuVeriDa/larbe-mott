@@ -46,6 +46,7 @@ enum PermissionCode {
   CAN_VIEW_LOGS
   CAN_MANAGE_FEATURE_FLAGS
   CAN_MANAGE_FEEDBACK
+  CAN_MANAGE_LEGAL
 }
 
 enum FeatureFlagCategory {
@@ -179,6 +180,13 @@ enum DeckType {
   NUMBERED
 }
 
+enum WordRelationType {
+  SYNONYM
+  ANTONYM
+  DERIVED // производное (меттан ← мотт)
+  FAMILY // однокоренное / семья слов
+}
+
 enum TokenStatus {
   ANALYZED
   AMBIGUOUS
@@ -229,6 +237,14 @@ enum LogLevel {
   ERROR
 }
 
+enum JobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
 //////////////////////////////////////////////////////
 // USER EVENTS (ANALYTICS)
 //////////////////////////////////////////////////////
@@ -239,8 +255,13 @@ enum UserEventType {
   CLICK_WORD
   ADD_TO_DICTIONARY
   FAIL_LOOKUP
-  READ_SESSION    // metadata: { textId, durationSeconds }
-  REVIEW_SESSION  // metadata: { correct, wrong, streak }
+  READ_SESSION // metadata: { textId, durationSeconds }
+  REVIEW_SESSION // metadata: { correct, wrong, streak }
+  PASSWORD_RESET_REQUESTED // metadata: { ip }
+  PASSWORD_RESET_COMPLETED // metadata: { ip }
+  PASSWORD_CHANGED // metadata: { ip } — авторизованная смена пароля
+  EMAIL_CHANGE_REQUESTED // metadata: { ip, newEmail }
+  EMAIL_CHANGE_COMPLETED // metadata: { ip, oldEmail, newEmail }
 }
 
 //////////////////////////////////////////////////////
@@ -248,59 +269,62 @@ enum UserEventType {
 //////////////////////////////////////////////////////
 
 model User {
-  id            String   @id @default(uuid())
-  email         String   @unique
-  password      String
-  username      String
-  name          String
-  surname       String
+  id                 String  @id @default(uuid())
+  email              String  @unique
+  password           String
+  username           String
+  name               String
+  surname            String
   hashedRefreshToken String? @db.Text
-  phone         String?
+  phone              String?
+  // URL аватара. Файлы аплоадятся вне backend'а (S3/R2/CDN); сюда сохраняется уже готовый URL.
+  // null = фронт показывает инициалы из name+surname.
+  avatar             String?
 
-  wordProgress  UserWordProgress[]
-  textProgress  UserTextProgress[]
-  deckCards     UserDeckCard[]     @relation("UserDeckCards")
-  deckState     UserDeckState?     @relation("UserDeckState")
-  dictionaryEntries DictionaryEntry[] @relation("DictionaryEntryCreator")
-  userDictionaryEntries UserDictionaryEntry[] @relation("UserDictionaryEntryUser")
+  wordProgress          UserWordProgress[]
+  textProgress          UserTextProgress[]
+  deckCards             UserDeckCard[]         @relation("UserDeckCards")
+  deckState             UserDeckState?         @relation("UserDeckState")
+  dictionaryEntries     DictionaryEntry[]      @relation("DictionaryEntryCreator")
+  userDictionaryEntries UserDictionaryEntry[]  @relation("UserDictionaryEntryUser")
   userDictionaryFolders UserDictionaryFolder[] @relation("UserDictionaryFolderUser")
-  
+
   texts Text[] @relation("text")
 
-  events UserEvent[] @relation("UserEventUser")
+  events       UserEvent[]     @relation("UserEventUser")
   wordContexts WordContext[]
   reviewLogs   UserReviewLog[] @relation("UserReviewLogs")
 
-  status        UserStatus @default(ACTIVE)
-  language      Language? @default(CHE)
-  level         Level? @default(A1)
+  status   UserStatus @default(ACTIVE)
+  language Language?  @default(CHE)
+  level    Level?     @default(A1)
 
-  lastActiveAt  DateTime?
-  trialEndsAt   DateTime? //пригодится для trial
-  signupAt      DateTime @default(now())
+  lastActiveAt DateTime?
+  trialEndsAt  DateTime? //пригодится для trial
+  signupAt     DateTime  @default(now())
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  deletedAt     DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
 
-  roles         UserRoleAssignment[]
+  roles UserRoleAssignment[]
 
-  subscriptions Subscription[]
-  payments      Payment[]
-  couponRedemptions CouponRedemption[]
-  sessions UserSession[]
-  featureFlags UserFeatureFlag[]
-  setFeatureFlagOverrides UserFeatureFlag[] @relation("UserFeatureFlagSetter")
-  createdFeatureFlags FeatureFlag[] @relation("FeatureFlagCreatedBy")
-  updatedFeatureFlags FeatureFlag[] @relation("FeatureFlagUpdatedBy")
+  subscriptions            Subscription[]
+  payments                 Payment[]
+  couponRedemptions        CouponRedemption[]
+  sessions                 UserSession[]
+  featureFlags             UserFeatureFlag[]
+  setFeatureFlagOverrides  UserFeatureFlag[]    @relation("UserFeatureFlagSetter")
+  createdFeatureFlags      FeatureFlag[]        @relation("FeatureFlagCreatedBy")
+  updatedFeatureFlags      FeatureFlag[]        @relation("FeatureFlagUpdatedBy")
   featureFlagHistoryEvents FeatureFlagHistory[] @relation("FeatureFlagHistoryActor")
 
-  feedbackThreads   FeedbackThread[]   @relation("UserFeedbackThreads")
-  assignedFeedbackThreads FeedbackThread[] @relation("FeedbackThreadAssignee")
-  delegatedFeedbackThreads FeedbackThread[] @relation("FeedbackThreadAssignedBy")
-  feedbackReactions FeedbackReaction[] @relation("UserFeedbackReactions")
+  feedbackThreads          FeedbackThread[]   @relation("UserFeedbackThreads")
+  assignedFeedbackThreads  FeedbackThread[]   @relation("FeedbackThreadAssignee")
+  delegatedFeedbackThreads FeedbackThread[]   @relation("FeedbackThreadAssignedBy")
+  feedbackReactions        FeedbackReaction[] @relation("UserFeedbackReactions")
 
-  bookmarks         UserTextBookmark[]
+  bookmarks             UserTextBookmark[]
   phrasebookSaves       UserPhrasebookSave[]
   phrasebookSuggestions PhrasebookSuggestion[]
 
@@ -308,7 +332,11 @@ model User {
   goals         UserGoals?
   notifications UserNotificationPreferences?
 
-  initiatedVersions TextProcessingVersion[] @relation("VersionInitiator")
+  passwordResetTokens PasswordResetToken[]
+  emailChangeTokens   EmailChangeToken[]
+
+  initiatedVersions     TextProcessingVersion[] @relation("VersionInitiator")
+  tokenizationJobs      TokenizationJob[]       @relation("TokenizationJobInitiator")
 
   @@index([status])
   @@index([language])
@@ -317,22 +345,22 @@ model User {
 }
 
 model FeatureFlag {
-  id          String   @id @default(uuid())
-  key         String   @unique
-  description String?
-  isEnabled   Boolean  @default(false)
-  category    FeatureFlagCategory @default(FUNCTIONAL)
-  environments FeatureFlagEnvironment[] @default([PROD, STAGE, DEV])
-  rolloutPercent Int @default(100)
-  createdById String?
-  updatedById String?
-  deletedAt   DateTime?
+  id             String                   @id @default(uuid())
+  key            String                   @unique
+  description    String?
+  isEnabled      Boolean                  @default(false)
+  category       FeatureFlagCategory      @default(FUNCTIONAL)
+  environments   FeatureFlagEnvironment[] @default([PROD, STAGE, DEV])
+  rolloutPercent Int                      @default(100)
+  createdById    String?
+  updatedById    String?
+  deletedAt      DateTime?
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  createdBy User? @relation("FeatureFlagCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  updatedBy User? @relation("FeatureFlagUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdBy     User?                @relation("FeatureFlagCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy     User?                @relation("FeatureFlagUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
   userOverrides UserFeatureFlag[]
   historyEvents FeatureFlagHistory[]
 
@@ -343,19 +371,19 @@ model FeatureFlag {
 }
 
 model UserFeatureFlag {
-  id            String   @id @default(uuid())
+  id            String  @id @default(uuid())
   userId        String
   featureFlagId String
   isEnabled     Boolean
   reason        String?
   setById       String?
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  featureFlag   FeatureFlag @relation(fields: [featureFlagId], references: [id], onDelete: Cascade)
-  setBy         User?       @relation("UserFeatureFlagSetter", fields: [setById], references: [id], onDelete: SetNull)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  featureFlag FeatureFlag @relation(fields: [featureFlagId], references: [id], onDelete: Cascade)
+  setBy       User?       @relation("UserFeatureFlagSetter", fields: [setById], references: [id], onDelete: SetNull)
 
   @@unique([userId, featureFlagId])
   @@index([featureFlagId])
@@ -373,8 +401,8 @@ model FeatureFlagHistory {
   actorId   String?
   createdAt DateTime                    @default(now())
 
-  flag      FeatureFlag? @relation(fields: [flagId], references: [id], onDelete: SetNull)
-  actor     User?        @relation("FeatureFlagHistoryActor", fields: [actorId], references: [id], onDelete: SetNull)
+  flag  FeatureFlag? @relation(fields: [flagId], references: [id], onDelete: SetNull)
+  actor User?        @relation("FeatureFlagHistoryActor", fields: [actorId], references: [id], onDelete: SetNull)
 
   @@index([flagId])
   @@index([flagKey])
@@ -385,38 +413,104 @@ model FeatureFlagHistory {
 }
 
 model UserSession {
-  id        String   @id @default(uuid())
-  userId    String
+  id     String @id @default(uuid())
+  userId String
 
   ipAddress String?
   userAgent String?
 
-  createdAt DateTime @default(now())
-  revokedAt DateTime?
+  createdAt    DateTime  @default(now())
+  lastActiveAt DateTime  @default(now())
+  revokedAt    DateTime?
 
-  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([createdAt])
+  @@index([lastActiveAt])
   @@map("user_session")
 }
 
+//////////////////////////////////////////////////////
+// PASSWORD RESET
+//////////////////////////////////////////////////////
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  // argon2-хеш сырого токена: в БД лежит хеш, в письме — сырой токен.
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  // аудит: кто запросил/использовал
+  requestIp        String?
+  requestUserAgent String?
+  consumedIp       String?
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
+}
+
+//////////////////////////////////////////////////////
+// EMAIL CHANGE
+//////////////////////////////////////////////////////
+
+// Токен подтверждения смены email. Письмо со ссылкой отправляется на НОВЫЙ адрес —
+// подтверждение = доказательство владения. На старый адрес отправляется уведомление
+// при подтверждении (чтобы юзер мог отреагировать на угон).
+model EmailChangeToken {
+  id        String    @id @default(uuid())
+  userId    String
+  newEmail  String
+  // argon2-хеш сырого токена; в письме — сырой токен (как у password reset).
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+
+  // аудит
+  requestIp        String?
+  requestUserAgent String?
+  consumedIp       String?
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("email_change_tokens")
+}
+
 model Plan {
-  id         String   @id @default(uuid())
-  code       String   @unique // e.g. "FREE", "PRO_MONTHLY"
-  name       String
-  type       PlanType
+  id   String   @id @default(uuid())
+  code String   @unique // e.g. "FREE", "PRO_MONTHLY"
+  name String
+  type PlanType
 
-  priceCents Int      @default(0)
-  currency   String   @default("USD")
-  interval   String?  // "month" | "year" | null (for lifetime/free)
-  isActive   Boolean  @default(true)
-  groupCode  String?  // links monthly/yearly variants (e.g. "PRO")
+  description String? // короткое описание для UI-карточки плана ("50 переводов в день · 500 слов в словаре")
 
-  limits     Json?
+  priceCents Int     @default(0)
+  currency   String  @default("USD")
+  interval   String? // "month" | "year" | null (for lifetime/free)
+  isActive   Boolean @default(true)
+  groupCode  String? // links monthly/yearly variants (e.g. "PRO")
 
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  trialDays Int @default(0) // длительность бесплатного триала в днях; 0 = триал недоступен
+
+  // ── Витринные поля для UI-карточки тарифа ──────────────────────────────────
+  displayColor      String? // hex/css-цвет акцента карточки (например, "#2254d3")
+  iconKey           String? // ключ иконки в дизайн-системе (например, "rocket")
+  highlightFeatures String[] @default([]) // 2–4 буллет-фичи для карточки в админке/витрине
+
+  limits Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   subscriptions Subscription[]
 
@@ -426,27 +520,27 @@ model Plan {
 }
 
 model Subscription {
-  id            String             @id @default(uuid())
-  userId        String
-  planId        String
+  id     String @id @default(uuid())
+  userId String
+  planId String
 
-  status        SubscriptionStatus @default(TRIALING)
-  isLifetime    Boolean            @default(false)
+  status     SubscriptionStatus @default(TRIALING)
+  isLifetime Boolean            @default(false)
 
-  startDate     DateTime
-  endDate       DateTime?
-  canceledAt    DateTime?
+  startDate  DateTime
+  endDate    DateTime?
+  canceledAt DateTime?
 
-  provider      PaymentProvider    @default(MANUAL)
+  provider      PaymentProvider @default(MANUAL)
   providerSubId String?
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  user          User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  plan          Plan @relation(fields: [planId], references: [id], onDelete: Restrict)
-  payments      Payment[]
-  events        SubscriptionEvent[]
+  user     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan     Plan                @relation(fields: [planId], references: [id], onDelete: Restrict)
+  payments Payment[]
+  events   SubscriptionEvent[]
 
   @@index([userId])
   @@index([planId])
@@ -455,23 +549,23 @@ model Subscription {
 }
 
 model Payment {
-  id                String         @id @default(uuid())
-  userId            String
-  subscriptionId    String?
+  id             String  @id @default(uuid())
+  userId         String
+  subscriptionId String?
 
   provider          PaymentProvider @default(MANUAL)
   providerPaymentId String?
 
-  status            PaymentStatus   @default(PENDING)
-  amountCents       Int
-  currency          String          @default("USD")
-  refundedCents     Int             @default(0)
+  status        PaymentStatus @default(PENDING)
+  amountCents   Int
+  currency      String        @default("USD")
+  refundedCents Int           @default(0)
 
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  subscription      Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
 
   couponRedemptions CouponRedemption[]
 
@@ -482,46 +576,46 @@ model Payment {
 }
 
 model Coupon {
-  id             String     @id @default(uuid())
-  code           String     @unique
-  name           String?    // human-readable label e.g. "Запуск платформы"
-  type           CouponType
-  amount         Int        // percent OR cents depending on type
+  id     String     @id @default(uuid())
+  code   String     @unique
+  name   String? // human-readable label e.g. "Запуск платформы"
+  type   CouponType
+  amount Int // percent OR cents depending on type
 
-  maxRedemptions  Int?
-  redeemedCount   Int       @default(0)
+  maxRedemptions Int?
+  redeemedCount  Int  @default(0)
 
-  validFrom       DateTime?
-  validUntil      DateTime?
+  validFrom  DateTime?
+  validUntil DateTime?
 
-  applicablePlans String[]  // plan codes this coupon applies to, [] = all plans
+  applicablePlans String[] // plan codes this coupon applies to, [] = all plans
 
-  maxPerUser      Int?      // max redemptions per single user (null = unlimited)
-  newUsersOnly    Boolean   @default(false) // only new users (no prior paid subscription)
-  isStackable     Boolean   @default(false) // can be combined with other coupons
+  maxPerUser   Int? // max redemptions per single user (null = unlimited)
+  newUsersOnly Boolean @default(false) // only new users (no prior paid subscription)
+  isStackable  Boolean @default(false) // can be combined with other coupons
 
-  isActive        Boolean   @default(true)
+  isActive Boolean @default(true)
 
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  redemptions     CouponRedemption[]
+  redemptions CouponRedemption[]
 
   @@index([isActive])
   @@map("coupon")
 }
 
 model CouponRedemption {
-  id        String   @id @default(uuid())
+  id        String  @id @default(uuid())
   couponId  String
   userId    String
   paymentId String?
 
   redeemedAt DateTime @default(now())
 
-  coupon   Coupon @relation(fields: [couponId], references: [id], onDelete: Cascade)
-  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  payment  Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  coupon  Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
 
   @@unique([couponId, userId])
   @@index([couponId])
@@ -533,11 +627,11 @@ model SubscriptionEvent {
   id             String                @id @default(uuid())
   subscriptionId String
   type           SubscriptionEventType
-  metadata       Json?                 // e.g. { fromPlan, toPlan, extendDays, reason }
+  metadata       Json? // e.g. { fromPlan, toPlan, extendDays, reason }
 
-  createdAt      DateTime              @default(now())
+  createdAt DateTime @default(now())
 
-  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
 
   @@index([subscriptionId])
   @@index([createdAt])
@@ -545,10 +639,10 @@ model SubscriptionEvent {
 }
 
 model Role {
-  id        String   @id @default(uuid())
-  name      RoleName @unique
+  id   String   @id @default(uuid())
+  name RoleName @unique
 
-  users     UserRoleAssignment[]
+  users       UserRoleAssignment[]
   permissions RolePermission[]
 
   createdAt DateTime @default(now())
@@ -558,10 +652,10 @@ model Role {
 }
 
 model Permission {
-  id        String          @id @default(uuid())
-  code      PermissionCode  @unique
+  id   String         @id @default(uuid())
+  code PermissionCode @unique
 
-  roles     RolePermission[]
+  roles RolePermission[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -584,8 +678,8 @@ model UserRoleAssignment {
   userId String
   roleId String
 
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role   Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
   assignedAt DateTime @default(now())
   assignedBy String?
@@ -600,15 +694,17 @@ model UserRoleAssignment {
 //////////////////////////////////////////////////////
 
 model UserDictionaryFolder {
-  id          String    @id @default(uuid())
+  id          String                @id @default(uuid())
   userId      String
-  name        String    // название папки
-  description String?   // описание папки
-  color       String?   // hex-цвет, напр. #2254d3
-  sortOrder   Int       @default(0)
-  updatedAt   DateTime  @updatedAt
-  user        User      @relation("UserDictionaryFolderUser", fields: [userId], references: [id], onDelete: Cascade)
+  name        String // название папки
+  description String? // описание папки
+  color       String? // hex-цвет, напр. #2254d3
+  icon        String? // ключ иконки, напр. "book", "leaf", "users"
+  sortOrder   Int                   @default(0)
+  updatedAt   DateTime              @updatedAt
+  user        User                  @relation("UserDictionaryFolderUser", fields: [userId], references: [id], onDelete: Cascade)
   entries     UserDictionaryEntry[] @relation("UserDictionaryEntryFolder")
+
   @@index([userId])
   @@map("user_dictionary_folder")
 }
@@ -618,52 +714,54 @@ model UserDictionaryFolder {
 //////////////////////////////////////////////////////
 
 model UserDictionaryEntry {
-  id               String   @id @default(uuid())
-  word             String   // как пользователь видит (или normalized)
-  normalized       String?  // для дедупликации и поиска
-  translation      String
-  addedAt          DateTime @default(now())
-  updatedAt        DateTime @updatedAt
-  learningLevel    WordStatus @default(NEW)  // NEW | LEARNING | KNOWN
-  cefrLevel        Level?                    // A1, A2, B1, B2
-  repetitionCount  Int      @default(0)
-  folderId         String?
-  lemmaId          String?  // опционально: связь с Lemma, если слово из словаря
-  
-  userId           String
-  user             User     @relation("UserDictionaryEntryUser", fields: [userId], references: [id], onDelete: Cascade)
-  
-  folder           UserDictionaryFolder? @relation("UserDictionaryEntryFolder", fields: [folderId], references: [id], onDelete: SetNull)
-  
-  lemma            Lemma?   @relation("UserDictionaryEntryLemma", fields: [lemmaId], references: [id], onDelete: SetNull)
-  @@unique([userId, normalized])  // одно и то же слово — одна запись на пользователя (при желании)
+  id              String     @id @default(uuid())
+  word            String // как пользователь видит (или normalized)
+  normalized      String? // для дедупликации и поиска
+  translation     String
+  addedAt         DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  learningLevel   WordStatus @default(NEW) // NEW | LEARNING | KNOWN
+  cefrLevel       Level? // A1, A2, B1, B2
+  repetitionCount Int        @default(0)
+  folderId        String?
+  lemmaId         String? // опционально: связь с Lemma, если слово из словаря
+
+  userId String
+  user   User   @relation("UserDictionaryEntryUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  folder UserDictionaryFolder? @relation("UserDictionaryEntryFolder", fields: [folderId], references: [id], onDelete: SetNull)
+
+  lemma Lemma? @relation("UserDictionaryEntryLemma", fields: [lemmaId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, normalized]) // одно и то же слово — одна запись на пользователя (при желании)
   @@index([userId])
   @@index([folderId])
   @@index([learningLevel])
   @@map("user_dictionary_entry")
 }
+
 //////////////////////////////////////////////////////
 // DICTIONARY CACHE (ONLINE)
 //////////////////////////////////////////////////////
 
 model DictionaryEntry {
-  id            String   @id @default(uuid())
+  id String @id @default(uuid())
 
-  externalId    String?
-  rawWord       String
-  rawWordAlt    String?
-  rawTranslate  String
-  notes         String?
+  externalId   String?
+  rawWord      String
+  rawWordAlt   String?
+  rawTranslate String
+  notes        String?
 
-  source        DictionarySource?
-  createdById   String?
+  source      DictionarySource?
+  createdById String?
 
-  cachedAt      DateTime @default(now())
-  createdBy     User?    @relation("DictionaryEntryCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  cachedAt  DateTime @default(now())
+  createdBy User?    @relation("DictionaryEntryCreator", fields: [createdById], references: [id], onDelete: SetNull)
 
-  headwords     Headword[]
-  senses        Sense[]
-  morphForms    MorphForm[]
+  headwords  Headword[]
+  senses     Sense[]
+  morphForms MorphForm[]
 
   @@index([rawWord])
   @@index([createdById])
@@ -671,14 +769,14 @@ model DictionaryEntry {
 }
 
 model DictionaryCache {
-  id          String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  normalized  String   @unique
+  normalized  String  @unique
   lemmaId     String?
   translation String?
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([normalized])
   @@map("dictionary_cache")
@@ -689,18 +787,18 @@ model DictionaryCache {
 //////////////////////////////////////////////////////
 
 model Headword {
-  id         String @id @default(uuid())
+  id String @id @default(uuid())
 
   entryId    String
   text       String
   normalized String
-  order      Int @default(0)
+  order      Int     @default(0)
   isPrimary  Boolean @default(false)
 
-  entry      DictionaryEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  entry DictionaryEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
 
-  lemmaId    String?
-  lemma      Lemma? @relation("HeadwordLemma", fields: [lemmaId], references: [id], onDelete: SetNull)
+  lemmaId String?
+  lemma   Lemma?  @relation("HeadwordLemma", fields: [lemmaId], references: [id], onDelete: SetNull)
 
   @@index([normalized])
   @@map("headword")
@@ -711,34 +809,40 @@ model Headword {
 //////////////////////////////////////////////////////
 
 model Lemma {
-  id            String @id @default(uuid())
+  id String @id @default(uuid())
 
-  baseForm      String
-  normalized    String
-  language      Language
+  baseForm        String
+  normalized      String
+  language        Language
   partOfSpeech    String?
   frequency       Int?
   transliteration String?
   level           Level?
+  audioUrl        String? // URL TTS/записи произношения
+  declensionClass String? // например "эргативный класс" — для подзаголовка таблицы склонений
+  domain          String? // тематика / domain (свободная строка): "повседневная речь", "религия" и т.п.
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  headwords     Headword[] @relation("HeadwordLemma")
+  headwords             Headword[]            @relation("HeadwordLemma")
   userDictionaryEntries UserDictionaryEntry[] @relation("UserDictionaryEntryLemma")
-  morphForms    MorphForm[]
-  tokenAnalyses TokenAnalysis[] @relation("TokenLemma")
-  vocabulary TextVocabulary[]
-  wordProgress  UserWordProgress[]
-  wordContexts  WordContext[]
-  deckCards     UserDeckCard[] @relation("LemmaDeckCards")
-  reviewLogs    UserReviewLog[] @relation("LemmaReviewLogs")
+  morphForms            MorphForm[]
+  tokenAnalyses         TokenAnalysis[]       @relation("TokenLemma")
+  vocabulary            TextVocabulary[]
+  wordProgress          UserWordProgress[]
+  wordContexts          WordContext[]
+  deckCards             UserDeckCard[]        @relation("LemmaDeckCards")
+  reviewLogs            UserReviewLog[]       @relation("LemmaReviewLogs")
+
+  relations        WordRelation[] @relation("WordRelationLemma")
+  inverseRelations WordRelation[] @relation("WordRelationRelated")
 
   feedbackThreads   FeedbackThread[]   @relation("LemmaFeedbackThreads")
   feedbackReactions FeedbackReaction[] @relation("LemmaFeedbackReactions")
 
   @@unique([normalized, language])
   @@index([normalized])
-  @@index([language, normalized])   // ← добавить
+  @@index([language, normalized]) // ← добавить
   @@map("lemma")
 }
 
@@ -747,22 +851,22 @@ model Lemma {
 //////////////////////////////////////////////////////
 
 model MorphologyRule {
-  id          String        @id @default(uuid())
+  id String @id @default(uuid())
 
   suffix      String
   add         String?
   pos         String?
   description String?
-  isRegex     Boolean       @default(false)
-  matchCount  Int           @default(0)
+  isRegex     Boolean @default(false)
+  matchCount  Int     @default(0)
 
-  type        MorphRuleType
-  language    Language      @default(CHE)
-  priority    Int           @default(0)
-  isActive    Boolean       @default(true)
+  type     MorphRuleType
+  language Language      @default(CHE)
+  priority Int           @default(0)
+  isActive Boolean       @default(true)
 
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([suffix, type, language])
   @@index([type, isActive, language])
@@ -775,25 +879,45 @@ model MorphologyRule {
 //////////////////////////////////////////////////////
 
 model MorphForm {
-  id          String @id @default(uuid())
+  id String @id @default(uuid())
 
   form        String
   normalized  String
   grammarTag  String?
+  translation String? // перевод формы для столбца «Значение» в таблице склонений (например "языка", "языку")
 
-  gramCase    GrammaticalCase?
-  gramNumber  GrammaticalNumber?
+  gramCase   GrammaticalCase?
+  gramNumber GrammaticalNumber?
 
-  lemmaId     String
-  entryId     String?
+  lemmaId String
+  entryId String?
 
-  lemma       Lemma @relation(fields: [lemmaId], references: [id], onDelete: Cascade)
-  entry       DictionaryEntry? @relation(fields: [entryId], references: [id], onDelete: SetNull)
+  lemma Lemma            @relation(fields: [lemmaId], references: [id], onDelete: Cascade)
+  entry DictionaryEntry? @relation(fields: [entryId], references: [id], onDelete: SetNull)
 
-  @@index([normalized])
   @@unique([normalized, lemmaId])
-
+  @@index([normalized])
   @@map("morph_form")
+}
+
+//////////////////////////////////////////////////////
+// WORD RELATIONS (synonyms / antonyms / derived / family)
+//////////////////////////////////////////////////////
+
+model WordRelation {
+  id String @id @default(uuid())
+
+  lemmaId        String
+  relatedLemmaId String
+  type           WordRelationType
+
+  lemma   Lemma @relation("WordRelationLemma", fields: [lemmaId], references: [id], onDelete: Cascade)
+  related Lemma @relation("WordRelationRelated", fields: [relatedLemmaId], references: [id], onDelete: Cascade)
+
+  @@unique([lemmaId, relatedLemmaId, type])
+  @@index([lemmaId])
+  @@index([relatedLemmaId])
+  @@map("word_relation")
 }
 
 //////////////////////////////////////////////////////
@@ -801,27 +925,35 @@ model MorphForm {
 //////////////////////////////////////////////////////
 
 model Sense {
-  id         String @id @default(uuid())
+  id String @id @default(uuid())
 
   entryId    String
   order      Int
   definition String
   notes      String?
 
-  entry      DictionaryEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  entry DictionaryEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
 
-  examples   Example[]
+  examples Example[]
+
   @@map("sense")
 }
 
 model Example {
-  id          String @id @default(uuid())
+  id String @id @default(uuid())
 
   senseId     String
   text        String
   translation String?
 
-  sense       Sense @relation(fields: [senseId], references: [id], onDelete: Cascade)
+  // Источник примера: либо текст из базы (sourceTextId), либо свободная подпись (sourceText)
+  sourceText   String?
+  sourceTextId String?
+
+  sense  Sense @relation(fields: [senseId], references: [id], onDelete: Cascade)
+  source Text? @relation("ExampleSourceText", fields: [sourceTextId], references: [id], onDelete: SetNull)
+
+  @@index([sourceTextId])
   @@map("example")
 }
 
@@ -830,18 +962,18 @@ model Example {
 //////////////////////////////////////////////////////
 
 model UnknownWord {
-  id          String            @id @default(uuid())
+  id String @id @default(uuid())
 
-  word        String
-  normalized  String
+  word       String
+  normalized String
 
-  seenCount   Int               @default(1)
+  seenCount Int @default(1)
 
-  status      UnknownWordStatus @default(PENDING)
-  resolvedAt  DateTime?
+  status     UnknownWordStatus @default(PENDING)
+  resolvedAt DateTime?
 
-  firstSeen   DateTime          @default(now())
-  lastSeen    DateTime          @default(now())
+  firstSeen DateTime @default(now())
+  lastSeen  DateTime @default(now())
 
   lastTokenId String?
   lastTextId  String?
@@ -855,15 +987,15 @@ model UnknownWord {
 //////////////////////////////////////////////////////
 
 model UserEvent {
-  id        String       @id @default(uuid())
+  id String @id @default(uuid())
 
-  userId    String
-  type      UserEventType
+  userId String
+  type   UserEventType
 
   metadata  Json?
-  createdAt DateTime     @default(now())
+  createdAt DateTime @default(now())
 
-  user      User @relation("UserEventUser", fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation("UserEventUser", fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([type])
@@ -877,8 +1009,8 @@ model UserEvent {
 //////////////////////////////////////////////////////
 
 model Tag {
-  id    String @id @default(uuid())
-  name  String @unique
+  id   String @id @default(uuid())
+  name String @unique
 
   texts TextTag[]
 
@@ -900,7 +1032,7 @@ model TextTag {
 }
 
 model Text {
-  id          String   @id @default(uuid())
+  id String @id @default(uuid())
 
   title       String
   description String?
@@ -921,33 +1053,35 @@ model Text {
   useNormalization   Boolean @default(true)
   useMorphAnalysis   Boolean @default(false)
 
-  createdById   String
-  createdBy     User @relation("text", fields: [createdById], references: [id], onDelete: Cascade)
+  createdById String
+  createdBy   User   @relation("text", fields: [createdById], references: [id], onDelete: Cascade)
 
-  pages         TextPage[]
-  tags          TextTag[]
+  pages TextPage[]
+  tags  TextTag[]
 
   processingVersions TextProcessingVersion[]
+  tokenizationJobs   TokenizationJob[]
   progress           UserTextProgress[]
   wordContexts       WordContext[]
+  exampleSources     Example[]               @relation("ExampleSourceText")
 
   feedbackThreads   FeedbackThread[]   @relation("TextFeedbackThreads")
   feedbackReactions FeedbackReaction[] @relation("TextFeedbackReactions")
 
-  bookmarks         UserTextBookmark[]
+  bookmarks UserTextBookmark[]
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([publishedAt])
   @@map("text")
 }
 
 model TextPage {
-  id        String @id @default(cuid())
+  id String @id @default(cuid())
 
-  textId    String
-  text      Text   @relation(fields: [textId], references: [id], onDelete: Cascade)
+  textId String
+  text   Text   @relation(fields: [textId], references: [id], onDelete: Cascade)
 
   pageNumber Int
   title      String?
@@ -955,10 +1089,10 @@ model TextPage {
   contentRich Json
   contentRaw  String
 
-  tokens    TextToken[]
+  tokens TextToken[]
 
   createdAt DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  updatedAt DateTime @updatedAt
 
   @@index([textId, pageNumber])
   @@map("text_page")
@@ -969,21 +1103,21 @@ model TextPage {
 //////////////////////////////////////////////////////
 
 model TextProcessingVersion {
-  id        String   @id @default(uuid())
+  id String @id @default(uuid())
 
-  textId    String
-  version   Int
+  textId  String
+  version Int
 
-  status        ProcessingStatus  @default(RUNNING)
-  progress      Int               @default(0)
-  errorMessage  String?
-  durationMs    Int?
+  status       ProcessingStatus @default(RUNNING)
+  progress     Int              @default(0)
+  errorMessage String?
+  durationMs   Int?
 
-  isCurrent     Boolean           @default(false)
+  isCurrent Boolean @default(false)
 
-  trigger       ProcessingTrigger @default(MANUAL)
-  initiatorId   String?
-  label         String?
+  trigger     ProcessingTrigger @default(MANUAL)
+  initiatorId String?
+  label       String?
 
   useNormalization Boolean @default(true)
   useMorphAnalysis Boolean @default(true)
@@ -991,11 +1125,11 @@ model TextProcessingVersion {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  text      Text  @relation(fields: [textId], references: [id], onDelete: Cascade)
-  initiator User? @relation("VersionInitiator", fields: [initiatorId], references: [id], onDelete: SetNull)
-  tokens    TextToken[]
+  text       Text             @relation(fields: [textId], references: [id], onDelete: Cascade)
+  initiator  User?            @relation("VersionInitiator", fields: [initiatorId], references: [id], onDelete: SetNull)
+  tokens     TextToken[]
   vocabulary TextVocabulary[]
-  logs      TextVersionLog[]
+  logs       TextVersionLog[]
 
   @@unique([textId, version])
   @@index([textId, isCurrent])
@@ -1009,7 +1143,7 @@ model TextVersionLog {
   level     LogLevel
   message   String
 
-  version   TextProcessingVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  version TextProcessingVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
 
   @@index([versionId])
   @@map("text_version_log")
@@ -1020,27 +1154,27 @@ model TextVersionLog {
 //////////////////////////////////////////////////////
 
 model TextToken {
-  id            String      @id @default(cuid())
+  id String @id @default(cuid())
 
-  versionId     String
-  pageId        String?   // опционально для обратной совместимости; при токенизации всегда задаётся
-  position      Int
+  versionId String
+  pageId    String? // опционально для обратной совместимости; при токенизации всегда задаётся
+  position  Int
 
-  original      String
-  normalized    String
+  original   String
+  normalized String
 
   /// Смещение в contentRaw страницы (символы), для замены слова в тексте при редактировании токена
-  startOffset   Int?
-  endOffset     Int?
+  startOffset Int?
+  endOffset   Int?
 
-  status        TokenStatus @default(ANALYZED)
+  status TokenStatus @default(ANALYZED)
 
-  vocabId       String?
-  vocabulary    TextVocabulary? @relation(fields: [vocabId], references: [id], onDelete: SetNull)
+  vocabId    String?
+  vocabulary TextVocabulary? @relation(fields: [vocabId], references: [id], onDelete: SetNull)
 
-  version       TextProcessingVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
-  page          TextPage?  @relation(fields: [pageId], references: [id], onDelete: Cascade)
-  analyses      TokenAnalysis[]
+  version  TextProcessingVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  page     TextPage?             @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  analyses TokenAnalysis[]
 
   @@index([normalized])
   @@index([versionId, position])
@@ -1054,24 +1188,24 @@ model TextToken {
 //////////////////////////////////////////////////////
 
 model TextVocabulary {
-  id          String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  versionId   String
-  normalized  String
+  versionId  String
+  normalized String
 
   lemmaId     String?
   translation String?
 
-  createdAt   DateTime @default(now())
+  createdAt DateTime @default(now())
 
-  version     TextProcessingVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
-  lemma       Lemma? @relation(fields: [lemmaId], references: [id], onDelete: SetNull)
+  version TextProcessingVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  lemma   Lemma?                @relation(fields: [lemmaId], references: [id], onDelete: SetNull)
 
-  tokens      TextToken[]
+  tokens TextToken[]
 
   @@unique([versionId, normalized])
   @@index([normalized])
-  @@index([versionId])  
+  @@index([versionId])
   @@map("text_vocabulary")
 }
 
@@ -1080,18 +1214,18 @@ model TextVocabulary {
 //////////////////////////////////////////////////////
 
 model TokenAnalysis {
-  id          String  @id @default(cuid())
+  id String @id @default(cuid())
 
-  tokenId     String
-  lemmaId     String?
+  tokenId String
+  lemmaId String?
 
-  source      AnalysisSource
+  source AnalysisSource
 
   probability Float?
   isPrimary   Boolean @default(false)
 
-  token       TextToken @relation(fields: [tokenId], references: [id], onDelete: Cascade)
-  lemma       Lemma? @relation("TokenLemma", fields: [lemmaId], references: [id], onDelete: SetNull)
+  token TextToken @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  lemma Lemma?    @relation("TokenLemma", fields: [lemmaId], references: [id], onDelete: SetNull)
 
   @@index([lemmaId])
   @@index([tokenId])
@@ -1115,28 +1249,53 @@ model TokenizationSettings {
 }
 
 //////////////////////////////////////////////////////
+// TOKENIZATION JOB QUEUE
+//////////////////////////////////////////////////////
+
+model TokenizationJob {
+  id            String            @id @default(cuid())
+  textId        String
+  status        JobStatus         @default(PENDING)
+  queuePosition Int?
+  trigger       ProcessingTrigger @default(MANUAL)
+  initiatorId   String?
+  createdAt     DateTime          @default(now())
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  error         String?
+
+  text      Text  @relation(fields: [textId], references: [id], onDelete: Cascade)
+  initiator User? @relation("TokenizationJobInitiator", fields: [initiatorId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([textId])
+  @@index([status, createdAt])
+  @@map("tokenization_job")
+}
+
+//////////////////////////////////////////////////////
 // USER WORD PROGRESS
 //////////////////////////////////////////////////////
 
 model UserWordProgress {
-  id          String     @id @default(cuid())
+  id String @id @default(cuid())
 
-  userId      String
-  lemmaId     String
+  userId  String
+  lemmaId String
 
-  status      WordStatus @default(NEW)
+  status WordStatus @default(NEW)
 
-  seenCount   Int        @default(0)
-  repetitions Int        @default(0)
+  seenCount   Int @default(0)
+  repetitions Int @default(0)
 
-  lastSeen    DateTime?
-  nextReview  DateTime?
+  lastSeen   DateTime?
+  nextReview DateTime?
 
-  easeFactor  Float      @default(2.5)
-  interval    Int        @default(0)
+  easeFactor Float @default(2.5)
+  interval   Int   @default(0)
 
-  user        User  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  lemma       Lemma @relation(fields: [lemmaId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lemma Lemma @relation(fields: [lemmaId], references: [id], onDelete: Cascade)
 
   @@unique([userId, lemmaId])
   @@index([userId])
@@ -1150,7 +1309,7 @@ model UserWordProgress {
 //////////////////////////////////////////////////////
 
 model WordContext {
-  id      String   @id @default(cuid())
+  id String @id @default(cuid())
 
   userId  String
   lemmaId String
@@ -1159,11 +1318,11 @@ model WordContext {
   word    String
   snippet String?
 
-  seenAt  DateTime @default(now())
+  seenAt DateTime @default(now())
 
-  user    User  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  lemma   Lemma @relation(fields: [lemmaId], references: [id], onDelete: Cascade)
-  text    Text  @relation(fields: [textId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lemma Lemma @relation(fields: [lemmaId], references: [id], onDelete: Cascade)
+  text  Text  @relation(fields: [textId], references: [id], onDelete: Cascade)
 
   @@unique([userId, lemmaId, textId])
   @@index([userId, lemmaId])
@@ -1175,33 +1334,39 @@ model WordContext {
 //////////////////////////////////////////////////////
 
 model UserTextProgress {
-  id              String   @id @default(uuid())
+  id String @id @default(uuid())
 
-  userId          String
-  textId          String
+  userId String
+  textId String
 
-  progressPercent Float    @default(0)
+  progressPercent Float     @default(0)
   lastOpened      DateTime?
+  // Last page the user opened. Reflects reading position; independent of progressPercent
+  // (which is the share of KNOWN words). Used by getPage and continue-reading.
+  lastPageNumber  Int       @default(1)
+  // Set once when progressPercent first reaches 100. Used for "Texts read in period" stat.
+  completedAt     DateTime?
 
-  user            User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  text            Text @relation(fields: [textId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  text Text @relation(fields: [textId], references: [id], onDelete: Cascade)
 
   @@unique([userId, textId])
   @@index([userId])
   @@index([textId])
+  @@index([userId, completedAt])
   @@map("user_text_progress")
 }
 
 model UserTextBookmark {
-  id        String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  userId    String
-  textId    String
+  userId String
+  textId String
 
   createdAt DateTime @default(now())
 
-  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  text      Text @relation(fields: [textId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  text Text @relation(fields: [textId], references: [id], onDelete: Cascade)
 
   @@unique([userId, textId])
   @@index([userId])
@@ -1213,17 +1378,17 @@ model UserTextBookmark {
 //////////////////////////////////////////////////////
 
 model UserDeckCard {
-  id         String   @id @default(cuid())
+  id String @id @default(cuid())
 
   userId     String
   lemmaId    String
   deckType   DeckType
-  deckNumber Int?     // только для deckType = NUMBERED
+  deckNumber Int? // только для deckType = NUMBERED
 
-  movedAt    DateTime @default(now()) // когда перемещено в текущую колоду
+  movedAt DateTime @default(now()) // когда перемещено в текущую колоду
 
-  user       User  @relation("UserDeckCards", fields: [userId], references: [id], onDelete: Cascade)
-  lemma      Lemma @relation("LemmaDeckCards", fields: [lemmaId], references: [id], onDelete: Cascade)
+  user  User  @relation("UserDeckCards", fields: [userId], references: [id], onDelete: Cascade)
+  lemma Lemma @relation("LemmaDeckCards", fields: [lemmaId], references: [id], onDelete: Cascade)
 
   @@unique([userId, lemmaId])
   @@index([userId, deckType])
@@ -1232,16 +1397,16 @@ model UserDeckCard {
 }
 
 model UserDeckState {
-  userId              String    @id
+  userId String @id
 
   isEnabled           Boolean   @default(true) // включить/выключить метод дек
   currentNumberedDeck Int       @default(1)
   lastRotatedAt       DateTime?
 
-  dailyWordCount      Int       @default(5)  // сколько слов предлагать в день (3 | 5 | 10)
-  deckMaxSize         Int       @default(90) // максимальный размер каждой колоды
+  dailyWordCount Int @default(5) // сколько слов предлагать в день (3 | 5 | 10)
+  deckMaxSize    Int @default(90) // максимальный размер каждой колоды
 
-  user                User @relation("UserDeckState", fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation("UserDeckState", fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_deck_state")
 }
@@ -1251,10 +1416,10 @@ model UserDeckState {
 //////////////////////////////////////////////////////
 
 model PhrasebookCategory {
-  id        String   @id @default(uuid())
+  id        String @id @default(uuid())
   emoji     String
   name      String
-  sortOrder Int      @default(0)
+  sortOrder Int    @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1266,21 +1431,21 @@ model PhrasebookCategory {
 }
 
 model PhrasebookPhrase {
-  id               String   @id @default(uuid())
-  categoryId       String
-  original         String
-  transliteration  String?
-  translation      String
-  lang             Language
-  sortOrder        Int      @default(0)
+  id              String   @id @default(uuid())
+  categoryId      String
+  original        String
+  transliteration String?
+  translation     String
+  lang            Language
+  sortOrder       Int      @default(0)
 
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  category         PhrasebookCategory       @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  words            PhrasebookPhraseWord[]
-  examples         PhrasebookPhraseExample[]
-  saves            UserPhrasebookSave[]
+  category PhrasebookCategory        @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  words    PhrasebookPhraseWord[]
+  examples PhrasebookPhraseExample[]
+  saves    UserPhrasebookSave[]
 
   @@index([categoryId])
   @@index([lang])
@@ -1294,7 +1459,7 @@ model PhrasebookPhraseWord {
   translation String
   position    Int    @default(0)
 
-  phrase      PhrasebookPhrase @relation(fields: [phraseId], references: [id], onDelete: Cascade)
+  phrase PhrasebookPhrase @relation(fields: [phraseId], references: [id], onDelete: Cascade)
 
   @@index([phraseId])
   @@map("phrasebook_phrase_word")
@@ -1322,24 +1487,24 @@ model PhrasebookSuggestion {
   context     String?
   categoryId  String?
 
-  createdAt   DateTime @default(now())
+  createdAt DateTime @default(now())
 
-  user        User?                @relation(fields: [userId], references: [id], onDelete: SetNull)
-  category    PhrasebookCategory?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  user     User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+  category PhrasebookCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@map("phrasebook_suggestion")
 }
 
 model UserPhrasebookSave {
-  id        String   @id @default(cuid())
-  userId    String
-  phraseId  String
+  id       String @id @default(cuid())
+  userId   String
+  phraseId String
 
   createdAt DateTime @default(now())
 
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  phrase    PhrasebookPhrase @relation(fields: [phraseId], references: [id], onDelete: Cascade)
+  user   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  phrase PhrasebookPhrase @relation(fields: [phraseId], references: [id], onDelete: Cascade)
 
   @@unique([userId, phraseId])
   @@index([userId])
@@ -1415,16 +1580,16 @@ model FeedbackThread {
   contextPosition Int?
   contextAction   String?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
   closedAt  DateTime?
 
-  user             User   @relation("UserFeedbackThreads", fields: [userId], references: [id], onDelete: Cascade)
-  assigneeAdmin    User?  @relation("FeedbackThreadAssignee", fields: [assigneeAdminId], references: [id], onDelete: SetNull)
-  assignedByAdmin  User?  @relation("FeedbackThreadAssignedBy", fields: [assignedByAdminId], references: [id], onDelete: SetNull)
-  lemma            Lemma? @relation("LemmaFeedbackThreads", fields: [contextLemmaId], references: [id], onDelete: SetNull)
-  text             Text?  @relation("TextFeedbackThreads", fields: [contextTextId], references: [id], onDelete: SetNull)
-  messages FeedbackMessage[]
+  user            User              @relation("UserFeedbackThreads", fields: [userId], references: [id], onDelete: Cascade)
+  assigneeAdmin   User?             @relation("FeedbackThreadAssignee", fields: [assigneeAdminId], references: [id], onDelete: SetNull)
+  assignedByAdmin User?             @relation("FeedbackThreadAssignedBy", fields: [assignedByAdminId], references: [id], onDelete: SetNull)
+  lemma           Lemma?            @relation("LemmaFeedbackThreads", fields: [contextLemmaId], references: [id], onDelete: SetNull)
+  text            Text?             @relation("TextFeedbackThreads", fields: [contextTextId], references: [id], onDelete: SetNull)
+  messages        FeedbackMessage[]
 
   @@index([userId])
   @@index([status])
@@ -1481,12 +1646,16 @@ model FeedbackReaction {
 //////////////////////////////////////////////////////
 
 model UserReviewLog {
-  id        String   @id @default(cuid())
+  id String @id @default(cuid())
 
-  userId    String
-  lemmaId   String
-  quality   Int      // 0-5
-  correct   Boolean  // quality >= 3
+  userId  String
+  lemmaId String
+  quality Int // 0-5
+  correct Boolean // quality >= 3
+
+  // Снимок SM-2 интервала вокруг ответа: фронт рисует прирост «+2 д» или «сброс»
+  intervalBefore Int?
+  intervalAfter  Int?
 
   createdAt DateTime @default(now())
 
@@ -1503,15 +1672,15 @@ model UserReviewLog {
 //////////////////////////////////////////////////////
 
 model UserPreferences {
-  userId         String  @id
+  userId String @id
 
   // Внешний вид
-  theme          String  @default("LIGHT")  // LIGHT | DARK | SYSTEM
-  uiLanguage     String  @default("RU")
+  theme      String @default("LIGHT") // LIGHT | DARK | SYSTEM
+  uiLanguage String @default("RU")
 
   // Ридер
   fontSize       Int     @default(16)
-  popupMode      String  @default("POPUP")  // POPUP | SIDEBAR | BOTH
+  popupMode      String  @default("POPUP") // POPUP | SIDEBAR | BOTH
   highlightKnown Boolean @default(true)
   showProgress   Boolean @default(true)
   autoNextPage   Boolean @default(false)
@@ -1520,26 +1689,33 @@ model UserPreferences {
   autoAddOnClick      Boolean @default(false)
   showGrammar         Boolean @default(true)
   showExamples        Boolean @default(true)
-  translationLanguage String  @default("RU")  // RU | EN | AR
+  translationLanguage String  @default("RU") // RU | EN | AR
 
-  user           User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // In-app напоминание о повторении на главной (отдельно от email-флага в UserNotificationPreferences)
+  showReviewReminder Boolean @default(true)
+
+  // Premium-фича: авторская система деков заучивания (NEW / OLD / RETIRED)
+  enableDecks Boolean @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_preferences")
 }
 
 model UserGoals {
-  userId       String @id
+  userId String @id
 
-  dailyWords   Int    @default(10)  // 5 | 10 | 20 | 30 | 50
-  dailyMinutes Int    @default(15)  // 5 | 15 | 30 | 60
+  dailyWords     Int @default(10)  // 5 | 10 | 20 | 30 | 50
+  dailyMinutes   Int @default(15)  // 5 | 15 | 30 | 60
+  vocabularyGoal Int @default(800) // total active vocabulary target (drives /statistics donut)
 
-  user         User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_goals")
 }
 
 model UserNotificationPreferences {
-  userId         String  @id
+  userId String @id
 
   repeatReminder Boolean @default(true)
   weeklyReport   Boolean @default(true)
@@ -1547,10 +1723,33 @@ model UserNotificationPreferences {
   supportReplies Boolean @default(true)
   marketing      Boolean @default(false)
 
-  reminderTime   String  @default("09:00")
-  timezone       String  @default("UTC+3")
+  reminderTime String @default("09:00")
+  timezone     String @default("Europe/Moscow") // IANA tz, нужно для cron-планировщика email-напоминаний
 
-  user           User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_notification_preferences")
+}
+
+/// Юридические/информационные страницы (Privacy, Terms, Contact и т.п.).
+/// Хранятся per-language: один документ — одна пара (slug, lang).
+/// Публичный эндпоинт отдаёт только опубликованные; админ видит и черновики.
+model LegalDocument {
+  id   String @id @default(uuid())
+  slug String // "privacy", "terms", "contact"
+  lang String // "ru" | "che" | "en" | "ar"
+
+  title   String
+  content String // Markdown
+
+  version     Int       @default(1) // увеличивается при правке content (для аудита/ToS-acceptance)
+  isPublished Boolean   @default(false)
+  publishedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([slug, lang])
+  @@index([slug, isPublished])
+  @@map("legal_document")
 }

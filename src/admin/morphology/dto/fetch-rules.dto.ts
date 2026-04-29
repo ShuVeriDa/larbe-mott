@@ -3,6 +3,9 @@ import { Language, MorphRuleType } from "@prisma/client";
 import { Type } from "class-transformer";
 import { IsEnum, IsIn, IsInt, IsOptional, IsString, Max, Min } from "class-validator";
 
+export type RuleSortBy = "suffix" | "priority" | "matchCount";
+export type SortOrder = "asc" | "desc";
+
 export class FetchRulesDto {
   @ApiPropertyOptional({ description: "Search in suffix and description" })
   @IsOptional()
@@ -47,4 +50,14 @@ export class FetchRulesDto {
   @Min(1)
   @Max(100)
   limit?: number = 50;
+
+  @ApiPropertyOptional({ enum: ["suffix", "priority", "matchCount"], default: "priority" })
+  @IsOptional()
+  @IsIn(["suffix", "priority", "matchCount"])
+  sortBy?: RuleSortBy;
+
+  @ApiPropertyOptional({ enum: ["asc", "desc"], default: "desc" })
+  @IsOptional()
+  @IsIn(["asc", "desc"])
+  sortOrder?: SortOrder;
 }

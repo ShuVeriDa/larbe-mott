@@ -3,12 +3,14 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Param,
   Patch,
   Post,
   Query,
+  Res,
 } from "@nestjs/common";
 import {
   ApiBearerAuth,
@@ -19,19 +21,25 @@ import {
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
 import { PermissionCode } from "@prisma/client";
+import type { Response } from "express";
 import { AdminPermission } from "src/auth/decorators/admin-permission.decorator";
 import { User } from "src/user/decorators/user.decorator";
 import { AdminBillingService } from "./admin-billing.service";
+import { CancelSubscriptionDto } from "./dto/cancel-subscription.dto";
 import { CreateCouponDto } from "./dto/create-coupon.dto";
+import { CreateManualSubscriptionDto } from "./dto/create-manual-subscription.dto";
 import { CreatePlanDto } from "./dto/create-plan.dto";
 import { CreateSubscriptionDto } from "./dto/create-subscription.dto";
 import { ExtendSubscriptionDto } from "./dto/extend-subscription.dto";
 import { FetchCouponsDto } from "./dto/fetch-coupons.dto";
 import { FetchPaymentsDto } from "./dto/fetch-payments.dto";
+import { FetchPlansDto } from "./dto/fetch-plans.dto";
 import { FetchSubscriptionsDto } from "./dto/fetch-subscriptions.dto";
 import { RefundPaymentDto } from "./dto/refund-payment.dto";
+import { SendReceiptDto } from "./dto/send-receipt.dto";
 import { UpdateCouponDto } from "./dto/update-coupon.dto";
 import { UpdatePlanDto } from "./dto/update-plan.dto";
+import { UpdatePlanLimitsDto } from "./dto/update-plan-limits.dto";
 
 @ApiTags("admin/billing")
 @ApiBearerAuth()
@@ -49,10 +57,13 @@ export class AdminBillingController {
   @ApiOperation({
     summary: "Billing KPI stats",
     description:
-      "Returns payingCount, totalUsers, MRR, ARR, conversionRate (last 30 days), churnRate (last 30 days).",
+      "Returns payingCount, totalUsers, MRR, ARR, conversionRate, churnRate за последние 30 дней, " +
+      "а также дельты к предыдущему 30-дневному периоду: payingDeltaLast30 (шт), mrrGrowthPct (%), " +
+      "conversionDeltaPp (пп), churnDeltaPp (пп). mrrGrowthPct = null, если MRR 30 дней назад был 0.",
   })
   @ApiOkResponse({
-    description: "{ payingCount, totalUsers, mrrCents, arrCents, conversionRate, churnRate }",
+    description:
+      "{ payingCount, totalUsers, mrrCents, arrCents, conversionRate, churnRate, payingDeltaLast30, mrrGrowthPct, conversionDeltaPp, churnDeltaPp }",
   })
   getBillingStats() {
     return this.billing.getBillingStats();
@@ -84,11 +95,12 @@ export class AdminBillingController {
   @Get("plans")
   @ApiOperation({
     summary: "List plans",
-    description: "Returns all plans (active and inactive) with subscriberCount.",
+    description:
+      "Returns plans with subscriberCount. Filters: onlyActive (true → только isActive), type, groupCode.",
   })
   @ApiOkResponse({ description: "Array of plans with subscriberCount." })
-  getPlans() {
-    return this.billing.getPlans();
+  getPlans(@Query() dto: FetchPlansDto) {
+    return this.billing.getPlans(dto);
   }
 
   @AdminPermission(PermissionCode.CAN_MANAGE_BILLING)
@@ -107,11 +119,52 @@ export class AdminBillingController {
   @ApiOperation({
     summary: "Update plan",
     description:
-      "Updates plan fields (name, prices, description, isActive, limits). Pass limits to update the full JSON limits object.",
+      "Updates plan fields (name, prices, description, isActive, limits, groupCode, displayColor, iconKey, highlightFeatures). Pass limits to replace the full JSON limits object — для частичного апдейта используйте PATCH /admin/plans/:id/limits.",
   })
   @ApiOkResponse({ description: "Updated plan." })
   updatePlan(@Param("id") id: string, @Body() dto: UpdatePlanDto) {
     return this.billing.updatePlan(id, dto);
+  }
+
+  @AdminPermission(PermissionCode.CAN_MANAGE_BILLING)
+  @Patch("plans/:id/limits")
+  @ApiOperation({
+    summary: "Update plan limits (partial merge)",
+    description:
+      "Частично обновляет JSON-объект лимитов плана: переданная дельта мерджится с текущим plan.limits, " +
+      "поэтому фронт может слать только изменённые поля. Передайте replace=true чтобы заменить лимиты целиком.",
+  })
+  @ApiOkResponse({ description: "Updated plan." })
+  updatePlanLimits(
+    @Param("id") id: string,
+    @Body() dto: UpdatePlanLimitsDto,
+  ) {
+    return this.billing.updatePlanLimits(id, dto);
+  }
+
+  @AdminPermission(PermissionCode.CAN_MANAGE_BILLING)
+  @Post("plans/:id/deactivate")
+  @ApiOperation({
+    summary: "Deactivate plan",
+    description:
+      "Sets isActive=false. Безопасная альтернатива удалению — у плана могут быть активные подписки.",
+  })
+  @ApiOkResponse({ description: "Updated plan with isActive=false." })
+  deactivatePlan(@Param("id") id: string) {
+    return this.billing.deactivatePlan(id);
+  }
+
+  @AdminPermission(PermissionCode.CAN_MANAGE_BILLING)
+  @Delete("plans/:id")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary: "Delete plan",
+    description:
+      "Permanently deletes a plan. Returns 409 если у плана есть подписки (любой статус) — в этом случае используйте deactivate.",
+  })
+  @ApiNoContentResponse({ description: "Plan deleted." })
+  deletePlan(@Param("id") id: string) {
+    return this.billing.deletePlan(id);
   }
 
   // ──────────────────────────────────────────────────────────────────────────────
@@ -123,11 +176,11 @@ export class AdminBillingController {
   @ApiOperation({
     summary: "Subscription KPI stats",
     description:
-      "Returns counts by status (active, trialing, canceled, expired) and deltas for the last 30 days.",
+      "Returns counts by status (active, trialing, canceled, expired), deltas for the last 30 days, new active in 30d, and trials expiring within 7d.",
   })
   @ApiOkResponse({
     description:
-      "{ activeCount, trialingCount, canceledCount, expiredCount, canceledLast30, expiredLast30, total }",
+      "{ activeCount, trialingCount, canceledCount, expiredCount, canceledLast30, expiredLast30, activeLast30, trialingExpiringIn7d, total }",
   })
   getSubscriptionStats() {
     return this.billing.getSubscriptionStats();
@@ -142,11 +195,56 @@ export class AdminBillingController {
   @ApiOperation({
     summary: "List all subscriptions",
     description:
-      "Paginated list of all subscriptions with user and plan info. Filterable by status, provider, planId, userId, search (name/email).",
+      "Paginated list of all subscriptions with user and plan info. Filterable by status, provider, planId/planType/planCode, userId, search (name/email/id) and sortable by next billing date / amount / createdAt.",
   })
   @ApiOkResponse({ description: "{ items[], total, page, limit }" })
   getSubscriptions(@Query() dto: FetchSubscriptionsDto) {
     return this.billing.getSubscriptions(dto);
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────────
+  // Subscriptions — export (CSV / JSON)
+  // ──────────────────────────────────────────────────────────────────────────────
+
+  @AdminPermission(PermissionCode.CAN_MANAGE_BILLING)
+  @Get("subscriptions/export")
+  @ApiOperation({
+    summary: "Export subscriptions",
+    description:
+      "Export subscriptions matching current filters. Add ?format=csv for a CSV file download.",
+  })
+  @ApiOkResponse({ description: "JSON array or CSV file" })
+  async exportSubscriptions(
+    @Query() dto: FetchSubscriptionsDto,
+    @Res() res: Response,
+  ) {
+    const result = await this.billing.exportSubscriptions(dto);
+    if (result.format === "csv") {
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader(
+        "Content-Disposition",
+        'attachment; filename="subscriptions.csv"',
+      );
+      res.send(result.data);
+    } else {
+      res.json(result.data);
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────────
+  // Subscriptions — manual create (resolves user by id or email)
+  // ──────────────────────────────────────────────────────────────────────────────
+
+  @AdminPermission(PermissionCode.CAN_MANAGE_BILLING)
+  @Post("subscriptions")
+  @ApiOperation({
+    summary: "Create manual subscription",
+    description:
+      "Create a subscription for a user identified by userId or email. Supports planId or planCode, trialDays, durationDays, isLifetime, reason.",
+  })
+  @ApiOkResponse({ description: "Created subscription." })
+  createManualSubscription(@Body() dto: CreateManualSubscriptionDto) {
+    return this.billing.createManualSubscription(dto);
   }
 
   // ──────────────────────────────────────────────────────────────────────────────
@@ -199,11 +297,15 @@ export class AdminBillingController {
   @Post("subscriptions/:id/cancel")
   @ApiOperation({
     summary: "Cancel subscription",
-    description: "Cancels subscription (sets status=CANCELED). Creates SubscriptionEvent.",
+    description:
+      "Cancels subscription (sets status=CANCELED). Creates SubscriptionEvent. Optional reason is stored in event metadata.",
   })
   @ApiOkResponse({ description: "Updated subscription." })
-  cancelSubscription(@Param("id") id: string) {
-    return this.billing.cancelSubscription(id);
+  cancelSubscription(
+    @Param("id") id: string,
+    @Body() dto?: CancelSubscriptionDto,
+  ) {
+    return this.billing.cancelSubscription(id, dto);
   }
 
   @AdminPermission(PermissionCode.CAN_MANAGE_BILLING)
@@ -286,11 +388,29 @@ export class AdminBillingController {
   @ApiOperation({
     summary: "List payments",
     description:
-      "Paginated list of payments with user and subscription/plan info. Filterable by status, provider, planId, dateFrom, dateTo, search.",
+      "Paginated list of payments with user and subscription/plan info. Filterable by status, provider, planId, dateFrom, dateTo, search, amountMin, amountMax.",
   })
   @ApiOkResponse({ description: "{ items[], total, page, limit }" })
   getPayments(@Query() dto: FetchPaymentsDto) {
     return this.billing.getPayments(dto);
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────────
+  // Payments — CSV export
+  // ──────────────────────────────────────────────────────────────────────────────
+
+  @AdminPermission(PermissionCode.CAN_MANAGE_BILLING)
+  @Get("payments/export.csv")
+  @ApiOperation({
+    summary: "Export payments as CSV",
+    description:
+      "Streams the payment list filtered by the same query params as GET /admin/payments. Returns CSV with up to 10 000 rows.",
+  })
+  @Header("Content-Type", "text/csv; charset=utf-8")
+  @Header("Content-Disposition", 'attachment; filename="payments.csv"')
+  async exportPaymentsCsv(@Query() dto: FetchPaymentsDto, @Res() res: Response) {
+    const csv = await this.billing.exportPaymentsCsv(dto);
+    res.send(csv);
   }
 
   // ──────────────────────────────────────────────────────────────────────────────
@@ -314,11 +434,26 @@ export class AdminBillingController {
   @ApiOperation({
     summary: "Refund payment",
     description:
-      "Marks payment as refunded (full or partial). Creates SubscriptionEvent if payment has a subscription.",
+      "Marks payment as refunded (full or partial). Accepts optional reason / reasonNote, persisted in SubscriptionEvent metadata.",
   })
   @ApiOkResponse({ description: "Updated payment." })
   refundPayment(@Param("id") id: string, @Body() dto: RefundPaymentDto) {
     return this.billing.refundPayment(id, dto);
+  }
+
+  @AdminPermission(PermissionCode.CAN_MANAGE_BILLING)
+  @Post("payments/:id/send-receipt")
+  @ApiOperation({
+    summary: "Email receipt to user",
+    description:
+      "Sends a payment receipt email to the user (or to body.email if provided).",
+  })
+  @ApiOkResponse({ description: "{ sent: true, to: string }" })
+  sendPaymentReceipt(
+    @Param("id") id: string,
+    @Body() dto: SendReceiptDto,
+  ) {
+    return this.billing.sendPaymentReceipt(id, dto.email);
   }
 
   // ──────────────────────────────────────────────────────────────────────────────
@@ -354,6 +489,24 @@ export class AdminBillingController {
   @ApiOkResponse({ description: "{ items[], total, page, limit }. Each item has computedStatus: active | expired | exhausted | disabled." })
   getCoupons(@Query() dto: FetchCouponsDto) {
     return this.billing.getCoupons(dto);
+  }
+
+  // ──────────────────────────────────────────────────────────────────────────────
+  // Coupons — CSV export (must come before :id to avoid shadowing)
+  // ──────────────────────────────────────────────────────────────────────────────
+
+  @AdminPermission(PermissionCode.CAN_MANAGE_BILLING)
+  @Get("coupons/export")
+  @Header("Content-Type", "text/csv; charset=utf-8")
+  @Header("Content-Disposition", 'attachment; filename="coupons.csv"')
+  @ApiOperation({
+    summary: "Export coupons as CSV",
+    description:
+      "Returns all coupons matching the same filters as the list endpoint, in CSV format.",
+  })
+  @ApiOkResponse({ description: "CSV payload of coupons (all pages)." })
+  exportCoupons(@Query() dto: FetchCouponsDto) {
+    return this.billing.exportCouponsCsv(dto);
   }
 
   // ──────────────────────────────────────────────────────────────────────────────
@@ -404,6 +557,17 @@ export class AdminBillingController {
   @ApiOkResponse({ description: "Updated coupon with isActive=false." })
   deactivateCoupon(@Param("id") id: string) {
     return this.billing.deactivateCoupon(id);
+  }
+
+  @AdminPermission(PermissionCode.CAN_MANAGE_BILLING)
+  @Post("coupons/:id/activate")
+  @ApiOperation({
+    summary: "Activate coupon",
+    description: "Sets isActive=true. Restores a previously deactivated coupon.",
+  })
+  @ApiOkResponse({ description: "Updated coupon with isActive=true." })
+  activateCoupon(@Param("id") id: string) {
+    return this.billing.activateCoupon(id);
   }
 
   @AdminPermission(PermissionCode.CAN_MANAGE_BILLING)

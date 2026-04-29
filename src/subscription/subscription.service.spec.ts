@@ -40,7 +40,9 @@ describe("SubscriptionService", () => {
       type: PlanType.FREE,
     });
 
-    await expect(service.subscribeToPlan("u1", "p-free")).rejects.toThrow(BadRequestException);
+    await expect(service.subscribeToPlan("u1", { planId: "p-free" })).rejects.toThrow(
+      BadRequestException,
+    );
   });
 
   it("should reject when already subscribed to the same plan", async () => {
@@ -54,7 +56,9 @@ describe("SubscriptionService", () => {
       .spyOn(service, "getMySubscription")
       .mockResolvedValue({ id: "s1", planId: "p-pro", plan: { priceCents: 1000 } } as never);
 
-    await expect(service.subscribeToPlan("u1", "p-pro")).rejects.toThrow(ConflictException);
+    await expect(service.subscribeToPlan("u1", { planId: "p-pro" })).rejects.toThrow(
+      ConflictException,
+    );
   });
 
   it("should return grouped and ungrouped active plans", async () => {

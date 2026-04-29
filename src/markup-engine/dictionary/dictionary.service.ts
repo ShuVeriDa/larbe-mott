@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { DictionarySource, Language, Level, Prisma, WordStatus } from "@prisma/client";
+import { AddLemmaDto } from "src/admin/dictionary/dto/add-lemma.dto";
 import { BulkDeleteDto } from "src/admin/dictionary/dto/bulk-delete.dto";
 import { CreateEntryDto } from "src/admin/dictionary/dto/create-entry.dto";
 import { CreateExampleDto } from "src/admin/dictionary/dto/create-example.dto";
@@ -13,6 +14,7 @@ import { CreateSenseDto } from "src/admin/dictionary/dto/create-sense.dto";
 import { DictSortOption, DictTabOption } from "src/admin/dictionary/dto/list-query.dto";
 import { PatchEntryDto } from "src/admin/dictionary/dto/update-entry.dto";
 import { UpdateExampleDto } from "src/admin/dictionary/dto/update-example.dto";
+import { UpdateHeadwordDto } from "src/admin/dictionary/dto/update-headword.dto";
 import { UpdateMorphFormDto } from "src/admin/dictionary/dto/update-morph-form.dto";
 import { UpdateSenseDto } from "src/admin/dictionary/dto/update-sense.dto";
 import { PrismaService } from "src/prisma.service";
@@ -43,7 +45,13 @@ export class DictionaryService {
             language: dto.language,
             partOfSpeech: dto.partOfSpeech ?? null,
             level: dto.level ?? null,
+            domain: dto.domain ?? null,
           },
+        });
+      } else if (dto.domain && !lemma.domain) {
+        lemma = await tx.lemma.update({
+          where: { id: lemma.id },
+          data: { domain: dto.domain },
         });
       }
 
@@ -89,6 +97,8 @@ export class DictionaryService {
       headwords: { some: { entry: { source: DictionarySource.ADMIN } } },
     };
 
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
     const [
       totalEntries,
       totalLemmas,
@@ -96,6 +106,9 @@ export class DictionaryService {
       totalMorphForms,
       entriesWithoutSenses,
       unknownWordsCount,
+      entriesAdded7d,
+      lemmasAdded7d,
+      lemmasWithForms,
     ] = await Promise.all([
       this.prisma.dictionaryEntry.count({ where: adminEntryWhere }),
       this.prisma.lemma.count({ where: lemmaWithAdminHeadword }),
@@ -112,7 +125,18 @@ export class DictionaryService {
         },
       }),
       this.prisma.unknownWord.count(),
+      this.prisma.dictionaryEntry.count({
+        where: { ...adminEntryWhere, cachedAt: { gte: sevenDaysAgo } },
+      }),
+      this.prisma.lemma.count({
+        where: { ...lemmaWithAdminHeadword, createdAt: { gte: sevenDaysAgo } },
+      }),
+      this.prisma.lemma.count({
+        where: { ...lemmaWithAdminHeadword, morphForms: { some: {} } },
+      }),
     ]);
+
+    const morphCoverage = totalLemmas > 0 ? lemmasWithForms / totalLemmas : 0;
 
     return {
       totalEntries,
@@ -121,7 +145,23 @@ export class DictionaryService {
       totalMorphForms,
       entriesWithoutSenses,
       unknownWordsCount,
+      entriesAdded7d,
+      lemmasAdded7d,
+      lemmasWithForms,
+      morphCoverage,
     };
+  }
+
+  async lookupByNormalized(normalized: string) {
+    const lemma = await this.prisma.lemma.findFirst({
+      where: {
+        normalized: { equals: normalized, mode: "insensitive" },
+        headwords: { some: { entry: { source: DictionarySource.ADMIN } } },
+      },
+      select: { id: true, normalized: true },
+    });
+    if (!lemma) return { found: false, normalized };
+    return { found: true, lemmaId: lemma.id, normalized: lemma.normalized };
   }
 
   // ─────────────────────────────────────────────────────
@@ -184,6 +224,8 @@ export class DictionaryService {
       orderBy = [{ frequency: { sort: "desc", nulls: "last" } }, { normalized: "asc" }];
     } else if (sort === "newest") {
       orderBy = [{ createdAt: "desc" }];
+    } else if (sort === "oldest") {
+      orderBy = [{ createdAt: "asc" }];
     }
     // "no_senses" sort — same as alpha but filtered entries come first; we just filter by tab
 
@@ -202,11 +244,16 @@ export class DictionaryService {
                   id: true,
                   rawTranslate: true,
                   cachedAt: true,
-                  _count: { select: { senses: true } },
+                  _count: { select: { senses: true, headwords: true } },
                   senses: {
                     orderBy: { order: "asc" },
                     take: 3,
-                    select: { id: true, order: true, definition: true },
+                    select: {
+                      id: true,
+                      order: true,
+                      definition: true,
+                      _count: { select: { examples: true } },
+                    },
                   },
                 },
               },
@@ -218,6 +265,40 @@ export class DictionaryService {
       }),
       this.prisma.lemma.count({ where }),
     ]);
+
+    const entryIds = Array.from(
+      new Set(
+        lemmas
+          .map((l) => l.headwords[0]?.entry?.id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    );
+
+    const examplesByEntry = entryIds.length
+      ? await this.prisma.example.groupBy({
+          by: ["senseId"],
+          where: { sense: { entryId: { in: entryIds } } },
+          _count: { _all: true },
+        })
+      : [];
+
+    const senseToEntry = entryIds.length
+      ? await this.prisma.sense.findMany({
+          where: { entryId: { in: entryIds } },
+          select: { id: true, entryId: true },
+        })
+      : [];
+    const senseEntryMap = new Map(senseToEntry.map((s) => [s.id, s.entryId]));
+
+    const examplesCountByEntry = new Map<string, number>();
+    for (const row of examplesByEntry) {
+      const entryId = senseEntryMap.get(row.senseId);
+      if (!entryId) continue;
+      examplesCountByEntry.set(
+        entryId,
+        (examplesCountByEntry.get(entryId) ?? 0) + row._count._all,
+      );
+    }
 
     const items = lemmas.map((l) => {
       const entry = l.headwords[0]?.entry;
@@ -233,8 +314,15 @@ export class DictionaryService {
         translation: entry?.rawTranslate ?? null,
         entryId: entry?.id ?? null,
         sensesCount: entry?._count?.senses ?? 0,
-        sensesPreview: entry?.senses ?? [],
+        sensesPreview:
+          entry?.senses?.map((s) => ({
+            id: s.id,
+            order: s.order,
+            definition: s.definition,
+          })) ?? [],
         formsCount: l._count.morphForms,
+        lemmasCount: entry?._count?.headwords ?? 0,
+        examplesCount: entry?.id ? examplesCountByEntry.get(entry.id) ?? 0 : 0,
       };
     });
 
@@ -328,6 +416,10 @@ export class DictionaryService {
       partOfSpeech: lemma.partOfSpeech,
       level: lemma.level,
       frequency: lemma.frequency,
+      transliteration: lemma.transliteration,
+      audioUrl: lemma.audioUrl,
+      declensionClass: lemma.declensionClass,
+      domain: lemma.domain,
       createdAt: lemma.createdAt,
       updatedAt: lemma.updatedAt,
       translation: entry?.rawTranslate ?? null,
@@ -343,6 +435,172 @@ export class DictionaryService {
       senses: entry?.senses ?? [],
       forms: lemma.morphForms,
     };
+  }
+
+  // ─────────────────────────────────────────────────────
+  // RELATED LEMMAS (другие леммы той же словарной статьи)
+  // ─────────────────────────────────────────────────────
+
+  /**
+   * Возвращает все леммы, привязанные к тем же DictionaryEntry,
+   * к которым принадлежит текущая лемма (включая саму). Используется
+   * для UI lemma-tabs ("мотт сущ." / "мотт гл." и т.п.).
+   */
+  async getRelatedLemmas(lemmaId: string) {
+    const headwords = await this.prisma.headword.findMany({
+      where: { lemmaId, entry: { source: DictionarySource.ADMIN } },
+      select: { entryId: true },
+    });
+    if (!headwords.length) throw new NotFoundException("Dictionary entry not found");
+
+    const entryIds = [...new Set(headwords.map((h) => h.entryId))];
+
+    const related = await this.prisma.lemma.findMany({
+      where: {
+        headwords: { some: { entryId: { in: entryIds } } },
+      },
+      orderBy: [{ partOfSpeech: "asc" }, { normalized: "asc" }],
+      select: {
+        id: true,
+        baseForm: true,
+        normalized: true,
+        partOfSpeech: true,
+        level: true,
+        frequency: true,
+      },
+    });
+
+    return related.map((l) => ({ ...l, isCurrent: l.id === lemmaId }));
+  }
+
+  // ─────────────────────────────────────────────────────
+  // FREQUENCY STATS (для sidebar "Частотность")
+  // ─────────────────────────────────────────────────────
+
+  async getFrequencyStats(lemmaId: string) {
+    const lemma = await this.prisma.lemma.findFirst({
+      where: {
+        id: lemmaId,
+        headwords: { some: { entry: { source: DictionarySource.ADMIN } } },
+      },
+      select: { id: true, frequency: true },
+    });
+    if (!lemma) throw new NotFoundException("Dictionary entry not found");
+
+    const adminLemmaWhere: Prisma.LemmaWhereInput = {
+      headwords: { some: { entry: { source: DictionarySource.ADMIN } } },
+      frequency: { not: null },
+    };
+
+    const [maxAgg, totalLemmas, higherCount, distinctTextRows, totalTexts] =
+      await Promise.all([
+        this.prisma.lemma.aggregate({
+          where: adminLemmaWhere,
+          _max: { frequency: true },
+        }),
+        this.prisma.lemma.count({ where: adminLemmaWhere }),
+        lemma.frequency != null
+          ? this.prisma.lemma.count({
+              where: { ...adminLemmaWhere, frequency: { gt: lemma.frequency } },
+            })
+          : Promise.resolve(0),
+        this.prisma.wordContext.findMany({
+          where: { lemmaId },
+          distinct: ["textId"],
+          select: { textId: true },
+        }),
+        this.prisma.text.count(),
+      ]);
+
+    const textsCovered = distinctTextRows.length;
+
+    return {
+      frequency: lemma.frequency,
+      maxFrequency: maxAgg._max.frequency,
+      rank: lemma.frequency != null ? higherCount + 1 : null,
+      totalLemmas,
+      textsCovered,
+      totalTexts,
+      textCoverage: totalTexts > 0 ? textsCovered / totalTexts : 0,
+    };
+  }
+
+  // ─────────────────────────────────────────────────────
+  // ADD LEMMA TO EXISTING ENTRY
+  // ─────────────────────────────────────────────────────
+
+  async addLemmaToEntry(entryId: string, dto: AddLemmaDto) {
+    const entry = await this.prisma.dictionaryEntry.findFirst({
+      where: { id: entryId, source: DictionarySource.ADMIN },
+      select: { id: true },
+    });
+    if (!entry) throw new NotFoundException("Dictionary entry not found");
+
+    const normalized = normalizeToken(dto.baseForm);
+
+    return this.prisma.$transaction(async (tx) => {
+      let lemma = await tx.lemma.findUnique({
+        where: { normalized_language: { normalized, language: dto.language } },
+      });
+
+      if (!lemma) {
+        lemma = await tx.lemma.create({
+          data: {
+            baseForm: dto.baseForm,
+            normalized,
+            language: dto.language,
+            partOfSpeech: dto.partOfSpeech ?? null,
+            level: dto.level ?? null,
+            frequency: dto.frequency ?? null,
+            transliteration: dto.transliteration ?? null,
+            audioUrl: dto.audioUrl ?? null,
+            declensionClass: dto.declensionClass ?? null,
+            domain: dto.domain ?? null,
+          },
+        });
+      }
+
+      const existingLink = await tx.headword.findFirst({
+        where: { entryId, lemmaId: lemma.id },
+        select: { id: true },
+      });
+      if (existingLink) {
+        throw new BadRequestException("This lemma is already linked to the entry");
+      }
+
+      const maxOrder = await tx.headword.aggregate({
+        where: { entryId },
+        _max: { order: true },
+      });
+
+      if (dto.isPrimary) {
+        await tx.headword.updateMany({
+          where: { entryId },
+          data: { isPrimary: false },
+        });
+      }
+
+      await tx.headword.create({
+        data: {
+          entryId,
+          lemmaId: lemma.id,
+          text: dto.baseForm,
+          normalized,
+          order: (maxOrder._max.order ?? -1) + 1,
+          isPrimary: dto.isPrimary ?? false,
+        },
+      });
+
+      return {
+        id: lemma.id,
+        baseForm: lemma.baseForm,
+        normalized: lemma.normalized,
+        language: lemma.language,
+        partOfSpeech: lemma.partOfSpeech,
+        level: lemma.level,
+        frequency: lemma.frequency,
+      };
+    });
   }
 
   // ─────────────────────────────────────────────────────
@@ -365,22 +623,30 @@ export class DictionaryService {
     if (!lemma) throw new NotFoundException("Dictionary entry not found");
 
     await this.prisma.$transaction(async (tx) => {
-      if (
-        dto.baseForm !== undefined ||
-        dto.partOfSpeech !== undefined ||
-        dto.level !== undefined
-      ) {
-        await tx.lemma.update({
-          where: { id: lemmaId },
-          data: {
-            ...(dto.baseForm !== undefined && {
-              baseForm: dto.baseForm,
-              normalized: normalizeToken(dto.baseForm),
-            }),
-            ...(dto.partOfSpeech !== undefined && { partOfSpeech: dto.partOfSpeech }),
-            ...(dto.level !== undefined && { level: dto.level }),
-          },
-        });
+      const lemmaUpdate: Prisma.LemmaUpdateInput = {};
+      if (dto.baseForm !== undefined) {
+        lemmaUpdate.baseForm = dto.baseForm;
+        lemmaUpdate.normalized = normalizeToken(dto.baseForm);
+      }
+      if (dto.partOfSpeech !== undefined) lemmaUpdate.partOfSpeech = dto.partOfSpeech;
+      if (dto.level !== undefined) lemmaUpdate.level = dto.level;
+      if (dto.frequency !== undefined) lemmaUpdate.frequency = dto.frequency;
+      if (dto.transliteration !== undefined) lemmaUpdate.transliteration = dto.transliteration;
+      if (dto.audioUrl !== undefined) lemmaUpdate.audioUrl = dto.audioUrl;
+      if (dto.declensionClass !== undefined) lemmaUpdate.declensionClass = dto.declensionClass;
+      if (dto.domain !== undefined) lemmaUpdate.domain = dto.domain;
+
+      if (Object.keys(lemmaUpdate).length > 0) {
+        await tx.lemma.update({ where: { id: lemmaId }, data: lemmaUpdate });
+
+        // Если изменили baseForm — синхронизируем text/normalized у привязанных headwords
+        if (dto.baseForm !== undefined) {
+          const newNormalized = normalizeToken(dto.baseForm);
+          await tx.headword.updateMany({
+            where: { lemmaId, isPrimary: true },
+            data: { text: dto.baseForm, normalized: newNormalized },
+          });
+        }
       }
 
       const entry = lemma.headwords[0]?.entry;
@@ -534,6 +800,30 @@ export class DictionaryService {
 
     return this.prisma.example.create({
       data: { senseId, text: dto.text, translation: dto.translation ?? null },
+      select: { id: true, text: true, translation: true },
+    });
+  }
+
+  /**
+   * Добавить пример к статье без явного senseId — вешает на 1-е значение (по order).
+   * Если у статьи нет ни одного значения — возвращает 422.
+   */
+  async addExampleToFirstSense(lemmaId: string, dto: CreateExampleDto) {
+    const entryId = await this.getEntryIdForLemma(lemmaId);
+
+    const firstSense = await this.prisma.sense.findFirst({
+      where: { entryId },
+      orderBy: { order: "asc" },
+      select: { id: true },
+    });
+    if (!firstSense) {
+      throw new BadRequestException(
+        "Cannot add example: entry has no senses. Create a sense first.",
+      );
+    }
+
+    return this.prisma.example.create({
+      data: { senseId: firstSense.id, text: dto.text, translation: dto.translation ?? null },
       select: { id: true, text: true, translation: true },
     });
   }
@@ -739,6 +1029,41 @@ export class DictionaryService {
     if (!hw) throw new NotFoundException("Headword not found");
     if (hw.isPrimary) throw new BadRequestException("Cannot delete the primary headword");
     await this.prisma.headword.delete({ where: { id: hwId } });
+  }
+
+  async updateHeadword(hwId: string, dto: UpdateHeadwordDto) {
+    const hw = await this.prisma.headword.findUnique({
+      where: { id: hwId },
+      select: { id: true, entryId: true, isPrimary: true },
+    });
+    if (!hw) throw new NotFoundException("Headword not found");
+
+    return this.prisma.$transaction(async (tx) => {
+      if (dto.isPrimary === true && !hw.isPrimary) {
+        await tx.headword.updateMany({
+          where: { entryId: hw.entryId, NOT: { id: hwId } },
+          data: { isPrimary: false },
+        });
+      } else if (dto.isPrimary === false && hw.isPrimary) {
+        throw new BadRequestException(
+          "Cannot unset primary directly — promote another headword to primary instead",
+        );
+      }
+
+      const data: Prisma.HeadwordUpdateInput = {};
+      if (dto.word !== undefined) {
+        data.text = dto.word;
+        data.normalized = normalizeToken(dto.word);
+      }
+      if (dto.isPrimary !== undefined) data.isPrimary = dto.isPrimary;
+      if (dto.order !== undefined) data.order = dto.order;
+
+      return tx.headword.update({
+        where: { id: hwId },
+        data,
+        select: { id: true, text: true, normalized: true, isPrimary: true, order: true },
+      });
+    });
   }
 
   // ─────────────────────────────────────────────────────

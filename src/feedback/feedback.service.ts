@@ -3,7 +3,11 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { FeedbackAuthorType, FeedbackStatus } from "@prisma/client";
+import {
+  FeedbackAuthorType,
+  FeedbackMessageType,
+  FeedbackStatus,
+} from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
 import { AddMessageDto } from "./dto/add-message.dto";
 import { CreateFeedbackDto } from "./dto/create-feedback.dto";
@@ -56,7 +60,11 @@ export class FeedbackService {
         skip,
         take: limit,
         include: {
-          messages: { orderBy: { createdAt: "asc" }, take: 1 },
+          messages: {
+            where: { messageType: FeedbackMessageType.PUBLIC_REPLY },
+            orderBy: { createdAt: "asc" },
+            take: 1,
+          },
         },
       }),
       this.prisma.feedbackThread.count({ where }),
@@ -68,6 +76,7 @@ export class FeedbackService {
       where: {
         threadId: { in: threadIds },
         authorType: FeedbackAuthorType.ADMIN,
+        messageType: FeedbackMessageType.PUBLIC_REPLY,
         isReadByUser: false,
       },
       _count: { id: true },
@@ -88,7 +97,10 @@ export class FeedbackService {
     const thread = await this.prisma.feedbackThread.findFirst({
       where: { id: threadId, userId },
       include: {
-        messages: { orderBy: { createdAt: "asc" } },
+        messages: {
+          where: { messageType: FeedbackMessageType.PUBLIC_REPLY },
+          orderBy: { createdAt: "asc" },
+        },
       },
     });
     if (!thread) throw new NotFoundException("Thread not found");
@@ -132,12 +144,25 @@ export class FeedbackService {
       where: {
         threadId,
         authorType: FeedbackAuthorType.ADMIN,
+        messageType: FeedbackMessageType.PUBLIC_REPLY,
         isReadByUser: false,
       },
       data: { isReadByUser: true },
     });
 
     return { success: true };
+  }
+
+  async getUnreadCount(userId: string) {
+    const count = await this.prisma.feedbackMessage.count({
+      where: {
+        thread: { userId },
+        authorType: FeedbackAuthorType.ADMIN,
+        messageType: FeedbackMessageType.PUBLIC_REPLY,
+        isReadByUser: false,
+      },
+    });
+    return { count };
   }
 
   async addMessage(userId: string, threadId: string, dto: AddMessageDto) {

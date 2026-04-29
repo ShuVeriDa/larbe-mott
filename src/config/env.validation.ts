@@ -24,4 +24,18 @@ export const envValidationSchema = Joi.object({
   ALLOW_MANUAL_BILLING_IN_PROD: Joi.string()
     .valid("true", "false")
     .default("false"),
+
+  DOSHAM_API_URL: Joi.string().uri().default("http://localhost:9666/api"),
+
+  // Mail / password reset
+  // MAIL_PROVIDER=log оставит письмо только в логах (для dev). resend — реальная отправка через Resend API.
+  MAIL_PROVIDER: Joi.string().valid("log", "resend").default("log"),
+  MAIL_FROM: Joi.string().default("Мотт Ларбе <noreply@example.com>"),
+  MAIL_REPLY_TO: Joi.string().allow("", null).optional(),
+  RESEND_API_KEY: Joi.string().when("MAIL_PROVIDER", {
+    is: "resend",
+    then: Joi.required(),
+    otherwise: Joi.optional().allow("", null),
+  }),
+  PASSWORD_RESET_TOKEN_TTL_HOURS: Joi.number().integer().min(1).max(168).default(24),
 });

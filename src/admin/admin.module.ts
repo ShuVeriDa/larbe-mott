@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { AuthModule } from "src/auth/auth.module";
+import { MailModule } from "src/mail/mail.module";
 import { DictionaryModule } from "src/markup-engine/dictionary/dictionary.module";
 import { MorphologyModule } from "src/markup-engine/morphology/morphology.module";
 import { TokenizerModule } from "src/markup-engine/tokenizer/tokenizer.module";
@@ -37,12 +38,17 @@ import { AdminDashboardController } from "./dashboard/admin-dashboard.controller
 import { AdminDashboardService } from "./dashboard/admin-dashboard.service";
 import { AdminTokenizationController } from "./tokenization/admin-tokenization.controller";
 import { AdminTokenizationService } from "./tokenization/admin-tokenization.service";
+import { TokenizationQueueService } from "./tokenization/tokenization-queue.service";
 import { AdminLogsController } from "./system-logs/admin-logs.controller";
 import { AdminLogsService } from "./system-logs/admin-logs.service";
+import { AdminLegalController } from "./legal/admin-legal.controller";
+import { AdminLegalService } from "./legal/admin-legal.service";
+import { AdminUploadsController } from "./uploads/admin-uploads.controller";
 
 @Module({
   imports: [
     AuthModule,
+    MailModule,
     TextModule,
     TokenModule,
     TokenizerModule,
@@ -67,6 +73,8 @@ import { AdminLogsService } from "./system-logs/admin-logs.service";
     AdminDashboardController,
     AdminTokenizationController,
     AdminLogsController,
+    AdminLegalController,
+    AdminUploadsController,
   ],
   providers: [
     AdminService,
@@ -84,7 +92,9 @@ import { AdminLogsService } from "./system-logs/admin-logs.service";
     AdminPhrasebookService,
     AdminDashboardService,
     AdminTokenizationService,
+    TokenizationQueueService,
     AdminLogsService,
+    AdminLegalService,
     PrismaService,
   ],
 })

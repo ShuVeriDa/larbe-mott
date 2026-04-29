@@ -11,6 +11,14 @@ export class ProblematicTokensQueryDto {
   @IsOptional()
   status?: string;
 
+  @ApiPropertyOptional({
+    enum: ["ADMIN", "CACHE", "MORPHOLOGY", "ONLINE"],
+    description: "Фильтр по источнику анализа (primary analysis source)",
+  })
+  @IsEnum(["ADMIN", "CACHE", "MORPHOLOGY", "ONLINE"])
+  @IsOptional()
+  source?: string;
+
   @ApiPropertyOptional({ default: 1, minimum: 1 })
   @Type(() => Number)
   @IsInt()

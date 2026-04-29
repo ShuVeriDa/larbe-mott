@@ -6,6 +6,7 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
+import { Auth } from "src/auth/decorators/auth.decorator";
 import { RequiresPremium } from "src/auth/decorators/premium.decorator";
 import { User } from "src/user/decorators/user.decorator";
 import { StatisticsService } from "./statistics.service";
@@ -19,6 +20,22 @@ import { LogReviewSessionDto } from "./dto/log-review-session.dto";
 @ApiUnauthorizedResponse({ description: "Missing or invalid bearer token" })
 export class StatisticsController {
   constructor(private readonly statisticsService: StatisticsService) {}
+
+  @Get("me/profile-summary")
+  @Auth()
+  @ApiOperation({
+    summary: "Compact stats for /profile page (Free + Premium)",
+    description:
+      "Минимальный набор для карточки «Статистика» и 70-дневного heatmap на странице /profile. " +
+      "Доступен ВСЕМ авторизованным юзерам (без Premium-gate). Полный /statistics/me остаётся под Premium.",
+  })
+  @ApiOkResponse({
+    description:
+      "{ words: { total, new, learning, known }, textsRead, streak: { current, record }, heatmap: [{ date, level, count }] }",
+  })
+  async getProfileSummary(@User("id") userId: string) {
+    return this.statisticsService.getProfileSummary(userId);
+  }
 
   @Get("me")
   @RequiresPremium()
@@ -37,7 +54,11 @@ export class StatisticsController {
     @User("id") userId: string,
     @Query() query: StatisticsQueryDto,
   ) {
-    return this.statisticsService.getUserStatistics(userId, query.period ?? StatPeriod.MONTH);
+    return this.statisticsService.getUserStatistics(
+      userId,
+      query.period ?? StatPeriod.MONTH,
+      { activityLimit: query.activityLimit },
+    );
   }
 
   @Post("reading-time")

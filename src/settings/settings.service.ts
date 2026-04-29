@@ -1,8 +1,11 @@
-import { Injectable } from "@nestjs/common";
+import { ForbiddenException, Injectable } from "@nestjs/common";
+import { PlanType, RoleName, SubscriptionStatus } from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
 import { UpdateGoalsDto } from "./dto/update-goals.dto";
 import { UpdateNotificationsDto } from "./dto/update-notifications.dto";
 import { UpdatePreferencesDto } from "./dto/update-preferences.dto";
+
+const PRIVILEGED_ROLES: RoleName[] = [RoleName.ADMIN, RoleName.SUPERADMIN];
 
 @Injectable()
 export class SettingsService {
@@ -23,10 +26,54 @@ export class SettingsService {
   // ─── PREFERENCES ─────────────────────────────────────────────────────────────
 
   async updatePreferences(userId: string, dto: UpdatePreferencesDto) {
+    // Premium-фича: включение деков заучивания требует активной Premium-подписки.
+    // Дублируем минимальную логику PremiumGuard (без redis-кеша) — гард не подходит,
+    // т.к. срабатывает на эндпоинт целиком, а нам нужно ограничить только одно поле.
+    if (dto.enableDecks === true) {
+      await this.assertPremium(userId);
+    }
+
     return this.prisma.userPreferences.upsert({
       where: { userId },
       update: dto,
       create: { userId, ...dto },
+    });
+  }
+
+  private async assertPremium(userId: string): Promise<void> {
+    const [adminRole, latestPremiumSubscription] = await Promise.all([
+      this.prisma.userRoleAssignment.findFirst({
+        where: { userId, role: { name: { in: PRIVILEGED_ROLES } } },
+      }),
+      this.prisma.subscription.findFirst({
+        where: { userId, plan: { type: PlanType.PREMIUM } },
+        orderBy: { startDate: "desc" },
+        select: { status: true },
+      }),
+    ]);
+
+    if (adminRole) return;
+    if (
+      latestPremiumSubscription?.status === SubscriptionStatus.ACTIVE ||
+      latestPremiumSubscription?.status === SubscriptionStatus.TRIALING
+    ) {
+      return;
+    }
+
+    if (
+      latestPremiumSubscription?.status === SubscriptionStatus.CANCELED ||
+      latestPremiumSubscription?.status === SubscriptionStatus.EXPIRED
+    ) {
+      throw new ForbiddenException({
+        error: "SUBSCRIPTION_EXPIRED",
+        message:
+          "Your Premium subscription has expired. Renew to enable the learning decks.",
+      });
+    }
+
+    throw new ForbiddenException({
+      error: "SUBSCRIPTION_REQUIRED",
+      message: "Enabling learning decks requires a Premium subscription.",
     });
   }
 
@@ -58,7 +105,11 @@ export class SettingsService {
   }
 
   async clearVocabulary(userId: string) {
-    await this.prisma.userDictionaryEntry.deleteMany({ where: { userId } });
+    // Транзакция: сначала записи (FK на folder со SetNull), потом папки.
+    await this.prisma.$transaction([
+      this.prisma.userDictionaryEntry.deleteMany({ where: { userId } }),
+      this.prisma.userDictionaryFolder.deleteMany({ where: { userId } }),
+    ]);
     return { success: true };
   }
 
@@ -75,17 +126,26 @@ export class SettingsService {
         cefrLevel: true,
         repetitionCount: true,
         addedAt: true,
+        folder: { select: { name: true } },
       },
       orderBy: { addedAt: "asc" },
     });
 
+    // Сглаживаем `folder.name` → `folder` для удобного формата JSON / CSV
+    const flat = entries.map(({ folder, ...rest }) => ({
+      ...rest,
+      folder: folder?.name ?? null,
+    }));
+
     if (format === "csv") {
-      const header = "word,normalized,translation,learningLevel,cefrLevel,repetitionCount,addedAt";
-      const rows = entries.map((e) =>
+      const header =
+        "word,normalized,translation,folder,learningLevel,cefrLevel,repetitionCount,addedAt";
+      const rows = flat.map((e) =>
         [
           this.csvCell(e.word),
           this.csvCell(e.normalized ?? ""),
           this.csvCell(e.translation),
+          this.csvCell(e.folder ?? ""),
           e.learningLevel,
           e.cefrLevel ?? "",
           e.repetitionCount,
@@ -95,7 +155,7 @@ export class SettingsService {
       return [header, ...rows].join("\n");
     }
 
-    return entries;
+    return flat;
   }
 
   async exportArchive(userId: string) {

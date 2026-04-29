@@ -1,5 +1,7 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { ApiPropertyOptional } from "@nestjs/swagger";
+import { Level } from "@prisma/client";
 import {
+  IsEnum,
   IsOptional,
   IsString,
   IsUUID,
@@ -42,4 +44,12 @@ export class CreateDictionaryEntryDto {
   @IsOptional()
   @IsUUID()
   folderId?: string;
+
+  @ApiPropertyOptional({
+    description: "CEFR level of the word (A1, A2, B1, B2)",
+    enum: Level,
+  })
+  @IsOptional()
+  @IsEnum(Level)
+  cefrLevel?: Level;
 }

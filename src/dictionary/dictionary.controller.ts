@@ -21,9 +21,11 @@ import { Auth } from "src/auth/decorators/auth.decorator";
 import { RequiresPremium } from "src/auth/decorators/premium.decorator";
 import { User } from "src/user/decorators/user.decorator";
 import { DictionaryService } from "./dictionary.service";
+import { BulkAssignEntriesDto } from "./dto/bulk-assign-entries.dto";
 import { CreateDictionaryEntryDto } from "./dto/create-dictionary-entry.dto";
 import { CreateDictionaryFolderDto } from "./dto/create-folder";
 import { GetDictionaryEntriesDto } from "./dto/get-dictionary-entries.dto";
+import { ReorderFoldersDto } from "./dto/reorder-folders.dto";
 import { UpdateDictionaryEntryDto } from "./dto/update-dictionary-entry.dto";
 import { UpdateDictionaryFolderDto } from "./dto/update-folder";
 import { FoldersService } from "./folders.service";
@@ -65,10 +67,11 @@ export class DictionaryController {
   }
 
   @Get("folders")
-  @RequiresPremium()
+  @Auth()
   @ApiOperation({
     summary: "Get all dictionary folders",
-    description: "Get all dictionary folders for the authenticated user. Requires Premium.",
+    description:
+      "List the authenticated user's dictionary folders. Read access is open to all users; creation/modification of folders requires Premium.",
   })
   @ApiOkResponse({ description: "All dictionary folders" })
   async getDictionaryFolders(@User("id") userId: string) {
@@ -76,10 +79,11 @@ export class DictionaryController {
   }
 
   @Get("folders/summary")
-  @RequiresPremium()
+  @Auth()
   @ApiOperation({
     summary: "Get folders summary",
-    description: "Get summary stats for the vocabulary folders page: folder count, words in folders, known words, words without folder. Requires Premium.",
+    description:
+      "Summary stats for the vocabulary folders page: folder count, words in folders, known words, words without folder. Read-only — available to all authenticated users.",
   })
   @ApiOkResponse({ description: "Folders summary" })
   async getDictionaryFoldersSummary(@User("id") userId: string) {
@@ -87,10 +91,11 @@ export class DictionaryController {
   }
 
   @Get("folders/:id")
-  @RequiresPremium()
+  @Auth()
   @ApiOperation({
     summary: "Get a dictionary folder by ID",
-    description: "Get a dictionary folder by ID for the authenticated user. Requires Premium.",
+    description:
+      "Returns a single folder owned by the authenticated user. Read-only — available to all authenticated users.",
   })
   @ApiOkResponse({ description: "Dictionary folder" })
   @ApiNotFoundResponse({ description: "Dictionary folder not found" })
@@ -118,7 +123,7 @@ export class DictionaryController {
   @ApiOperation({
     summary: "Get a dictionary entry by ID",
     description:
-      "Returns full word detail: lemma (transliteration, POS, frequency, morphForms), meanings with examples, occurrences in user's texts, SM-2 progress, and review history.",
+      "Returns full word detail: lemma (transliteration, POS, frequency, morphForms, audioUrl, declensionClass), meanings with examples (with origin), related words, occurrences in user's texts, SM-2 progress (with targetRepetitions), and review history (with intervalDelta).",
   })
   @ApiOkResponse({ description: "Dictionary entry detail" })
   @ApiNotFoundResponse({ description: "Dictionary entry not found" })
@@ -127,6 +132,29 @@ export class DictionaryController {
     @User("id") userId: string,
   ) {
     return await this.dictionaryService.getUserDictionaryEntryDetail(id, userId);
+  }
+
+  @Get(":id/neighbors")
+  @Auth()
+  @ApiOperation({
+    summary: "Get prev/next dictionary entries",
+    description:
+      "Returns the entry before and after the given one within the same filter/sort context as the list view. Accepts the same query parameters as GET /dictionary.",
+  })
+  @ApiOkResponse({
+    description: "{ prev: { id, word } | null, next: { id, word } | null }",
+  })
+  @ApiNotFoundResponse({ description: "Dictionary entry not found" })
+  async getDictionaryEntryNeighbors(
+    @Param("id", ParseUUIDPipe) id: string,
+    @User("id") userId: string,
+    @Query() query: GetDictionaryEntriesDto,
+  ) {
+    return await this.dictionaryService.getUserDictionaryEntryNeighbors(
+      id,
+      userId,
+      query,
+    );
   }
 
   @Post()
@@ -141,6 +169,39 @@ export class DictionaryController {
     @User("id") userId: string,
   ) {
     return await this.dictionaryService.createUserDictionaryEntry(dto, userId);
+  }
+
+  @Patch("folders/reorder")
+  @RequiresPremium()
+  @ApiOperation({
+    summary: "Reorder dictionary folders",
+    description:
+      "Set sortOrder for all of the user's folders in one transaction. Body must contain every folder ID owned by the user, in the desired order. Requires Premium.",
+  })
+  @ApiOkResponse({ description: "Folders reordered" })
+  async reorderDictionaryFolders(
+    @Body() dto: ReorderFoldersDto,
+    @User("id") userId: string,
+  ) {
+    return await this.foldersService.reorderUserDictionaryFolders(dto, userId);
+  }
+
+  @Patch("entries/bulk-assign")
+  @RequiresPremium()
+  @ApiOperation({
+    summary: "Bulk assign dictionary entries to folders",
+    description:
+      "Assign or remove folderId for multiple dictionary entries in one transaction. Powers the 'Распределить все' action on the folders page. Requires Premium.",
+  })
+  @ApiOkResponse({ description: "Entries reassigned" })
+  async bulkAssignDictionaryEntries(
+    @Body() dto: BulkAssignEntriesDto,
+    @User("id") userId: string,
+  ) {
+    return await this.dictionaryService.bulkAssignEntriesToFolder(
+      dto.assignments,
+      userId,
+    );
   }
 
   @Patch("folders/:id")

@@ -3,6 +3,7 @@ import {
   LogLevel,
   PaymentStatus,
   Prisma,
+  ProcessingTrigger,
   SubscriptionEventType,
   UserEventType,
 } from "@prisma/client";
@@ -14,6 +15,28 @@ import {
   AdminLogsTab,
   FetchAdminLogsDto,
 } from "./dto/fetch-admin-logs.dto";
+
+const KNOWN_SERVICES = [
+  "api-gateway",
+  "auth-service",
+  "billing",
+  "dictionary",
+  "scheduler",
+  "text-processor",
+  "worker",
+] as const;
+
+const CRITICAL_TEXT_KEYWORDS = [
+  "timeout",
+  "overflow",
+  "unreachable",
+  "fatal",
+  "panic",
+] as const;
+
+const EXPORT_ROW_LIMIT = 5000;
+const COUNT_LEVELS_FALLBACK_SAMPLE = 12000;
+const FETCH_HARD_CAP = 20000;
 
 interface PeriodBounds {
   from: Date;
@@ -71,6 +94,10 @@ interface LevelCounters {
 export class AdminLogsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  getServices(): { services: string[] } {
+    return { services: [...KNOWN_SERVICES] };
+  }
+
   async getLogs(query: FetchAdminLogsDto) {
     const page = Math.max(1, query.page ?? 1);
     const limit = Math.min(100, Math.max(1, query.limit ?? 25));
@@ -78,16 +105,18 @@ export class AdminLogsService {
     const tabOrLevel = this.resolveLevelFilter(query);
 
     const bounds = this.resolvePeriod(query);
-    const counters = await this.countLevels(query, bounds);
-    const candidateTake = Math.min(5000, page * limit + 100);
+    const counters = await this.resolveCounters(query, bounds);
+    const candidateTake = Math.min(FETCH_HARD_CAP, skip + limit + 200);
     const events = await this.fetchUnifiedEvents(query, bounds, candidateTake);
     const filtered = this.applyInMemoryFilters(events, query, tabOrLevel);
     const sorted = this.sortEvents(filtered, query.order ?? "desc");
     const pageItems = sorted.slice(skip, skip + limit).map((item) => this.toListItem(item));
 
+    const total = tabOrLevel ? counters[tabOrLevel] : counters.total;
+
     return {
       items: pageItems,
-      total: counters.total,
+      total,
       page,
       limit,
       skip,
@@ -103,17 +132,13 @@ export class AdminLogsService {
     };
     const bounds = this.resolvePeriod(query);
     const [currentCounts, prevCounts, avgNow, avgPrev] = await Promise.all([
-      this.countLevels(statsQuery, {
+      this.resolveCounters(statsQuery, {
         from: bounds.from,
         to: bounds.to,
-        prevFrom: bounds.prevFrom,
-        prevTo: bounds.prevTo,
       }),
-      this.countLevels(statsQuery, {
+      this.resolveCounters(statsQuery, {
         from: bounds.prevFrom,
         to: bounds.prevTo,
-        prevFrom: bounds.prevFrom,
-        prevTo: bounds.prevTo,
       }),
       this.prisma.textProcessingVersion.aggregate({
         where: { createdAt: { gte: bounds.from, lte: bounds.to }, durationMs: { not: null } },
@@ -220,7 +245,13 @@ export class AdminLogsService {
   }
 
   async exportLogs(query: FetchAdminLogsDto, format: AdminLogsExportFormat) {
-    const payload = await this.getLogs({ ...query, page: 1, limit: 1000 });
+    const tabOrLevel = this.resolveLevelFilter(query);
+    const bounds = this.resolvePeriod(query);
+    const events = await this.fetchUnifiedEvents(query, bounds, FETCH_HARD_CAP);
+    const filtered = this.applyInMemoryFilters(events, query, tabOrLevel);
+    const sorted = this.sortEvents(filtered, query.order ?? "desc");
+    const items = sorted.slice(0, EXPORT_ROW_LIMIT).map((item) => this.toListItem(item));
+
     const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
     const baseName = `admin-logs-${stamp}`;
 
@@ -228,14 +259,22 @@ export class AdminLogsService {
       return {
         format,
         fileName: `${baseName}.csv`,
-        content: this.toCsv(payload.items),
+        content: this.toCsv(items),
       };
     }
 
     return {
       format: AdminLogsExportFormat.JSON,
       fileName: `${baseName}.json`,
-      content: JSON.stringify(payload, null, 2),
+      content: JSON.stringify(
+        {
+          items,
+          total: items.length,
+          truncated: sorted.length > EXPORT_ROW_LIMIT,
+        },
+        null,
+        2,
+      ),
     };
   }
 
@@ -331,6 +370,9 @@ export class AdminLogsService {
     const dbLevels = this.textLevelsForFilter(query);
     if (dbLevels) where.level = { in: dbLevels };
 
+    const versionFilter = this.textVersionFilter(query);
+    if (versionFilter) where.version = versionFilter;
+
     const q = query.q?.trim();
     if (q) {
       where.OR = [
@@ -409,6 +451,7 @@ export class AdminLogsService {
     };
     const types = this.userEventTypesForService(query.service);
     if (types) where.type = { in: types };
+    if (query.userId) where.userId = query.userId;
 
     const q = query.q?.trim();
     if (q) {
@@ -458,6 +501,7 @@ export class AdminLogsService {
     const where: Prisma.SubscriptionEventWhereInput = {
       createdAt: { gte: bounds.from, lte: bounds.to },
     };
+    if (query.userId) where.subscription = { userId: query.userId };
     const q = query.q?.trim();
     if (q) {
       where.OR = [
@@ -509,6 +553,7 @@ export class AdminLogsService {
     const where: Prisma.PaymentWhereInput = {
       createdAt: { gte: bounds.from, lte: bounds.to },
     };
+    if (query.userId) where.userId = query.userId;
     const q = query.q?.trim();
     if (q) {
       where.OR = [
@@ -564,12 +609,21 @@ export class AdminLogsService {
     level?: AdminLogsLevel,
   ): UnifiedLogEvent[] {
     const q = query.q?.trim().toLowerCase();
+    const { durationMin, durationMax, userId } = query;
     return items.filter((item) => {
       if (query.service && query.service !== "all" && item.service !== query.service) {
         return false;
       }
       if (level && item.level !== level) {
         return false;
+      }
+      if (userId && item.userId !== userId) {
+        return false;
+      }
+      if (durationMin !== undefined || durationMax !== undefined) {
+        if (item.durationMs == null) return false;
+        if (durationMin !== undefined && item.durationMs < durationMin) return false;
+        if (durationMax !== undefined && item.durationMs > durationMax) return false;
       }
       if (!q) return true;
 
@@ -605,23 +659,58 @@ export class AdminLogsService {
     };
   }
 
-  private async countLevels(
+  private async resolveCounters(
     query: FetchAdminLogsDto,
-    bounds: Pick<PeriodBounds, "from" | "to" | "prevFrom" | "prevTo">,
+    bounds: Pick<PeriodBounds, "from" | "to">,
   ): Promise<LevelCounters> {
-    const sample = await this.fetchUnifiedEvents(query, bounds, 8000);
-    const filtered = this.applyInMemoryFilters(sample, query);
+    if (this.requiresInMemoryCounting(query)) {
+      return this.inMemoryCountLevels(query, bounds);
+    }
+    return this.dbCountLevels(query, bounds);
+  }
 
+  private requiresInMemoryCounting(query: FetchAdminLogsDto): boolean {
+    if (query.q && query.q.trim().length > 0) return true;
+    if (query.durationMin !== undefined || query.durationMax !== undefined) {
+      // Duration filter on UserEvent.metadata cannot be expressed in DB WHERE.
+      const service = query.service ?? "all";
+      if (
+        service === "all" ||
+        service === "api-gateway" ||
+        service === "auth-service" ||
+        service === "dictionary" ||
+        service === "worker"
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private async inMemoryCountLevels(
+    query: FetchAdminLogsDto,
+    bounds: Pick<PeriodBounds, "from" | "to">,
+  ): Promise<LevelCounters> {
+    const sample = await this.fetchUnifiedEvents(
+      query,
+      bounds,
+      COUNT_LEVELS_FALLBACK_SAMPLE,
+    );
+    const filtered = this.applyInMemoryFilters(sample, query);
+    return this.buildCounters(filtered);
+  }
+
+  private buildCounters(items: UnifiedLogEvent[]): LevelCounters {
     const counters: LevelCounters = {
-      total: filtered.length,
+      total: items.length,
       debug: 0,
       info: 0,
       warn: 0,
       error: 0,
       critical: 0,
-      tabs: { all: filtered.length, debug: 0, info: 0, warn: 0, error: 0, critical: 0 },
+      tabs: { all: items.length, debug: 0, info: 0, warn: 0, error: 0, critical: 0 },
     };
-    for (const item of filtered) {
+    for (const item of items) {
       if (item.level === AdminLogsLevel.DEBUG) counters.debug += 1;
       if (item.level === AdminLogsLevel.INFO) counters.info += 1;
       if (item.level === AdminLogsLevel.WARN) counters.warn += 1;
@@ -634,6 +723,243 @@ export class AdminLogsService {
     counters.tabs.error = counters.error;
     counters.tabs.critical = counters.critical;
     return counters;
+  }
+
+  private async dbCountLevels(
+    query: FetchAdminLogsDto,
+    bounds: Pick<PeriodBounds, "from" | "to">,
+  ): Promise<LevelCounters> {
+    const service = query.service ?? "all";
+    const tasks: Array<Promise<Partial<Record<AdminLogsLevel, number>>>> = [];
+
+    if (service === "all" || service === "text-processor" || service === "scheduler") {
+      tasks.push(this.dbCountTextLogs(query, bounds));
+    }
+    if (
+      service === "all" ||
+      service === "api-gateway" ||
+      service === "auth-service" ||
+      service === "dictionary" ||
+      service === "worker"
+    ) {
+      tasks.push(this.dbCountUserEvents(query, bounds));
+    }
+    if (service === "all" || service === "billing") {
+      tasks.push(this.dbCountSubscriptionEvents(query, bounds));
+      tasks.push(this.dbCountPayments(query, bounds));
+    }
+
+    const partials = await Promise.all(tasks);
+
+    let debug = 0;
+    let info = 0;
+    let warn = 0;
+    let error = 0;
+    let critical = 0;
+    for (const part of partials) {
+      debug += part[AdminLogsLevel.DEBUG] ?? 0;
+      info += part[AdminLogsLevel.INFO] ?? 0;
+      warn += part[AdminLogsLevel.WARN] ?? 0;
+      error += part[AdminLogsLevel.ERROR] ?? 0;
+      critical += part[AdminLogsLevel.CRITICAL] ?? 0;
+    }
+    const total = debug + info + warn + error + critical;
+
+    return {
+      total,
+      debug,
+      info,
+      warn,
+      error,
+      critical,
+      tabs: { all: total, debug, info, warn, error, critical },
+    };
+  }
+
+  private async dbCountTextLogs(
+    query: FetchAdminLogsDto,
+    bounds: Pick<PeriodBounds, "from" | "to">,
+  ): Promise<Partial<Record<AdminLogsLevel, number>>> {
+    const baseWhere: Prisma.TextVersionLogWhereInput = {
+      timestamp: { gte: bounds.from, lte: bounds.to },
+    };
+    const versionFilter = this.textVersionFilter(query);
+    if (versionFilter) baseWhere.version = versionFilter;
+
+    const criticalOr = this.criticalTextErrorOr();
+    const [debug, info, warn, errorTotal, critical] = await Promise.all([
+      this.prisma.textVersionLog.count({
+        where: { ...baseWhere, level: LogLevel.OK },
+      }),
+      this.prisma.textVersionLog.count({
+        where: { ...baseWhere, level: LogLevel.INFO },
+      }),
+      this.prisma.textVersionLog.count({
+        where: { ...baseWhere, level: LogLevel.WARN },
+      }),
+      this.prisma.textVersionLog.count({
+        where: { ...baseWhere, level: LogLevel.ERROR },
+      }),
+      this.prisma.textVersionLog.count({
+        where: { ...baseWhere, level: LogLevel.ERROR, OR: criticalOr },
+      }),
+    ]);
+
+    return {
+      [AdminLogsLevel.DEBUG]: debug,
+      [AdminLogsLevel.INFO]: info,
+      [AdminLogsLevel.WARN]: warn,
+      [AdminLogsLevel.ERROR]: Math.max(0, errorTotal - critical),
+      [AdminLogsLevel.CRITICAL]: critical,
+    };
+  }
+
+  private async dbCountUserEvents(
+    query: FetchAdminLogsDto,
+    bounds: Pick<PeriodBounds, "from" | "to">,
+  ): Promise<Partial<Record<AdminLogsLevel, number>>> {
+    const where: Prisma.UserEventWhereInput = {
+      createdAt: { gte: bounds.from, lte: bounds.to },
+    };
+    const types = this.userEventTypesForService(query.service);
+    if (types !== null && types.length === 0) return {};
+    if (types) where.type = { in: types };
+    if (query.userId) where.userId = query.userId;
+
+    const grouped = await this.prisma.userEvent.groupBy({
+      by: ["type"],
+      where,
+      _count: { _all: true },
+    });
+
+    let debug = 0;
+    let info = 0;
+    let warn = 0;
+    for (const row of grouped) {
+      const cnt = row._count._all;
+      if (row.type === UserEventType.CLICK_WORD) debug += cnt;
+      else if (row.type === UserEventType.FAIL_LOOKUP) warn += cnt;
+      else info += cnt;
+    }
+
+    return {
+      [AdminLogsLevel.DEBUG]: debug,
+      [AdminLogsLevel.INFO]: info,
+      [AdminLogsLevel.WARN]: warn,
+    };
+  }
+
+  private async dbCountSubscriptionEvents(
+    query: FetchAdminLogsDto,
+    bounds: Pick<PeriodBounds, "from" | "to">,
+  ): Promise<Partial<Record<AdminLogsLevel, number>>> {
+    const where: Prisma.SubscriptionEventWhereInput = {
+      createdAt: { gte: bounds.from, lte: bounds.to },
+    };
+    if (query.userId) where.subscription = { userId: query.userId };
+
+    const grouped = await this.prisma.subscriptionEvent.groupBy({
+      by: ["type"],
+      where,
+      _count: { _all: true },
+    });
+
+    let info = 0;
+    let warn = 0;
+    for (const row of grouped) {
+      const cnt = row._count._all;
+      if (
+        row.type === SubscriptionEventType.CANCELED ||
+        row.type === SubscriptionEventType.REFUNDED
+      ) {
+        warn += cnt;
+      } else {
+        info += cnt;
+      }
+    }
+
+    return {
+      [AdminLogsLevel.INFO]: info,
+      [AdminLogsLevel.WARN]: warn,
+    };
+  }
+
+  private async dbCountPayments(
+    query: FetchAdminLogsDto,
+    bounds: Pick<PeriodBounds, "from" | "to">,
+  ): Promise<Partial<Record<AdminLogsLevel, number>>> {
+    const where: Prisma.PaymentWhereInput = {
+      createdAt: { gte: bounds.from, lte: bounds.to },
+    };
+    if (query.userId) where.userId = query.userId;
+
+    const grouped = await this.prisma.payment.groupBy({
+      by: ["status"],
+      where,
+      _count: { _all: true },
+    });
+
+    let debug = 0;
+    let info = 0;
+    let warn = 0;
+    let error = 0;
+    for (const row of grouped) {
+      const cnt = row._count._all;
+      if (row.status === PaymentStatus.PENDING) debug += cnt;
+      else if (row.status === PaymentStatus.SUCCEEDED) info += cnt;
+      else if (row.status === PaymentStatus.REFUNDED) warn += cnt;
+      else error += cnt;
+    }
+
+    return {
+      [AdminLogsLevel.DEBUG]: debug,
+      [AdminLogsLevel.INFO]: info,
+      [AdminLogsLevel.WARN]: warn,
+      [AdminLogsLevel.ERROR]: error,
+    };
+  }
+
+  private textVersionFilter(
+    query: FetchAdminLogsDto,
+  ): Prisma.TextProcessingVersionWhereInput | null {
+    const filter: Prisma.TextProcessingVersionWhereInput = {};
+    let used = false;
+
+    if (query.userId) {
+      filter.initiatorId = query.userId;
+      used = true;
+    }
+    if (query.service === "text-processor") {
+      filter.trigger = ProcessingTrigger.MANUAL;
+      used = true;
+    } else if (query.service === "scheduler") {
+      filter.trigger = {
+        in: [ProcessingTrigger.AUTO_ON_SAVE, ProcessingTrigger.AUTO_ON_CREATE],
+      };
+      used = true;
+    }
+    if (query.durationMin !== undefined || query.durationMax !== undefined) {
+      const range: { gte?: number; lte?: number } = {};
+      if (query.durationMin !== undefined) range.gte = query.durationMin;
+      if (query.durationMax !== undefined) range.lte = query.durationMax;
+      filter.durationMs = range;
+      used = true;
+    }
+    return used ? filter : null;
+  }
+
+  private criticalTextErrorOr(): Prisma.TextVersionLogWhereInput[] {
+    return [
+      { version: { durationMs: { gte: 5000 } } },
+      ...CRITICAL_TEXT_KEYWORDS.map((kw) => ({
+        message: { contains: kw, mode: "insensitive" as const },
+      })),
+      ...CRITICAL_TEXT_KEYWORDS.map((kw) => ({
+        version: {
+          errorMessage: { contains: kw, mode: "insensitive" as const },
+        },
+      })),
+    ];
   }
 
   private resolveLevelFilter(query: FetchAdminLogsDto): AdminLogsLevel | undefined {

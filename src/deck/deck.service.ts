@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { DeckType } from "@prisma/client";
+import { DeckType, Prisma } from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
+import { attachLatestContexts } from "src/progress/latest-context.helper";
 
 const DEFAULT_DECK_LIMIT = 90;
 
@@ -9,10 +10,16 @@ const lemmaSelect = {
   baseForm: true,
   partOfSpeech: true,
   headwords: {
-    take: 1,
+    take: 3,
+    orderBy: { order: "asc" },
     include: { entry: { select: { rawTranslate: true } } },
   },
-};
+  morphForms: {
+    take: 8,
+    orderBy: [{ gramCase: "asc" }, { gramNumber: "asc" }],
+    select: { form: true, grammarTag: true, gramCase: true, gramNumber: true },
+  },
+} satisfies Prisma.LemmaSelect;
 
 @Injectable()
 export class DeckService {
@@ -179,11 +186,23 @@ export class DeckService {
       });
     }
 
+    const [
+      newWithCtx,
+      oldWithCtx,
+      retiredWithCtx,
+      numberedWithCtx,
+    ] = await Promise.all([
+      attachLatestContexts(this.prisma, userId, newCards),
+      attachLatestContexts(this.prisma, userId, oldCards),
+      attachLatestContexts(this.prisma, userId, retiredCards),
+      attachLatestContexts(this.prisma, userId, numberedCards),
+    ]);
+
     return {
-      new: newCards,
-      old: oldCards,
-      retired: retiredCards,
-      numbered: numberedCards,
+      new: newWithCtx,
+      old: oldWithCtx,
+      retired: retiredWithCtx,
+      numbered: numberedWithCtx,
       currentNumberedDeck,
       maxNumberedDeck: maxDeck,
     };
@@ -194,7 +213,7 @@ export class DeckService {
   async getStats(userId: string) {
     const settings = await this.getSettings(userId);
 
-    const [newCount, oldCount, retiredCount, numberedGroups] = await Promise.all([
+    const [newCount, oldCount, retiredCount, numberedGroups, maxResult] = await Promise.all([
       this.prisma.userDeckCard.count({ where: { userId, deckType: DeckType.NEW } }),
       this.prisma.userDeckCard.count({ where: { userId, deckType: DeckType.OLD } }),
       this.prisma.userDeckCard.count({ where: { userId, deckType: DeckType.RETIRED } }),
@@ -204,9 +223,16 @@ export class DeckService {
         _count: { id: true },
         orderBy: { deckNumber: "asc" },
       }),
+      this.prisma.userDeckCard.aggregate({
+        where: { userId, deckType: DeckType.NUMBERED },
+        _max: { deckNumber: true },
+      }),
     ]);
 
     const numberedTotal = numberedGroups.reduce((sum, g) => sum + g._count.id, 0);
+    const maxNumberedDeck = maxResult._max.deckNumber ?? 0;
+    const currentNumberedDeck =
+      maxNumberedDeck > 0 ? await this.getCurrentNumberedDeck(userId, maxNumberedDeck) : null;
 
     return {
       new: newCount,
@@ -214,6 +240,8 @@ export class DeckService {
       retired: retiredCount,
       numbered: numberedGroups.map((g) => ({ deckNumber: g.deckNumber, count: g._count.id })),
       total: newCount + oldCount + retiredCount + numberedTotal,
+      currentNumberedDeck,
+      maxNumberedDeck,
       deckMaxSize: settings.deckMaxSize,
       dailyWordCount: settings.dailyWordCount,
     };

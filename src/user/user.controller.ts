@@ -11,7 +11,6 @@ import {
 } from "@nestjs/common";
 import {
   ApiBearerAuth,
-  ApiCreatedResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -23,6 +22,7 @@ import { PermissionCode } from "@prisma/client";
 import { Auth } from "src/auth/decorators/auth.decorator";
 import { PermissionsService } from "src/auth/permissions/permissions.service";
 import { User } from "./decorators/user.decorator";
+import { DeleteAccountDto } from "./dto/delete-account.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
 import { UserService } from "./user.service";
 
@@ -35,6 +35,18 @@ export class UserController {
     private readonly userService: UserService,
     private readonly permissionsService: PermissionsService,
   ) {}
+
+  @Get("me")
+  @Auth()
+  @ApiOperation({
+    summary: "Get current user profile",
+    description:
+      "Возвращает профиль авторизованного пользователя без необходимости знать его id. Используется приветствием на главной, шапкой и т.д.",
+  })
+  @ApiOkResponse({ description: "Returns the current user profile" })
+  async getMe(@User("id") userId: string) {
+    return this.userService.getUserById(userId);
+  }
 
   @Get(":id")
   @Auth()
@@ -67,18 +79,26 @@ export class UserController {
     return this.userService.updateUser(dto, userId);
   }
 
-  @HttpCode(201)
+  @HttpCode(200)
   @Auth()
   @Delete()
-  @ApiOperation({ summary: "Delete current user account" })
-  @ApiNotFoundResponse({
-    description: "The user not found",
+  @ApiOperation({
+    summary:
+      "Schedule current account for deletion (soft-delete with 30-day grace period)",
+    description:
+      "Требует подтверждения через ввод email текущего аккаунта в теле запроса. " +
+      "Аккаунт помечается status=DELETED, deletedAt=now(), все активные сессии отзываются. " +
+      "Через 30 дней данные удаляются безвозвратно фоновым job'ом.",
   })
-  @ApiCreatedResponse({
-    description: "The user has been deleted successfully",
+  @ApiNotFoundResponse({ description: "The user not found" })
+  @ApiOkResponse({
+    description:
+      "Account scheduled for deletion. Returns { success: true, message }.",
   })
-  @ApiOkResponse({ description: "User account deleted successfully" })
-  async deleteUser(@User("id") userId: string) {
-    return this.userService.deleteUser(userId);
+  async deleteUser(
+    @User("id") userId: string,
+    @Body() dto: DeleteAccountDto,
+  ) {
+    return this.userService.deleteUser(userId, dto);
   }
 }

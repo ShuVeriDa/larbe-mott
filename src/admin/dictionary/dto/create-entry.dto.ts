@@ -70,4 +70,12 @@ export class CreateEntryDto {
   @ArrayNotEmpty()
   @IsString({ each: true })
   forms?: string[];
+
+  @ApiProperty({
+    description: "Domain / topic (free-form): e.g. 'повседневная речь'",
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  domain?: string;
 }

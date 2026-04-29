@@ -35,6 +35,15 @@ export class UpdateDictionaryFolderDto {
   color?: string;
 
   @ApiPropertyOptional({
+    description: "Icon key (frontend renders the corresponding SVG)",
+    example: "book",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  icon?: string;
+
+  @ApiPropertyOptional({
     description: "Sort order (lower = first)",
   })
   @IsOptional()

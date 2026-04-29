@@ -1,20 +1,18 @@
-export interface DikWord {
-  id: string;
-  word1?: string;
+/**
+ * Запись из нашего dosham-бэкенда (`GET /api/dictionary/lookup/:word`).
+ * Полная схема `UnifiedEntry` гораздо шире — здесь только нужные нам поля.
+ */
+export interface DoshamMeaning {
+  translation: string;
+  examples?: { nah: string; ru: string }[];
+}
+
+export interface DoshamEntry {
+  id: number;
   word: string;
-  translate: string;
-}
-
-export interface DikDictionary {
-  dictTableName: string;
-  dictName: string;
-  words: DikWord[];
-}
-
-export interface DikResponse {
-  data: DikDictionary[];
-  suggestedWords: DikWord[];
-  errors: string[];
+  wordNormalized: string;
+  partOfSpeech?: string | null;
+  meanings: DoshamMeaning[];
 }
 
 export type LookupResult = {

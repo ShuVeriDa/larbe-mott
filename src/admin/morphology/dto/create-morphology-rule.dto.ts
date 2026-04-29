@@ -31,9 +31,10 @@ export class CreateMorphologyRuleDto {
   @IsEnum(MorphRuleType)
   type: MorphRuleType;
 
-  @ApiProperty({ enum: Language, description: "Language this rule applies to" })
+  @ApiPropertyOptional({ enum: Language, description: "Language this rule applies to", default: "CHE" })
+  @IsOptional()
   @IsEnum(Language)
-  language: Language;
+  language?: Language;
 
   @ApiPropertyOptional({ description: "Higher priority rules are tried first", default: 0 })
   @IsOptional()

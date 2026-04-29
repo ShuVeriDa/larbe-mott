@@ -29,8 +29,13 @@ export class StatisticsService {
 
   // ─── Main entry point ────────────────────────────────────────────────────────
 
-  async getUserStatistics(userId: string, period: StatPeriod) {
+  async getUserStatistics(
+    userId: string,
+    period: StatPeriod,
+    opts: { activityLimit?: number } = {},
+  ) {
     const range = this.buildRange(period);
+    const activityLimit = opts.activityLimit ?? 15;
 
     const [
       wordsLearned,
@@ -39,7 +44,8 @@ export class StatisticsService {
       textsRead,
       streak,
       heatmap,
-      words,
+      wordStats,
+      goals,
       wordsPerDay,
       texts,
       accuracy,
@@ -52,11 +58,17 @@ export class StatisticsService {
       this.getStreak(userId),
       this.getYearHeatmap(userId),
       this.analyticsService.getWordStats(userId),
+      this.prisma.userGoals.findUnique({
+        where: { userId },
+        select: { vocabularyGoal: true },
+      }),
       this.getWordsPerDay(userId, range, period),
       this.getTextsProgress(userId),
       this.getAccuracy(userId, range, period),
-      this.getRecentActivity(userId, range),
+      this.getRecentActivity(userId, range, activityLimit),
     ]);
+
+    const words = { ...wordStats, goal: goals?.vocabularyGoal ?? 800 };
 
     return {
       period,
@@ -69,6 +81,67 @@ export class StatisticsService {
       accuracy,
       recentActivity,
     };
+  }
+
+  // ─── Profile summary (Free + Premium) ────────────────────────────────────────
+  // Минимальный набор статистики для страницы /profile (доступен ВСЕМ юзерам, без Premium).
+  // Полный /statistics/me остаётся под @RequiresPremium().
+
+  async getProfileSummary(userId: string) {
+    const [wordStats, streakDetails, textsRead, heatmap] = await Promise.all([
+      this.analyticsService.getWordStats(userId),
+      this.analyticsService.getStreakDetails(userId),
+      this.prisma.userTextProgress.count({
+        where: { userId, completedAt: { not: null } },
+      }),
+      this.getProfileHeatmap(userId),
+    ]);
+
+    return {
+      words: wordStats, // { total, new, learning, known }
+      textsRead,
+      streak: { current: streakDetails.current, record: streakDetails.record },
+      heatmap, // плоский массив 70 ячеек: [{ date, level, count }]
+    };
+  }
+
+  /** Последние 70 дней активности — flat-массив для UI heatmap на /profile. */
+  private async getProfileHeatmap(userId: string) {
+    const days = 70;
+    const from = new Date();
+    from.setUTCDate(from.getUTCDate() - (days - 1));
+    from.setUTCHours(0, 0, 0, 0);
+
+    const events = await this.prisma.userEvent.findMany({
+      where: {
+        userId,
+        type: { in: [UserEventType.CLICK_WORD, UserEventType.ADD_TO_DICTIONARY] },
+        createdAt: { gte: from },
+      },
+      select: { createdAt: true },
+    });
+
+    const countByDay: Record<string, number> = {};
+    for (const e of events) {
+      const day = this.utcDateKey(e.createdAt);
+      countByDay[day] = (countByDay[day] ?? 0) + 1;
+    }
+
+    const toLevel = (n: number): 0 | 1 | 2 | 3 | 4 => {
+      if (n === 0) return 0;
+      if (n <= 5) return 1;
+      if (n <= 15) return 2;
+      if (n <= 30) return 3;
+      return 4;
+    };
+
+    return Array.from({ length: days }, (_, i) => {
+      const d = new Date(from);
+      d.setUTCDate(from.getUTCDate() + i);
+      const key = this.utcDateKey(d);
+      const count = countByDay[key] ?? 0;
+      return { date: key, level: toLevel(count), count };
+    });
   }
 
   // ─── Period range ────────────────────────────────────────────────────────────
@@ -167,34 +240,25 @@ export class StatisticsService {
   }
 
   // ─── Header: texts read ──────────────────────────────────────────────────────
+  // Counts texts the user finished (progressPercent reached 100%) within the range.
+  // Uses UserTextProgress.completedAt — set once on first completion.
 
   private async getTextsRead(userId: string, range: DateRange, period: StatPeriod) {
-    const events = await this.prisma.userEvent.findMany({
-      where: { userId, type: UserEventType.OPEN_TEXT, ...this.periodWhere(period, range) },
-      select: { metadata: true },
-    });
+    const completedWhere =
+      period !== StatPeriod.ALL
+        ? { userId, completedAt: { gte: range.from, lte: range.to } }
+        : { userId, completedAt: { not: null } };
 
-    const textIds = new Set(
-      events
-        .map((e) => (e.metadata as { textId?: string } | null)?.textId)
-        .filter((id): id is string => Boolean(id)),
-    );
+    const [total, prev] = await Promise.all([
+      this.prisma.userTextProgress.count({ where: completedWhere }),
+      period !== StatPeriod.ALL
+        ? this.prisma.userTextProgress.count({
+            where: { userId, completedAt: { gte: range.prevFrom, lt: range.prevTo } },
+          })
+        : Promise.resolve(null as number | null),
+    ]);
 
-    let delta: number | null = null;
-    if (period !== StatPeriod.ALL) {
-      const prevEvents = await this.prisma.userEvent.findMany({
-        where: { userId, type: UserEventType.OPEN_TEXT, createdAt: { gte: range.prevFrom, lt: range.prevTo } },
-        select: { metadata: true },
-      });
-      const prevIds = new Set(
-        prevEvents
-          .map((e) => (e.metadata as { textId?: string } | null)?.textId)
-          .filter((id): id is string => Boolean(id)),
-      );
-      delta = textIds.size - prevIds.size;
-    }
-
-    return { total: textIds.size, delta };
+    return { total, delta: prev !== null ? total - prev : null };
   }
 
   // ─── Streak ──────────────────────────────────────────────────────────────────
@@ -245,7 +309,8 @@ export class StatisticsService {
 
       const days = Array.from({ length: daysInMonth }, (_, d) => {
         const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(d + 1).padStart(2, "0")}`;
-        return { date: dateStr, level: toLevel(countByDay[dateStr] ?? 0) };
+        const count = countByDay[dateStr] ?? 0;
+        return { date: dateStr, level: toLevel(count), count };
       });
 
       return { month: MONTH_LABELS[month], days };
@@ -373,7 +438,10 @@ export class StatisticsService {
 
   // ─── Recent activity ──────────────────────────────────────────────────────────
 
-  private async getRecentActivity(userId: string, range: DateRange) {
+  private async getRecentActivity(userId: string, range: DateRange, limit: number) {
+    // Pull a bit more raw events than `limit` to compensate for dedup/collapse,
+    // capped to keep the in-memory pass small.
+    const fetchLimit = Math.min(100, Math.max(limit * 3, 30));
     const events = await this.prisma.userEvent.findMany({
       where: {
         userId,
@@ -381,7 +449,7 @@ export class StatisticsService {
         createdAt: { gte: range.from },
       },
       orderBy: { createdAt: "desc" },
-      take: 30,
+      take: fetchLimit,
       select: { id: true, type: true, metadata: true, createdAt: true },
     });
 
@@ -467,7 +535,7 @@ export class StatisticsService {
         });
       }
 
-      if (result.length >= 15) break;
+      if (result.length >= limit) break;
     }
 
     return result;

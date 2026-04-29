@@ -1,9 +1,17 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
-import { Language, Level, UserEventType } from "@prisma/client";
+import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  FeedbackAuthorType,
+  FeedbackContextType,
+  FeedbackType,
+  Language,
+  Level,
+  UserEventType,
+} from "@prisma/client";
 import { TokenizerProcessor } from "src/markup-engine/tokenizer/tokenizer.processor";
 import { PrismaService } from "src/prisma.service";
 import { TextProgressService } from "src/progress/text-progress/text-progress.service";
 import { WordProgressService } from "src/progress/word-progress/word-progress.service";
+import { ReportTextDto, TextReportReason } from "./dto/report-text.dto";
 
 export type TextProgressStatus = "NEW" | "IN_PROGRESS" | "COMPLETED";
 export type TextSortOrder = "newest" | "oldest" | "alpha" | "progress" | "length" | "level";
@@ -99,13 +107,27 @@ export class TextService {
       this.prisma.text.count({ where }),
     ]);
 
+    // Глобальные счётчики по всей выборке (without status filter), чтобы stats row
+    // отражал не только items текущей страницы.
+    const [completedCount, inProgressCount] = userId
+      ? await Promise.all([
+          this.prisma.userTextProgress.count({
+            where: { userId, progressPercent: 100, text: where },
+          }),
+          this.prisma.userTextProgress.count({
+            where: { userId, progressPercent: { gt: 0, lt: 100 }, text: where },
+          }),
+        ])
+      : [0, 0];
+    const counts = {
+      total,
+      new: total - completedCount - inProgressCount,
+      inProgress: inProgressCount,
+      completed: completedCount,
+    };
+
     if (!texts.length) {
-      return {
-        items: [],
-        page: safePage,
-        limit: safeLimit,
-        counts: { total, new: 0, inProgress: 0, completed: 0 },
-      };
+      return { items: [], page: safePage, limit: safeLimit, counts };
     }
 
     const ids = texts.map((t) => t.id);
@@ -192,14 +214,6 @@ export class TextService {
       items.sort((a, b) => b.wordCount - a.wordCount);
     }
 
-    // Счётчики по текущей выборке (до фильтра статуса, но с остальными фильтрами)
-    const counts = {
-      total,
-      new: items.filter((i) => i.progressStatus === "NEW").length,
-      inProgress: items.filter((i) => i.progressStatus === "IN_PROGRESS").length,
-      completed: items.filter((i) => i.progressStatus === "COMPLETED").length,
-    };
-
     // Убираем служебное поле tags из Prisma (TextTag[]), оставляем наш маппинг
     const result = items.map(({ tags, ...rest }) => ({ ...rest, tags }));
 
@@ -216,7 +230,12 @@ export class TextService {
         progressPercent: { gt: 0, lt: 100 },
       },
       orderBy: { lastOpened: "desc" },
-      select: { textId: true, progressPercent: true, lastOpened: true },
+      select: {
+        textId: true,
+        progressPercent: true,
+        lastOpened: true,
+        lastPageNumber: true,
+      },
     });
 
     if (!progressRows.length) return [];
@@ -273,7 +292,10 @@ export class TextService {
         const totalPages = pageCountByTextId.get(p.textId) ?? 0;
         const versionId = latestVersionIdByTextId.get(p.textId);
         const wordCount = versionId ? (countByVersionId.get(versionId) ?? 0) : 0;
-        const currentPage = totalPages > 0 ? Math.ceil((p.progressPercent / 100) * totalPages) : 0;
+        // Reading position the user actually reached, clamped to totalPages in case
+        // pages were removed after the position was recorded.
+        const currentPage =
+          totalPages > 0 ? Math.min(p.lastPageNumber, totalPages) : 0;
         const tags = text.tags.map((tt) => tt.tag);
         return {
           ...text,
@@ -317,6 +339,22 @@ export class TextService {
     ]);
     if (!page) throw new NotFoundException("Page not found");
 
+    // Bump reading position (monotonic forward) and read it back together with the
+    // bookmark flag in a single Promise.all to keep this hot path tight.
+    const [position, bookmark] = await Promise.all([
+      userId
+        ? this.textProgress.setPosition(userId, textId, pageNumber)
+        : Promise.resolve(null),
+      userId
+        ? this.prisma.userTextBookmark.findUnique({
+            where: { userId_textId: { userId, textId } },
+            select: { id: true },
+          })
+        : Promise.resolve(null),
+    ]);
+    const lastPageNumber = position?.lastPageNumber ?? pageNumber;
+    const bookmarked = bookmark !== null;
+
     if (!latestVersion) {
       return {
         ...text,
@@ -325,6 +363,8 @@ export class TextService {
         contentRich: page.contentRich,
         tokens: [],
         progress: 0,
+        bookmarked,
+        lastPageNumber,
         page: {
           id: page.id,
           pageNumber: page.pageNumber,
@@ -392,11 +432,7 @@ export class TextService {
       : 0;
 
     if (userId) {
-      await this.prisma.userTextProgress.upsert({
-        where: { userId_textId: { userId, textId } },
-        update: { progressPercent: progress, lastOpened: new Date() },
-        create: { userId, textId, progressPercent: progress, lastOpened: new Date() },
-      });
+      await this.textProgress.persistProgress(userId, textId, progress, { touchLastOpened: true });
     }
 
     const tokensWithStatus = tokens.map((t) => {
@@ -412,6 +448,8 @@ export class TextService {
       contentRich: page.contentRich,
       tokens: tokensWithStatus,
       progress,
+      bookmarked,
+      lastPageNumber,
       page: {
         id: page.id,
         pageNumber: page.pageNumber,
@@ -461,7 +499,11 @@ export class TextService {
       userId
         ? this.prisma.userTextProgress.findUnique({
             where: { userId_textId: { userId, textId } },
-            select: { progressPercent: true, lastOpened: true },
+            select: {
+              progressPercent: true,
+              lastOpened: true,
+              lastPageNumber: true,
+            },
           })
         : Promise.resolve(null),
       userId
@@ -475,7 +517,8 @@ export class TextService {
     const progressPercent = userProgress?.progressPercent ?? 0;
     const lastOpened = userProgress?.lastOpened ?? null;
     const totalPages = text.pages.length;
-    const currentPage = totalPages > 0 ? Math.ceil((progressPercent / 100) * totalPages) : 0;
+    const currentPage =
+      totalPages > 0 ? Math.min(userProgress?.lastPageNumber ?? 1, totalPages) : 0;
 
     // Статистика слов из текста по статусам пользователя
     let wordStats = { total: lemmaIds.length, known: 0, learning: 0, new: 0 };
@@ -511,11 +554,7 @@ export class TextService {
       : 0;
 
     if (userId) {
-      await this.prisma.userTextProgress.upsert({
-        where: { userId_textId: { userId, textId } },
-        update: { progressPercent: progress, lastOpened: new Date() },
-        create: { userId, textId, progressPercent: progress, lastOpened: new Date() },
-      });
+      await this.textProgress.persistProgress(userId, textId, progress, { touchLastOpened: true });
     }
 
     const tags = text.tags.map((tt) => tt.tag);
@@ -544,6 +583,17 @@ export class TextService {
       wordStats,
       isFavorite: bookmark !== null,
     };
+  }
+
+  async resetProgress(textId: string, userId: string): Promise<{ ok: true }> {
+    const text = await this.prisma.text.findUnique({
+      where: { id: textId },
+      select: { id: true },
+    });
+    if (!text) throw new NotFoundException("Text not found");
+
+    await this.prisma.userTextProgress.deleteMany({ where: { userId, textId } });
+    return { ok: true };
   }
 
   async toggleBookmark(textId: string, userId: string): Promise<{ bookmarked: boolean }> {
@@ -711,5 +761,77 @@ export class TextService {
         progressPercent: progressByTextId.get(t.id) ?? 0,
       };
     });
+  }
+
+  /**
+   * Жалоба на текст. Создаёт FeedbackThread (type=COMPLAINT, contextType=TEXT),
+   * чтобы попасть в общий пайплайн фидбека (админка + история жалоб юзера).
+   */
+  async reportText(textId: string, userId: string, dto: ReportTextDto) {
+    const text = await this.prisma.text.findUnique({
+      where: { id: textId },
+      select: { id: true, title: true },
+    });
+    if (!text) throw new NotFoundException("Text not found");
+
+    // Не даём пользователю плодить открытые жалобы на один и тот же текст.
+    const existing = await this.prisma.feedbackThread.findFirst({
+      where: {
+        userId,
+        type: FeedbackType.COMPLAINT,
+        contextTextId: textId,
+        closedAt: null,
+      },
+      select: { id: true, ticketNumber: true, status: true, createdAt: true },
+    });
+    if (existing) {
+      throw new ConflictException({
+        message: "У вас уже есть открытая жалоба на этот текст",
+        threadId: existing.id,
+        ticketNumber: existing.ticketNumber,
+      });
+    }
+
+    const reasonLabels: Record<TextReportReason, string> = {
+      SPAM: "Спам",
+      INAPPROPRIATE: "Недопустимый контент",
+      COPYRIGHT: "Нарушение авторских прав",
+      INCORRECT_CONTENT: "Ошибки в содержании",
+      BROKEN: "Технические проблемы",
+      OTHER: "Другое",
+    };
+
+    const reasonLabel = reasonLabels[dto.reason];
+    const trimmedComment = dto.comment?.trim();
+    const body = trimmedComment
+      ? `Причина: ${reasonLabel}\n\n${trimmedComment}`
+      : `Причина: ${reasonLabel}`;
+    const title = `Жалоба: ${reasonLabel} — ${text.title}`.slice(0, 200);
+
+    const thread = await this.prisma.feedbackThread.create({
+      data: {
+        userId,
+        type: FeedbackType.COMPLAINT,
+        title,
+        contextType: FeedbackContextType.TEXT,
+        contextTextId: textId,
+        contextAction: dto.reason,
+        messages: {
+          create: {
+            authorType: FeedbackAuthorType.USER,
+            authorId: userId,
+            body,
+          },
+        },
+      },
+      select: {
+        id: true,
+        ticketNumber: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+
+    return thread;
   }
 }

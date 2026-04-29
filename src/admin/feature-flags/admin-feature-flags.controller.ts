@@ -24,6 +24,7 @@ import { CreateFeatureFlagDto } from "./dto/create-feature-flag.dto";
 import { CreateFeatureFlagOverrideDto } from "./dto/create-feature-flag-override.dto";
 import { DuplicateFeatureFlagDto } from "./dto/duplicate-feature-flag.dto";
 import { FetchFeatureFlagHistoryDto } from "./dto/fetch-feature-flag-history.dto";
+import { FetchFeatureFlagKeysDto } from "./dto/fetch-feature-flag-keys.dto";
 import { FetchFeatureFlagOverridesDto } from "./dto/fetch-feature-flag-overrides.dto";
 import { FetchFeatureFlagsDto } from "./dto/fetch-feature-flags.dto";
 import { ImportFeatureFlagsDto } from "./dto/import-feature-flags.dto";
@@ -74,6 +75,28 @@ export class AdminFeatureFlagsController {
     @User("id") actorId: string,
   ) {
     return this.flags.deleteOverride(overrideId, actorId);
+  }
+
+  @AdminPermission(PermissionCode.CAN_MANAGE_FEATURE_FLAGS)
+  @Get("keys")
+  @ApiOperation({
+    summary: "Lightweight list of flag keys for selects/typeahead",
+  })
+  @ApiOkResponse({
+    description: "Compact list of flags with id/key/category/isEnabled.",
+  })
+  getFlagKeys(@Query() query: FetchFeatureFlagKeysDto) {
+    return this.flags.getFlagKeys(query);
+  }
+
+  @AdminPermission(PermissionCode.CAN_MANAGE_FEATURE_FLAGS)
+  @Get("history/actors")
+  @ApiOperation({ summary: "Distinct authors of feature flag history" })
+  @ApiOkResponse({
+    description: "Users who have appeared as actors in flag history (for filter).",
+  })
+  getHistoryActors() {
+    return this.flags.getHistoryActors();
   }
 
   @AdminPermission(PermissionCode.CAN_MANAGE_FEATURE_FLAGS)

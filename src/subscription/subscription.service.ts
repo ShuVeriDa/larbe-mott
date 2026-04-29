@@ -62,14 +62,25 @@ export class SubscriptionService {
     });
   }
 
-  async getMyPayments(userId: string) {
-    return this.prisma.payment.findMany({
+  async getMyPayments(userId: string, opts?: { limit?: number; cursor?: string }) {
+    const limit = Math.min(100, Math.max(1, opts?.limit ?? 20));
+    const cursor = opts?.cursor;
+
+    const items = await this.prisma.payment.findMany({
       where: { userId },
       include: {
         subscription: { include: { plan: true } },
       },
       orderBy: { createdAt: "desc" },
+      take: limit + 1,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     });
+
+    const hasMore = items.length > limit;
+    const page = hasMore ? items.slice(0, limit) : items;
+    const nextCursor = hasMore ? page[page.length - 1]!.id : null;
+
+    return { items: page, nextCursor, hasMore };
   }
 
   async getUsage(userId: string) {
@@ -84,19 +95,27 @@ export class SubscriptionService {
       this.getMySubscription(userId),
     ]);
 
-    const planLimits = subscription?.plan?.limits as Record<string, number> | null;
-    const limits = {
-      maxTranslationsPerDay: planLimits?.maxTranslationsPerDay ?? 50,
-      maxVocabularyWords: planLimits?.maxVocabularyWords ?? 500,
-    };
+    const planLimits =
+      (subscription?.plan?.limits as Record<string, unknown> | null) ?? null;
 
-    return { translationsToday, wordsInDictionary, limits };
+    return {
+      translationsToday,
+      wordsInDictionary,
+      // Полный limits-объект отдаём, чтобы фронт мог построить feature-list карточек и сравнительную таблицу
+      limits: planLimits ?? {
+        translationsPerDay: 50,
+        wordsInDictionary: 500,
+      },
+    };
   }
 
-  async subscribeToPlan(userId: string, planId: string) {
+  async subscribeToPlan(
+    userId: string,
+    ref: { planId?: string; planCode?: string },
+  ) {
     this.assertBillingModeSafeForCurrentEnv();
-    const plan = await this.prisma.plan.findUnique({ where: { id: planId } });
-    if (!plan || !plan.isActive) throw new NotFoundException("Plan not found or inactive");
+    const plan = await this.resolvePlan(ref);
+    const planId = plan.id;
 
     // Пункт 2: подписка на FREE через этот эндпоинт запрещена
     if (plan.type === PlanType.FREE) {
@@ -312,12 +331,94 @@ export class SubscriptionService {
         throw e;
       }
       return {
+        code: coupon.code,
+        name: coupon.name,
         type: coupon.type,
         amount: coupon.amount,
+        // Купон сохранён, но скидка применится только при следующем POST /subscription/subscribe.
+        // Списания денег и моментальной модификации текущей подписки НЕ происходит.
+        status: "saved_for_next_subscription" as const,
         appliesOn: "next_subscription_payment" as const,
         requiresSubscriptionAction: true,
       };
     });
+  }
+
+  async startTrial(userId: string, ref: { planId?: string; planCode?: string }) {
+    this.assertBillingModeSafeForCurrentEnv();
+
+    const plan = await this.resolvePlan(ref);
+    const planId = plan.id;
+    if (plan.type === PlanType.FREE) {
+      throw new BadRequestException("Trial is not applicable to FREE plan");
+    }
+    if (plan.trialDays <= 0) {
+      throw new BadRequestException("Trial is not available for this plan");
+    }
+
+    // Уже есть активная/триальная подписка
+    const current = await this.getMySubscription(userId);
+    if (current) {
+      throw new ConflictException(
+        "You already have an active subscription. Cancel it before starting a trial.",
+      );
+    }
+
+    // Триал даётся один раз — проверяем по любому событию TRIAL_STARTED у этого пользователя
+    const trialStartedBefore = await this.prisma.subscriptionEvent.findFirst({
+      where: {
+        type: SubscriptionEventType.TRIAL_STARTED,
+        subscription: { userId },
+      },
+      select: { id: true },
+    });
+    if (trialStartedBefore) {
+      throw new ConflictException("Trial has already been used");
+    }
+
+    const now = new Date();
+    const endDate = new Date(now.getTime() + plan.trialDays * 24 * 60 * 60 * 1000);
+
+    return this.prisma.$transaction(async (tx) => {
+      const subscription = await tx.subscription.create({
+        data: {
+          userId,
+          planId,
+          status: SubscriptionStatus.TRIALING,
+          startDate: now,
+          endDate,
+          provider: PaymentProvider.MANUAL,
+        },
+        include: { plan: true },
+      });
+
+      await tx.subscriptionEvent.create({
+        data: {
+          subscriptionId: subscription.id,
+          type: SubscriptionEventType.TRIAL_STARTED,
+          metadata: { planCode: plan.code, trialDays: plan.trialDays },
+        },
+      });
+
+      return subscription;
+    });
+  }
+
+  private async resolvePlan(ref: { planId?: string; planCode?: string }) {
+    const { planId, planCode } = ref;
+    if (!planId && !planCode) {
+      throw new BadRequestException("Either planId or planCode must be provided");
+    }
+    if (planId && planCode) {
+      throw new BadRequestException("Provide only one of planId or planCode, not both");
+    }
+    const plan = planId
+      ? await this.prisma.plan.findUnique({ where: { id: planId } })
+      : await this.prisma.plan.findUnique({ where: { code: planCode! } });
+    if (!plan || !plan.isActive) {
+      throw new NotFoundException("Plan not found or inactive");
+    }
+    return plan;
   }
 
   private assertBillingModeSafeForCurrentEnv(): void {

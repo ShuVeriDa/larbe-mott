@@ -153,4 +153,35 @@ export class FetchAdminLogsDto {
   @IsOptional()
   @IsIn(["desc", "asc"])
   order?: "desc" | "asc" = "desc";
+
+  @ApiPropertyOptional({
+    description:
+      "Filter by user ID. Matches initiator/userId fields across all log sources.",
+    example: "ckl1ab2cd3...",
+  })
+  @IsOptional()
+  @IsString()
+  userId?: string;
+
+  @ApiPropertyOptional({
+    description:
+      "Minimum duration in milliseconds (inclusive). Events without duration are excluded when set.",
+    example: 500,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  durationMin?: number;
+
+  @ApiPropertyOptional({
+    description:
+      "Maximum duration in milliseconds (inclusive). Events without duration are excluded when set.",
+    example: 5000,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  durationMax?: number;
 }

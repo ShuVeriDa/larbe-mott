@@ -38,6 +38,12 @@ export class FeedbackController {
     return this.feedbackService.getThreads(userId, dto);
   }
 
+  @Get("unread-count")
+  @ApiOperation({ summary: "Total unread admin replies across all threads" })
+  getUnreadCount(@User("id") userId: string) {
+    return this.feedbackService.getUnreadCount(userId);
+  }
+
   @Get(":threadId")
   @ApiOperation({ summary: "Get thread with all messages" })
   getThread(

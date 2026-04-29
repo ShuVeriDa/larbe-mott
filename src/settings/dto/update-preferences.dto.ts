@@ -66,4 +66,20 @@ export class UpdatePreferencesDto {
   @IsOptional()
   @IsIn(["RU", "EN", "AR"])
   translationLanguage?: string;
+
+  @ApiPropertyOptional({
+    description:
+      "In-app напоминание о повторении на главной странице (число слов на повторение).",
+  })
+  @IsOptional()
+  @IsBoolean()
+  showReviewReminder?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      "Premium-фича: включить авторские деки заучивания (NEW / OLD / RETIRED). При установке в true требуется активная Premium-подписка.",
+  })
+  @IsOptional()
+  @IsBoolean()
+  enableDecks?: boolean;
 }

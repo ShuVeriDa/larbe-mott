@@ -43,6 +43,63 @@ export class AdminDashboardService {
     return { kpi, chart, content, recentUsers, activityFeed, support, billing, unknownWords, featureFlags };
   }
 
+  // ─── Export ────────────────────────────────────────────────────────────────
+
+  async exportCsv(query: DashboardQueryDto): Promise<string> {
+    const data = await this.getDashboard(query);
+    const bounds = this.resolvePeriod(query);
+    const rows: string[][] = [["section", "key", "value"]];
+
+    rows.push(["period", "from", bounds.from.toISOString()]);
+    rows.push(["period", "to", bounds.to.toISOString()]);
+
+    for (const [k, v] of Object.entries(data.kpi)) {
+      rows.push(["kpi", k, v === null || v === undefined ? "" : String(v)]);
+    }
+
+    for (const [k, v] of Object.entries(data.content)) {
+      if (k === "textsByLevel") continue;
+      rows.push(["content", k, v === null || v === undefined ? "" : String(v)]);
+    }
+    for (const lvl of data.content.textsByLevel) {
+      rows.push(["content.textsByLevel", lvl.level ?? "", String(lvl.count)]);
+    }
+
+    rows.push(["unknownWords", "total", String(data.unknownWords.total)]);
+    rows.push(["support", "openCount", String(data.support.openCount)]);
+    rows.push(["support", "inProgressCount", String(data.support.inProgressCount)]);
+    rows.push(["support", "answeredCount", String(data.support.answeredCount)]);
+    rows.push(["support", "resolvedCount", String(data.support.resolvedCount)]);
+
+    for (const p of data.billing.plans) {
+      rows.push(["billing.plans", p.code, String(p.activeSubscriptions)]);
+    }
+    for (const p of data.billing.recentPayments) {
+      rows.push([
+        "billing.recentPayments",
+        `${p.userName} (${p.createdAt.toISOString()})`,
+        `${(p.amountCents / 100).toFixed(2)} ${p.currency}`,
+      ]);
+    }
+
+    for (let i = 0; i < data.chart.labels.length; i++) {
+      rows.push([
+        "chart",
+        data.chart.labels[i],
+        `new=${data.chart.newUsers[i]};active=${data.chart.activeUsers[i]}`,
+      ]);
+    }
+
+    return rows.map((r) => r.map((c) => this.csvCell(c)).join(",")).join("\r\n");
+  }
+
+  private csvCell(value: string): string {
+    if (/[",\r\n]/.test(value)) {
+      return `"${value.replace(/"/g, '""')}"`;
+    }
+    return value;
+  }
+
   // ─── Period ────────────────────────────────────────────────────────────────
 
   private resolvePeriod(query: DashboardQueryDto): PeriodBounds {
@@ -100,6 +157,7 @@ export class AdminDashboardService {
       newPaidSubsPrev,
       revenueNow,
       revenuePrev,
+      revenueByCurrency,
     ] = await Promise.all([
       this.prisma.user.count({ where: { status: notDeleted } }),
       this.prisma.user.count({
@@ -132,7 +190,25 @@ export class AdminDashboardService {
         where: { status: PaymentStatus.SUCCEEDED, createdAt: { gte: prevFrom, lte: prevTo } },
         _sum: { amountCents: true, refundedCents: true },
       }),
+      this.prisma.payment.groupBy({
+        by: ["currency"],
+        where: { status: PaymentStatus.SUCCEEDED, createdAt: { gte: from, lte: to } },
+        _sum: { amountCents: true },
+      }),
     ]);
+
+    const dominantCurrency =
+      revenueByCurrency
+        .slice()
+        .sort(
+          (a, b) => (b._sum.amountCents ?? 0) - (a._sum.amountCents ?? 0),
+        )[0]?.currency ?? null;
+    const fallbackPlan = await this.prisma.plan.findFirst({
+      where: { isActive: true, type: { not: PlanType.FREE } },
+      orderBy: { priceCents: "desc" },
+      select: { currency: true },
+    });
+    const currency = dominantCurrency ?? fallbackPlan?.currency ?? "USD";
 
     const revenueCents =
       (revenueNow._sum.amountCents ?? 0) - (revenueNow._sum.refundedCents ?? 0);
@@ -151,6 +227,7 @@ export class AdminDashboardService {
       revenueCents,
       revenuePrevCents,
       revenueTrend: this.pctChange(revenueCents, revenuePrevCents),
+      currency,
     };
   }
 
@@ -235,12 +312,14 @@ export class AdminDashboardService {
     const [
       totalTexts,
       publishedTexts,
+      newTextsInPeriod,
       dictionaryWordsCount,
       readingsInPeriod,
       textsByLevel,
     ] = await Promise.all([
       this.prisma.text.count(),
       this.prisma.text.count({ where: { publishedAt: { not: null } } }),
+      this.prisma.text.count({ where: { createdAt: { gte: from, lte: to } } }),
       this.prisma.dictionaryEntry.count(),
       this.prisma.userEvent.count({
         where: { type: UserEventType.OPEN_TEXT, createdAt: { gte: from, lte: to } },
@@ -257,6 +336,7 @@ export class AdminDashboardService {
       publishedTexts,
       publishedPercent:
         totalTexts > 0 ? Math.round((publishedTexts / totalTexts) * 100) : 0,
+      newTextsInPeriod,
       dictionaryWordsCount,
       readingsInPeriod,
       textsByLevel: textsByLevel.map((r) => ({ level: r.level, count: r._count.id })),
@@ -323,7 +403,10 @@ export class AdminDashboardService {
   // ─── Activity feed ─────────────────────────────────────────────────────────
 
   private async getActivityFeed() {
-    const [texts, payments, feedbackNew, blockedUsers] = await Promise.all([
+    const morphLookbackDays = 30;
+    const morphLookback = new Date(Date.now() - morphLookbackDays * 86_400_000);
+
+    const [texts, payments, feedbackNew, blockedUsers, promoRedemptions, morphRules] = await Promise.all([
       this.prisma.text.findMany({
         where: { publishedAt: { not: null } },
         orderBy: { publishedAt: "desc" },
@@ -360,6 +443,21 @@ export class AdminDashboardService {
         orderBy: { updatedAt: "desc" },
         take: 5,
         select: { name: true, surname: true, updatedAt: true },
+      }),
+      this.prisma.couponRedemption.findMany({
+        orderBy: { redeemedAt: "desc" },
+        take: 5,
+        select: {
+          redeemedAt: true,
+          coupon: { select: { code: true, name: true } },
+          user: { select: { name: true, surname: true } },
+        },
+      }),
+      this.prisma.morphologyRule.findMany({
+        where: { createdAt: { gte: morphLookback } },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+        select: { createdAt: true },
       }),
     ]);
 
@@ -403,9 +501,56 @@ export class AdminDashboardService {
       });
     }
 
+    for (const r of promoRedemptions) {
+      events.push({
+        type: "PROMO_REDEEMED",
+        title: `Промокод ${r.coupon.code} активирован`,
+        meta: `${r.user.name} ${r.user.surname} · Биллинг`,
+        createdAt: r.redeemedAt,
+      });
+    }
+
+    // Cluster morph rules into batches: a new batch starts when the gap to the
+    // previous rule exceeds 10 minutes. One feed event per batch.
+    const BATCH_GAP_MS = 10 * 60_000;
+    let batchCount = 0;
+    let batchEnd: Date | null = null;
+    let prev: Date | null = null;
+    for (const rule of morphRules) {
+      if (prev && prev.getTime() - rule.createdAt.getTime() > BATCH_GAP_MS) {
+        events.push({
+          type: "MORPH_RULES_ADDED",
+          title: `Добавлено ${batchCount} ${this.pluralizeRules(batchCount)}`,
+          meta: "Морфология",
+          createdAt: batchEnd!,
+        });
+        batchCount = 0;
+        batchEnd = null;
+      }
+      if (batchCount === 0) batchEnd = rule.createdAt;
+      batchCount++;
+      prev = rule.createdAt;
+    }
+    if (batchCount > 0 && batchEnd) {
+      events.push({
+        type: "MORPH_RULES_ADDED",
+        title: `Добавлено ${batchCount} ${this.pluralizeRules(batchCount)}`,
+        meta: "Морфология",
+        createdAt: batchEnd,
+      });
+    }
+
     return events
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
       .slice(0, 20);
+  }
+
+  private pluralizeRules(n: number): string {
+    const mod10 = n % 10;
+    const mod100 = n % 100;
+    if (mod10 === 1 && mod100 !== 11) return "морфологическое правило";
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return "морфологических правила";
+    return "морфологических правил";
   }
 
   // ─── Support summary ───────────────────────────────────────────────────────

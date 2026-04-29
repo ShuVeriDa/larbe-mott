@@ -222,10 +222,10 @@ export class WordLookupByWordService {
     ]);
 
     const planLimits = subscription?.plan?.limits as Record<string, number> | null;
-    const maxTranslationsPerDay = planLimits?.maxTranslationsPerDay ?? 50;
-    if (translationsToday >= maxTranslationsPerDay) {
+    const translationsPerDay = planLimits?.translationsPerDay ?? 50;
+    if (translationsPerDay !== -1 && translationsToday >= translationsPerDay) {
       throw new ForbiddenException(
-        `Daily translation limit of ${maxTranslationsPerDay} reached. Upgrade your plan for more.`,
+        `Daily translation limit of ${translationsPerDay} reached. Upgrade your plan for more.`,
       );
     }
   }

@@ -16,6 +16,7 @@ import {
   FetchFeatureFlagsDto,
   FeatureFlagStatusFilter,
 } from "./dto/fetch-feature-flags.dto";
+import { FetchFeatureFlagKeysDto } from "./dto/fetch-feature-flag-keys.dto";
 import { FetchFeatureFlagOverridesDto } from "./dto/fetch-feature-flag-overrides.dto";
 import { FetchFeatureFlagHistoryDto } from "./dto/fetch-feature-flag-history.dto";
 import {
@@ -46,10 +47,16 @@ export class AdminFeatureFlagsService {
         }),
       ]);
 
-    const overridesUsersCount = await this.prisma.userFeatureFlag.groupBy({
-      by: ["userId"],
-      where: { featureFlag: { deletedAt: null } },
-    });
+    const [overridesUsersCount, categoriesGroup] = await Promise.all([
+      this.prisma.userFeatureFlag.groupBy({
+        by: ["userId"],
+        where: { featureFlag: { deletedAt: null } },
+      }),
+      this.prisma.featureFlag.groupBy({
+        by: ["category"],
+        where: { deletedAt: null },
+      }),
+    ]);
 
     return {
       totalFlags,
@@ -58,7 +65,50 @@ export class AdminFeatureFlagsService {
       overridesCount,
       overridesUsersCount: overridesUsersCount.length,
       prodOnlyCount,
+      categoriesCount: categoriesGroup.length,
     };
+  }
+
+  async getFlagKeys(query: FetchFeatureFlagKeysDto = {}) {
+    const limit = Math.min(500, Math.max(1, query.limit ?? 100));
+    const where: Prisma.FeatureFlagWhereInput = {};
+    if (!query.includeDeleted) where.deletedAt = null;
+    if (query.search?.trim()) {
+      where.key = { contains: query.search.trim(), mode: "insensitive" };
+    }
+
+    const items = await this.prisma.featureFlag.findMany({
+      where,
+      take: limit,
+      orderBy: [{ category: "asc" }, { key: "asc" }],
+      select: {
+        id: true,
+        key: true,
+        category: true,
+        isEnabled: true,
+      },
+    });
+
+    return { items, total: items.length };
+  }
+
+  async getHistoryActors() {
+    const rows = await this.prisma.featureFlagHistory.findMany({
+      where: { actorId: { not: null } },
+      select: { actorId: true },
+      distinct: ["actorId"],
+    });
+    const ids = rows
+      .map((r) => r.actorId)
+      .filter((value): value is string => Boolean(value));
+    if (ids.length === 0) return { items: [] };
+
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, email: true, name: true, surname: true },
+      orderBy: [{ surname: "asc" }, { name: "asc" }, { email: "asc" }],
+    });
+    return { items: users };
   }
 
   async getFlags(query: FetchFeatureFlagsDto = {}) {
@@ -244,34 +294,71 @@ export class AdminFeatureFlagsService {
         },
       });
 
-      const details: Record<string, Prisma.InputJsonValue> = {};
-      if (dto.key !== undefined && dto.key !== flag.key) details["key"] = { from: flag.key, to: dto.key };
-      if (dto.description !== undefined && dto.description !== flag.description) {
-        details["description"] = { from: flag.description, to: dto.description };
-      }
-      if (dto.isEnabled !== undefined && dto.isEnabled !== flag.isEnabled) {
-        details["isEnabled"] = { from: flag.isEnabled, to: dto.isEnabled };
-      }
-      if (dto.category !== undefined && dto.category !== flag.category) {
-        details["category"] = { from: flag.category, to: dto.category };
-      }
-      if (
+      const isEnabledChanged =
+        dto.isEnabled !== undefined && dto.isEnabled !== flag.isEnabled;
+      const rolloutChanged =
+        dto.rolloutPercent !== undefined && dto.rolloutPercent !== flag.rolloutPercent;
+      const environmentsChanged =
         dto.environments !== undefined &&
-        JSON.stringify(dto.environments) !== JSON.stringify(flag.environments)
-      ) {
-        details["environments"] = { from: flag.environments, to: dto.environments };
-      }
-      if (dto.rolloutPercent !== undefined && dto.rolloutPercent !== flag.rolloutPercent) {
-        details["rolloutPercent"] = { from: flag.rolloutPercent, to: dto.rolloutPercent };
+        JSON.stringify([...dto.environments].sort()) !==
+          JSON.stringify([...flag.environments].sort());
+
+      if (isEnabledChanged) {
+        await this.createHistory(tx, {
+          flagId: updated.id,
+          flagKey: updated.key,
+          eventType: dto.isEnabled
+            ? FeatureFlagHistoryEventType.GLOBAL_ENABLED
+            : FeatureFlagHistoryEventType.GLOBAL_DISABLED,
+          actorId,
+          details: { from: flag.isEnabled, to: dto.isEnabled },
+        });
       }
 
-      if (Object.keys(details).length > 0) {
+      if (rolloutChanged) {
+        await this.createHistory(tx, {
+          flagId: updated.id,
+          flagKey: updated.key,
+          eventType: FeatureFlagHistoryEventType.ROLLOUT_CHANGED,
+          actorId,
+          details: { from: flag.rolloutPercent, to: dto.rolloutPercent },
+        });
+      }
+
+      if (environmentsChanged) {
+        await this.createHistory(tx, {
+          flagId: updated.id,
+          flagKey: updated.key,
+          eventType: FeatureFlagHistoryEventType.ENVIRONMENTS_CHANGED,
+          actorId,
+          details: { from: flag.environments, to: dto.environments },
+        });
+      }
+
+      const otherDetails: Record<string, Prisma.InputJsonValue> = {};
+      if (dto.key !== undefined && dto.key !== flag.key) {
+        otherDetails["key"] = { from: flag.key, to: dto.key };
+      }
+      if (
+        dto.description !== undefined &&
+        dto.description !== flag.description
+      ) {
+        otherDetails["description"] = {
+          from: flag.description,
+          to: dto.description,
+        };
+      }
+      if (dto.category !== undefined && dto.category !== flag.category) {
+        otherDetails["category"] = { from: flag.category, to: dto.category };
+      }
+
+      if (Object.keys(otherDetails).length > 0) {
         await this.createHistory(tx, {
           flagId: updated.id,
           flagKey: updated.key,
           eventType: FeatureFlagHistoryEventType.FLAG_UPDATED,
           actorId,
-          details,
+          details: otherDetails,
         });
       }
 

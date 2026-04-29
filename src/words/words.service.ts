@@ -112,4 +112,98 @@ export class WordsService {
       dictionaryEntryId,
     };
   }
+
+  // Связанные слова: синонимы / антонимы / однокоренные. Симметрично:
+  // ищем по обеим сторонам WordRelation (lemmaId или relatedLemmaId совпадают),
+  // дедуплицируем по (relatedLemmaId, type).
+  async getRelated(lemmaId: string) {
+    const [outgoing, incoming] = await Promise.all([
+      this.prisma.wordRelation.findMany({
+        where: { lemmaId },
+        select: {
+          type: true,
+          related: {
+            select: {
+              id: true,
+              baseForm: true,
+              transliteration: true,
+              level: true,
+              partOfSpeech: true,
+            },
+          },
+        },
+      }),
+      this.prisma.wordRelation.findMany({
+        where: { relatedLemmaId: lemmaId },
+        select: {
+          type: true,
+          lemma: {
+            select: {
+              id: true,
+              baseForm: true,
+              transliteration: true,
+              level: true,
+              partOfSpeech: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    const seen = new Set<string>();
+    type RelatedOut = {
+      type: string;
+      lemmaId: string;
+      baseForm: string;
+      transliteration: string | null;
+      level: string | null;
+      partOfSpeech: string | null;
+    };
+    const items: RelatedOut[] = [];
+    const push = (type: string, lemma: {
+      id: string;
+      baseForm: string;
+      transliteration: string | null;
+      level: string | null;
+      partOfSpeech: string | null;
+    }) => {
+      const key = `${lemma.id}:${type}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      items.push({
+        type,
+        lemmaId: lemma.id,
+        baseForm: lemma.baseForm,
+        transliteration: lemma.transliteration,
+        level: lemma.level,
+        partOfSpeech: lemma.partOfSpeech,
+      });
+    };
+
+    for (const r of outgoing) push(r.type, r.related);
+    for (const r of incoming) push(r.type, r.lemma);
+
+    // Подтянем перевод (rawTranslate) из DictionaryEntry через Headword,
+    // чтобы фронт мог показать чип как «слово — перевод».
+    const ids = items.map((i) => i.lemmaId);
+    const translations = ids.length
+      ? await this.prisma.headword.findMany({
+          where: { lemmaId: { in: ids }, isPrimary: true },
+          select: {
+            lemmaId: true,
+            entry: { select: { rawTranslate: true } },
+          },
+        })
+      : [];
+    const trMap = new Map<string, string>();
+    for (const hw of translations) {
+      if (hw.lemmaId && hw.entry.rawTranslate && !trMap.has(hw.lemmaId)) {
+        trMap.set(hw.lemmaId, hw.entry.rawTranslate);
+      }
+    }
+    return items.map((i) => ({
+      ...i,
+      translation: trMap.get(i.lemmaId) ?? null,
+    }));
+  }
 }

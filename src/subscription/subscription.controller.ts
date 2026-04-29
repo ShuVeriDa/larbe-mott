@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Post } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Post, Query } from "@nestjs/common";
 import {
   ApiBearerAuth,
   ApiBadRequestResponse,
@@ -12,7 +12,9 @@ import {
 import { Auth } from "src/auth/decorators/auth.decorator";
 import { User } from "src/user/decorators/user.decorator";
 import { SubscriptionService } from "./subscription.service";
+import { FetchMyPaymentsDto } from "./dto/fetch-my-payments.dto";
 import { RedeemPromoDto } from "./dto/redeem-promo.dto";
+import { StartTrialDto } from "./dto/start-trial.dto";
 import { SubscribePlanDto } from "./dto/subscribe-plan.dto";
 
 @ApiTags("subscription")
@@ -43,10 +45,16 @@ export class SubscriptionController {
   @Auth()
   @ApiBearerAuth()
   @ApiUnauthorizedResponse({ description: "Missing or invalid bearer token" })
-  @ApiOperation({ summary: "Get payment history for current user" })
-  @ApiOkResponse({ description: "List of payments ordered by date descending" })
-  async getMyPayments(@User("id") userId: string) {
-    return this.subscriptionService.getMyPayments(userId);
+  @ApiOperation({ summary: "Get payment history for current user (cursor-paginated)" })
+  @ApiOkResponse({
+    description:
+      "{ items[], nextCursor, hasMore }. Передавайте nextCursor в параметре `cursor` для следующей страницы.",
+  })
+  async getMyPayments(
+    @User("id") userId: string,
+    @Query() dto: FetchMyPaymentsDto,
+  ) {
+    return this.subscriptionService.getMyPayments(userId, dto);
   }
 
   @Get("subscription/usage")
@@ -55,10 +63,35 @@ export class SubscriptionController {
   @ApiUnauthorizedResponse({ description: "Missing or invalid bearer token" })
   @ApiOperation({ summary: "Get today usage and plan limits for current user" })
   @ApiOkResponse({
-    description: "translationsToday, wordsInDictionary, limits (maxTranslationsPerDay, maxVocabularyWords)",
+    description:
+      "translationsToday, wordsInDictionary, limits (полный PlanLimits JSON; -1 = безлимит).",
   })
   async getUsage(@User("id") userId: string) {
     return this.subscriptionService.getUsage(userId);
+  }
+
+  @Post("subscription/trial")
+  @Auth()
+  @HttpCode(200)
+  @ApiBearerAuth()
+  @ApiUnauthorizedResponse({ description: "Missing or invalid bearer token" })
+  @ApiNotFoundResponse({ description: "Plan not found or inactive" })
+  @ApiBadRequestResponse({
+    description: "Trial not available for this plan, or plan is FREE",
+  })
+  @ApiConflictResponse({
+    description: "Active subscription already exists, or trial already used",
+  })
+  @ApiOperation({ summary: "Start free trial on the given plan (one-time per user)" })
+  @ApiOkResponse({
+    description:
+      "Created TRIALING subscription with status, startDate, endDate (= now + plan.trialDays), and plan info",
+  })
+  async startTrial(@User("id") userId: string, @Body() dto: StartTrialDto) {
+    return this.subscriptionService.startTrial(userId, {
+      planId: dto.planId,
+      planCode: dto.planCode,
+    });
   }
 
   @Post("subscription/subscribe")
@@ -73,7 +106,10 @@ export class SubscriptionController {
       "New subscription with plan info. Includes couponApplied when a redeemed promo was used.",
   })
   async subscribe(@User("id") userId: string, @Body() dto: SubscribePlanDto) {
-    return this.subscriptionService.subscribeToPlan(userId, dto.planId);
+    return this.subscriptionService.subscribeToPlan(userId, {
+      planId: dto.planId,
+      planCode: dto.planCode,
+    });
   }
 
   @Delete("subscription")
@@ -99,7 +135,7 @@ export class SubscriptionController {
   @ApiOperation({ summary: "Redeem a promo code" })
   @ApiOkResponse({
     description:
-      "Coupon redeemed. Returns discount details and indicates it will be applied to the next subscription payment.",
+      "Купон сохранён. Скидка БУДЕТ ПРИМЕНЕНА только при следующем POST /subscription/subscribe — мгновенного списания/изменения текущей подписки не происходит. Поле status='saved_for_next_subscription' позволяет фронту показать корректный toast («Промокод сохранён»).",
   })
   async redeemPromo(@User("id") userId: string, @Body() dto: RedeemPromoDto) {
     return this.subscriptionService.redeemCoupon(userId, dto.code);

@@ -130,9 +130,13 @@ export class DeckController {
   @Get("stats")
   @ApiOperation({
     summary: "Get deck statistics",
-    description: "Returns word count per deck and current settings. Requires Premium.",
+    description:
+      "Returns word count per deck (new/old/retired/numbered), current/max numbered deck and settings. Requires Premium.",
   })
-  @ApiOkResponse({ description: "Deck statistics with settings." })
+  @ApiOkResponse({
+    description:
+      "{ new, old, retired, numbered:[{deckNumber,count}], total, currentNumberedDeck, maxNumberedDeck, deckMaxSize, dailyWordCount }",
+  })
   async getStats(@User("id") userId: string) {
     return this.deck.getStats(userId);
   }

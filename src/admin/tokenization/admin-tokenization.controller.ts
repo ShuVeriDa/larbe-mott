@@ -9,6 +9,7 @@ import {
   Patch,
   Post,
   Query,
+  Sse,
 } from "@nestjs/common";
 import {
   ApiBearerAuth,
@@ -22,6 +23,7 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
+import { map } from "rxjs";
 import { PermissionCode } from "@prisma/client";
 import { AdminPermission } from "src/auth/decorators/admin-permission.decorator";
 import { User } from "src/user/decorators/user.decorator";
@@ -31,13 +33,33 @@ import { AdminTokenizationListQueryDto } from "./dto/list-query.dto";
 import { RunTokenizationDto } from "./dto/run.dto";
 import { ProblematicTokensQueryDto } from "./dto/tokens-query.dto";
 import { UpdateTokenizationSettingsDto } from "./dto/update-settings.dto";
+import { TokenizationEventsService } from "./tokenization-events.service";
 
 @ApiTags("admin/tokenization")
 @ApiBearerAuth()
 @Controller("admin/tokenization")
 @ApiUnauthorizedResponse({ description: "Missing or invalid bearer token" })
 export class AdminTokenizationController {
-  constructor(private readonly service: AdminTokenizationService) {}
+  constructor(
+    private readonly service: AdminTokenizationService,
+    private readonly events: TokenizationEventsService,
+  ) {}
+
+  // ──────────────────────────────────────────────────────────────
+  // SSE — realtime events
+  // ──────────────────────────────────────────────────────────────
+
+  @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
+  @Sse("events")
+  @ApiOperation({
+    summary: "SSE-поток событий токенизации (admin only)",
+    description:
+      "Отправляет события: progress {textId, progress}, status_change {textId, status}, queue_changed {queue}",
+  })
+  @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
+  sseEvents() {
+    return this.events.stream$.pipe(map((event) => ({ data: event })));
+  }
 
   // ──────────────────────────────────────────────────────────────
   // STATS

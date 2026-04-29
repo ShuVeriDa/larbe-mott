@@ -31,6 +31,7 @@ import {
 } from "@nestjs/swagger";
 import { PermissionCode } from "@prisma/client";
 import type { Response } from "express";
+import { AddLemmaDto } from "src/admin/dictionary/dto/add-lemma.dto";
 import { BulkDeleteDto } from "src/admin/dictionary/dto/bulk-delete.dto";
 import { CreateEntryDto } from "src/admin/dictionary/dto/create-entry.dto";
 import { CreateExampleDto } from "src/admin/dictionary/dto/create-example.dto";
@@ -40,6 +41,7 @@ import { CreateSenseDto } from "src/admin/dictionary/dto/create-sense.dto";
 import { DictionaryListQueryDto } from "src/admin/dictionary/dto/list-query.dto";
 import { PatchEntryDto } from "src/admin/dictionary/dto/update-entry.dto";
 import { UpdateExampleDto } from "src/admin/dictionary/dto/update-example.dto";
+import { UpdateHeadwordDto } from "src/admin/dictionary/dto/update-headword.dto";
 import { UpdateMorphFormDto } from "src/admin/dictionary/dto/update-morph-form.dto";
 import { UpdateSenseDto } from "src/admin/dictionary/dto/update-sense.dto";
 import { AdminPermission } from "src/auth/decorators/admin-permission.decorator";
@@ -71,6 +73,24 @@ export class AdminDictionaryController {
   @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
   getStats() {
     return this.dictionaryService.getStats();
+  }
+
+  // ─────────────────────────────────────────────────────
+  // LOOKUP by normalized form (for deep-link from token)
+  // ─────────────────────────────────────────────────────
+
+  @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
+  @Get("lookup")
+  @ApiOperation({
+    summary: "Найти запись по нормализованной форме (admin only)",
+    description:
+      "Используется для deep-link из детали токена: если слово уже есть — вернёт lemmaId, иначе found: false.",
+  })
+  @ApiQuery({ name: "normalized", required: true, description: "Нормализованная форма слова" })
+  @ApiOkResponse({ description: "{ found: boolean, lemmaId?: string, normalized: string }" })
+  @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
+  async lookup(@Query("normalized") normalized: string) {
+    return this.dictionaryService.lookupByNormalized(normalized);
   }
 
   // ─────────────────────────────────────────────────────
@@ -328,6 +348,22 @@ export class AdminDictionaryController {
   }
 
   @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
+  @Post(":id/examples")
+  @ApiOperation({
+    summary: "Add example to entry's first sense (admin only)",
+    description:
+      "Adds an example to the lemma's first sense (by order). Returns 400 if entry has no senses. Used by the row-action dropdown in the dictionary list, where senseId is not known.",
+  })
+  @ApiParam({ name: "id", description: "Lemma ID (UUID)" })
+  @ApiBody({ type: CreateExampleDto })
+  @ApiCreatedResponse({ description: "Created example: { id, text, translation }" })
+  @ApiNotFoundResponse({ description: "Entry not found." })
+  @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
+  addExampleToFirstSense(@Param("id") lemmaId: string, @Body() dto: CreateExampleDto) {
+    return this.dictionaryService.addExampleToFirstSense(lemmaId, dto);
+  }
+
+  @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
   @Delete("examples/:exampleId")
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: "Delete an example (admin only)" })
@@ -368,6 +404,22 @@ export class AdminDictionaryController {
   @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
   addHeadword(@Param("id") lemmaId: string, @Body() dto: CreateHeadwordDto) {
     return this.dictionaryService.addHeadword(lemmaId, dto);
+  }
+
+  @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
+  @Patch("headwords/:hwId")
+  @ApiOperation({
+    summary: "Update a headword (admin only)",
+    description:
+      "Update text, primary flag, or order of an existing headword. Promoting to primary clears the previous primary headword in the same entry.",
+  })
+  @ApiParam({ name: "hwId", description: "Headword ID (UUID)" })
+  @ApiBody({ type: UpdateHeadwordDto })
+  @ApiOkResponse({ description: "Updated headword: { id, text, normalized, isPrimary, order }" })
+  @ApiNotFoundResponse({ description: "Headword not found." })
+  @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
+  updateHeadword(@Param("hwId") hwId: string, @Body() dto: UpdateHeadwordDto) {
+    return this.dictionaryService.updateHeadword(hwId, dto);
   }
 
   @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
@@ -449,6 +501,73 @@ export class AdminDictionaryController {
   @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
   getPrevEntry(@Param("id") lemmaId: string) {
     return this.dictionaryService.getPrevEntry(lemmaId);
+  }
+
+  // ─────────────────────────────────────────────────────
+  // RELATED LEMMAS (other lemmas of the same entry)
+  // ─────────────────────────────────────────────────────
+
+  @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
+  @Get(":id/related-lemmas")
+  @ApiOperation({
+    summary: "Get sibling lemmas of the same dictionary entry (admin only)",
+    description:
+      "Returns all lemmas attached (via headwords) to the same DictionaryEntry as the given lemma — used to render lemma-tabs on the detail page.",
+  })
+  @ApiParam({ name: "id", description: "Lemma ID (UUID)" })
+  @ApiOkResponse({
+    description:
+      "Array of [{ id, baseForm, normalized, partOfSpeech, level, frequency, isCurrent }]",
+  })
+  @ApiNotFoundResponse({ description: "Entry not found." })
+  @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
+  getRelatedLemmas(@Param("id") lemmaId: string) {
+    return this.dictionaryService.getRelatedLemmas(lemmaId);
+  }
+
+  // ─────────────────────────────────────────────────────
+  // FREQUENCY STATS (sidebar "Частотность")
+  // ─────────────────────────────────────────────────────
+
+  @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
+  @Get(":id/frequency-stats")
+  @ApiOperation({
+    summary: "Get frequency stats for entry (admin only)",
+    description:
+      "Returns lemma frequency, max frequency in admin corpus, alphabetical rank, total counted lemmas, and corpus text coverage.",
+  })
+  @ApiParam({ name: "id", description: "Lemma ID (UUID)" })
+  @ApiOkResponse({
+    description:
+      "{ frequency, maxFrequency, rank, totalLemmas, textsCovered, totalTexts, textCoverage }",
+  })
+  @ApiNotFoundResponse({ description: "Entry not found." })
+  @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
+  getFrequencyStats(@Param("id") lemmaId: string) {
+    return this.dictionaryService.getFrequencyStats(lemmaId);
+  }
+
+  // ─────────────────────────────────────────────────────
+  // ADD LEMMA TO EXISTING ENTRY
+  // ─────────────────────────────────────────────────────
+
+  @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
+  @Post("entries/:entryId/lemmas")
+  @ApiOperation({
+    summary: "Attach a new lemma to an existing dictionary entry (admin only)",
+    description:
+      "Creates (or reuses by normalized+language) a lemma and links it to the entry as a new headword. Used for lemma-tabs (e.g. noun + verb under one entry).",
+  })
+  @ApiParam({ name: "entryId", description: "DictionaryEntry ID (UUID)" })
+  @ApiBody({ type: AddLemmaDto })
+  @ApiCreatedResponse({
+    description:
+      "Created/linked lemma: { id, baseForm, normalized, language, partOfSpeech, level, frequency }",
+  })
+  @ApiNotFoundResponse({ description: "Dictionary entry not found." })
+  @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
+  addLemmaToEntry(@Param("entryId") entryId: string, @Body() dto: AddLemmaDto) {
+    return this.dictionaryService.addLemmaToEntry(entryId, dto);
   }
 
   // ─────────────────────────────────────────────────────

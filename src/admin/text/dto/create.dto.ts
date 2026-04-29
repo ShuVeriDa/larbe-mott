@@ -5,19 +5,23 @@ import {
   ArrayMinSize,
   IsArray,
   IsBoolean,
+  IsEnum,
   IsInt,
   IsNotEmpty,
   IsObject,
   IsOptional,
   IsString,
   IsUUID,
+  IsUrl,
   Matches,
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
   ValidateNested,
 } from "class-validator";
 import { IsTiptapDoc } from "../../../text/dto/tiptap-doc.validator";
+import { TextStatusUpdate } from "./update.dto";
 
 export class CreateTextPageDto {
   @ApiProperty({ description: "Page number (1-based)", example: 1 })
@@ -104,10 +108,29 @@ export class CreateTextDto {
   @MaxLength(50, { message: "Author must be no more than 50 characters long" })
   author?: string;
 
-  @ApiProperty({ required: false })
-  @IsString()
+  @ApiProperty({
+    required: false,
+    description: "Source URL (must include http(s):// protocol if provided)",
+  })
   @IsOptional()
+  @ValidateIf((_o, v) => v != null && v !== "")
+  @IsUrl({ require_protocol: true }, { message: "source must be a valid URL with protocol" })
+  @MaxLength(500)
   source?: string;
+
+  @ApiProperty({
+    description:
+      "Cover image URL. Either a full URL (https://...) or a relative path returned by POST /admin/uploads/cover (e.g. /uploads/covers/foo.png).",
+    required: false,
+    nullable: true,
+  })
+  @IsOptional()
+  @ValidateIf((_o, v) => v != null && v !== "")
+  @Matches(/^(\/uploads\/[\w\-./]+|https?:\/\/.+)$/, {
+    message:
+      "imageUrl must be a relative /uploads/... path or a full http(s) URL",
+  })
+  imageUrl?: string | null;
 
   @ApiProperty({
     type: [String],
@@ -119,6 +142,28 @@ export class CreateTextDto {
   @IsArray()
   @IsUUID("4", { each: true })
   tagIds?: string[];
+
+  @ApiProperty({
+    type: [String],
+    description:
+      "Array of tag NAMES to assign to the text. Tags not yet present in the database will be created (find-or-create). Merged with tagIds.",
+    required: false,
+    example: ["История", "Грамматика"],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  tagNames?: string[];
+
+  @ApiProperty({
+    enum: TextStatusUpdate,
+    description:
+      "Initial status. If set, takes precedence over `publish`. ARCHIVED creates an archived text right away.",
+    required: false,
+  })
+  @IsOptional()
+  @IsEnum(TextStatusUpdate)
+  status?: TextStatusUpdate;
 
   @ApiProperty({
     description: "If true, sets publishedAt to now on creation.",

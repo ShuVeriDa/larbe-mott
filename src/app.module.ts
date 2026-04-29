@@ -1,10 +1,12 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
+import { ScheduleModule } from "@nestjs/schedule";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { ThrottlerStorageRedisService } from "@nest-lab/throttler-storage-redis";
 import { WinstonModule } from "nest-winston";
 import { AdminModule } from "./admin/admin.module";
+import { TokenizationEventsModule } from "./admin/tokenization/tokenization-events.module";
 import { AnalyticsModule } from "./analytics/analytics.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
 import { AuthModule } from "./auth/auth.module";
@@ -15,6 +17,7 @@ import { DeckModule } from "./deck/deck.module";
 import { DictionaryModule } from "./dictionary/dictionary.module";
 import { FeedbackModule } from "./feedback/feedback.module";
 import { HealthModule } from "./health/health.module";
+import { LegalModule } from "./legal/legal.module";
 import { PhrasebookModule } from "./phrasebook/phrasebook.module";
 import { SettingsModule } from "./settings/settings.module";
 import { StatisticsModule } from "./statistics/statistics.module";
@@ -46,6 +49,7 @@ import { envValidationSchema } from "./config/env.validation";
         createWinstonOptions(config.get("NODE_ENV")),
     }),
     RedisModule,
+    ScheduleModule.forRoot(),
     ObservabilityModule,
     ThrottlerModule.forRootAsync({
       imports: [RedisModule],
@@ -58,6 +62,7 @@ import { envValidationSchema } from "./config/env.validation";
     UserModule,
     AuthModule,
     TextModule,
+    TokenizationEventsModule,
     TokenizerModule,
     TokenModule,
     ProgressModule,
@@ -73,6 +78,7 @@ import { envValidationSchema } from "./config/env.validation";
     SettingsModule,
     StatisticsModule,
     HealthModule,
+    LegalModule,
   ],
   controllers: [],
   providers: [

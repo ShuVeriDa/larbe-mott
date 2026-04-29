@@ -57,4 +57,12 @@ export class AddToDictionaryDto {
   @IsArray()
   @IsString({ each: true })
   forms?: string[];
+
+  @ApiPropertyOptional({
+    description: "Domain / topic (free-form)",
+    example: "повседневная речь",
+  })
+  @IsOptional()
+  @IsString()
+  domain?: string;
 }

@@ -24,7 +24,7 @@ export class AnalyticsController {
   })
   @ApiOkResponse({
     description:
-      "words (total/new/learning/known), dueToday, texts (opened/avgProgress), streak (days), activity (date + count per day)",
+      "words (total/new/learning/known), dueToday {total/new/learning}, texts (opened/avgProgress), streak (days), activity (date + count per day)",
   })
   async getMyAnalytics(@User("id") userId: string) {
     return this.analyticsService.getUserAnalytics(userId);

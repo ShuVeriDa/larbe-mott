@@ -28,6 +28,10 @@ import { ExtendSubscriptionDto } from "./dto/extend-subscription.dto";
 import { SetFeatureFlagOverrideDto } from "./dto/set-feature-flag-override.dto";
 import { ApplyCouponDto } from "./dto/apply-coupon.dto";
 import { UserAnalyticsService } from "./user-analytics.service";
+import {
+  lookupSessionLocation,
+  parseDeviceLabel,
+} from "src/auth/utils/session-meta.util";
 
 // Paid plan types for stats/filter
 const PAID_PLAN_TYPES: PlanType[] = [
@@ -520,8 +524,15 @@ export class AdminUsersService {
   async revokeRole(userId: string, roleId: string) {
     const existing = await this.prisma.userRoleAssignment.findUnique({
       where: { userId_roleId: { userId, roleId } },
+      include: { role: { select: { name: true } } },
     });
     if (!existing) throw new NotFoundException("Role assignment not found");
+
+    if (existing.role.name === RoleName.LEARNER) {
+      throw new BadRequestException(
+        "LEARNER is the base role and cannot be revoked",
+      );
+    }
 
     await this.prisma.userRoleAssignment.delete({
       where: { userId_roleId: { userId, roleId } },
@@ -629,13 +640,26 @@ export class AdminUsersService {
         ipAddress: true,
         userAgent: true,
         createdAt: true,
+        lastActiveAt: true,
         revokedAt: true,
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: { lastActiveAt: "desc" },
       take: 50,
     });
 
-    return sessions.map((s) => ({ ...s, isActive: s.revokedAt === null }));
+    let latestActiveSeen = false;
+    return sessions.map((s) => {
+      const isActive = s.revokedAt === null;
+      const isLatest = isActive && !latestActiveSeen;
+      if (isLatest) latestActiveSeen = true;
+      return {
+        ...s,
+        device: parseDeviceLabel(s.userAgent),
+        location: lookupSessionLocation(s.ipAddress),
+        isActive,
+        isLatest,
+      };
+    });
   }
 
   // ─── Subscription ─────────────────────────────────────────────────────────────

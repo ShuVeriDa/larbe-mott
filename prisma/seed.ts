@@ -6,6 +6,7 @@ import { seedCoupons } from "./helpers/couponHelper";
 import { seedDeck } from "./helpers/deckHelper";
 import { seedFeatureFlags } from "./helpers/featureFlagsHelper";
 import { seedFeedback } from "./helpers/feedbackHelper";
+import { seedLegalDocuments } from "./helpers/legalHelper";
 import { seedPhrasebook } from "./helpers/phrasebookHelper";
 import { seedMorphologyRules } from "./helpers/morphologyHelper";
 import { seedRolesAndPermissions } from "./helpers/rbacHelper";
@@ -52,12 +53,16 @@ async function up() {
 
   // 7. Разговорник
   await seedPhrasebook();
+
+  // 8. Юридические/информационные страницы (Privacy, Terms, Contact)
+  await seedLegalDocuments();
 }
 
 async function down() {
   try {
     await prisma.$executeRaw`
       TRUNCATE TABLE
+        "legal_document",
         "user_phrasebook_save",
         "phrasebook_phrase_example",
         "phrasebook_phrase_word",

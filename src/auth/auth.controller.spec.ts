@@ -36,9 +36,14 @@ describe("AuthController", () => {
 
     const result = await controller.login({} as never, req as never, res as never);
 
-    expect(authService.login).toHaveBeenCalled();
+    // recordSession теперь вызывается внутри AuthService.login (см. auth.service.ts) —
+    // контроллер просто пробрасывает { ip, userAgent } в meta.
+    expect(authService.login).toHaveBeenCalledWith(
+      {},
+      { ip: "127.0.0.1", userAgent: "jest" },
+    );
     expect(authService.addRefreshTokenResponse).toHaveBeenCalledWith(res, "refresh");
-    expect(authService.recordSession).toHaveBeenCalledWith("u1", "127.0.0.1", "jest");
+    expect(authService.recordSession).not.toHaveBeenCalled();
     expect(result).toEqual({ user: { id: "u1" }, accessToken: "access" });
   });
 

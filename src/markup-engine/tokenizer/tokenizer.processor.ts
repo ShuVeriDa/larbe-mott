@@ -1,5 +1,6 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
 import { LogLevel, Prisma, ProcessingTrigger } from "@prisma/client";
+import { TokenizationEventsService } from "src/admin/tokenization/tokenization-events.service";
 import { PrismaService } from "src/prisma.service";
 import { DictionaryCacheProcessor } from "../dictionary-cache/dictionary-cache.processor";
 import { DictionaryProcessor } from "../dictionary/dictionary.processor";
@@ -27,6 +28,7 @@ export class TokenizerProcessor {
     private dictionaryCacheProcessor: DictionaryCacheProcessor,
     private onlineDictionaryProcessor: OnlineDictionaryProcessor,
     private unknownWordProcessor: UnknownWordProcessor,
+    @Optional() private readonly eventsService?: TokenizationEventsService,
   ) {}
 
   async processText(textId: string, opts: ProcessTextOpts = {}) {
@@ -47,6 +49,7 @@ export class TokenizerProcessor {
       where: { id: textId },
       data: { processingStatus: "RUNNING", processingProgress: 0, processingError: null },
     });
+    this.eventsService?.emit("status_change", { textId, status: "RUNNING", progress: 0 });
 
     let versionId: string | null = null;
 
@@ -61,6 +64,7 @@ export class TokenizerProcessor {
           where: { id: textId },
           data: { processingStatus: "COMPLETED", processingProgress: 100 },
         });
+        this.eventsService?.emit("status_change", { textId, status: "COMPLETED", progress: 100 });
         return;
       }
 
@@ -111,11 +115,7 @@ export class TokenizerProcessor {
       await this.prisma.textToken.createMany({ data: tokensToInsert });
       log("OK", `Токенизация завершена. Итого токенов: ${tokensToInsert.length}`);
 
-      await this.updateVersionProgress(version.id, 20);
-      await this.prisma.text.update({
-        where: { id: textId },
-        data: { processingProgress: 20 },
-      });
+      await this._updateProgress(textId, version.id, 20);
 
       // ── Normalization ──────────────────────────────────────────────────────
       if (useNormalization) {
@@ -125,52 +125,28 @@ export class TokenizerProcessor {
         log("INFO", "Нормализация пропущена (отключена настройкой)");
       }
 
-      await this.updateVersionProgress(version.id, 40);
-      await this.prisma.text.update({
-        where: { id: textId },
-        data: { processingProgress: 40 },
-      });
+      await this._updateProgress(textId, version.id, 40);
 
       // ── Morphological analysis ─────────────────────────────────────────────
       if (useMorphAnalysis) {
         log("INFO", "Запуск морфологического анализа");
 
         await this.dictionaryProcessor.analyzeVersion(version.id);
-        await this.updateVersionProgress(version.id, 55);
-        await this.prisma.text.update({
-          where: { id: textId },
-          data: { processingProgress: 55 },
-        });
+        await this._updateProgress(textId, version.id, 55);
 
         await this.dictionaryCacheProcessor.analyzeVersion(version.id);
-        await this.updateVersionProgress(version.id, 70);
-        await this.prisma.text.update({
-          where: { id: textId },
-          data: { processingProgress: 70 },
-        });
+        await this._updateProgress(textId, version.id, 70);
 
         await this.onlineDictionaryProcessor.analyzeVersion(version.id);
-        await this.updateVersionProgress(version.id, 80);
-        await this.prisma.text.update({
-          where: { id: textId },
-          data: { processingProgress: 80 },
-        });
+        await this._updateProgress(textId, version.id, 80);
 
         await this.unknownWordProcessor.analyzeVersion(version.id);
-        await this.updateVersionProgress(version.id, 90);
-        await this.prisma.text.update({
-          where: { id: textId },
-          data: { processingProgress: 90 },
-        });
+        await this._updateProgress(textId, version.id, 90);
 
         log("OK", "Морфологический анализ завершён");
       } else {
         log("INFO", "Морфологический анализ пропущен (отключён настройкой)");
-        await this.updateVersionProgress(version.id, 90);
-        await this.prisma.text.update({
-          where: { id: textId },
-          data: { processingProgress: 90 },
-        });
+        await this._updateProgress(textId, version.id, 90);
       }
 
       // ── Vocabulary index ───────────────────────────────────────────────────
@@ -196,6 +172,7 @@ export class TokenizerProcessor {
         where: { id: textId },
         data: { processingStatus: "COMPLETED", processingProgress: 100, processingError: null },
       });
+      this.eventsService?.emit("status_change", { textId, status: "COMPLETED", progress: 100 });
 
       return version;
     } catch (err: unknown) {
@@ -219,12 +196,21 @@ export class TokenizerProcessor {
         where: { id: textId },
         data: { processingStatus: "ERROR", processingError: message },
       });
+      this.eventsService?.emit("status_change", { textId, status: "ERROR" });
 
       throw err;
     }
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
+
+  private async _updateProgress(textId: string, versionId: string, progress: number) {
+    await Promise.all([
+      this.prisma.textProcessingVersion.update({ where: { id: versionId }, data: { progress } }),
+      this.prisma.text.update({ where: { id: textId }, data: { processingProgress: progress } }),
+    ]);
+    this.eventsService?.emit("progress", { textId, progress });
+  }
 
   private async updateVersionProgress(versionId: string, progress: number) {
     await this.prisma.textProcessingVersion.update({

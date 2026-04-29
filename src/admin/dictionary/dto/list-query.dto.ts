@@ -3,7 +3,7 @@ import { Type } from "class-transformer";
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { Language, Level } from "@prisma/client";
 
-export type DictSortOption = "alpha" | "frequency_desc" | "newest" | "no_senses";
+export type DictSortOption = "alpha" | "frequency_desc" | "newest" | "oldest" | "no_senses";
 export type DictTabOption = "all" | "no_senses" | "no_examples" | "no_forms";
 
 /** Query params for GET /admin/dictionary — search, filters, sort, tabs, pagination. */
@@ -35,8 +35,8 @@ export class DictionaryListQueryDto {
   level?: Level;
 
   @ApiPropertyOptional({
-    description: "Sort order: alpha | frequency_desc | newest | no_senses",
-    enum: ["alpha", "frequency_desc", "newest", "no_senses"],
+    description: "Sort order: alpha | frequency_desc | newest | oldest | no_senses",
+    enum: ["alpha", "frequency_desc", "newest", "oldest", "no_senses"],
     default: "alpha",
   })
   @IsOptional()

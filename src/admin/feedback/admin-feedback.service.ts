@@ -8,10 +8,16 @@ import {
   FeedbackMessageType,
   FeedbackStatus,
   Prisma,
+  RoleName,
+  SubscriptionStatus,
 } from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
 import { AdminReplyDto } from "./dto/admin-reply.dto";
 import { AssignFeedbackDto } from "./dto/assign-feedback.dto";
+import {
+  ExportAdminFeedbackDto,
+  FeedbackExportFormat,
+} from "./dto/export-feedback.dto";
 import {
   AdminFeedbackTab,
   FetchAdminFeedbackDto,
@@ -19,6 +25,17 @@ import {
 import { TransferFeedbackDto } from "./dto/transfer-feedback.dto";
 import { UpdateFeedbackPriorityDto } from "./dto/update-priority.dto";
 import { UpdateFeedbackStatusDto } from "./dto/update-status.dto";
+
+const ASSIGNEE_ROLES: RoleName[] = [
+  RoleName.SUPPORT,
+  RoleName.ADMIN,
+  RoleName.SUPERADMIN,
+];
+
+const ACTIVE_SUB_STATUSES: SubscriptionStatus[] = [
+  SubscriptionStatus.ACTIVE,
+  SubscriptionStatus.TRIALING,
+];
 
 @Injectable()
 export class AdminFeedbackService {
@@ -82,7 +99,24 @@ export class AdminFeedbackService {
         take: limit,
         include: {
           user: {
-            select: { id: true, username: true, name: true, surname: true, email: true },
+            select: {
+              id: true,
+              username: true,
+              name: true,
+              surname: true,
+              email: true,
+              subscriptions: {
+                where: { status: { in: ACTIVE_SUB_STATUSES } },
+                orderBy: { createdAt: "desc" },
+                take: 1,
+                select: {
+                  status: true,
+                  endDate: true,
+                  isLifetime: true,
+                  plan: { select: { name: true, type: true } },
+                },
+              },
+            },
           },
           assigneeAdmin: {
             select: { id: true, username: true, name: true, surname: true, email: true },
@@ -107,11 +141,15 @@ export class AdminFeedbackService {
       unreadCountsByAdmin.map((entry) => [entry.threadId, entry._count.id]),
     );
 
-    const mappedItems = items.map((item) => ({
-      ...item,
-      latestMessage: item.messages[0] ?? null,
-      unreadCountAdmin: unreadMap[item.id] ?? 0,
-    }));
+    const mappedItems = items.map((item) => {
+      const { subscriptions, ...userRest } = item.user;
+      return {
+        ...item,
+        user: { ...userRest, activeSubscription: subscriptions[0] ?? null },
+        latestMessage: item.messages[0] ?? null,
+        unreadCountAdmin: unreadMap[item.id] ?? 0,
+      };
+    });
 
     return { items: mappedItems, total, page, limit };
   }
@@ -128,6 +166,17 @@ export class AdminFeedbackService {
             surname: true,
             email: true,
             signupAt: true,
+            subscriptions: {
+              where: { status: { in: ACTIVE_SUB_STATUSES } },
+              orderBy: { createdAt: "desc" },
+              take: 1,
+              select: {
+                status: true,
+                endDate: true,
+                isLifetime: true,
+                plan: { select: { name: true, type: true } },
+              },
+            },
           },
         },
         assigneeAdmin: {
@@ -153,8 +202,11 @@ export class AdminFeedbackService {
       where: { userId: thread.userId, NOT: { id: threadId } },
     });
 
+    const { subscriptions: userSubs, ...userRest } = thread.user;
+
     return {
       ...thread,
+      user: { ...userRest, activeSubscription: userSubs[0] ?? null },
       otherThreadsCount,
       messages: thread.messages.map((message) => ({
         ...message,
@@ -329,6 +381,98 @@ export class AdminFeedbackService {
     }, 0);
 
     return { total, byStatus, byType, openTotal, unreadByAdmin };
+  }
+
+  async deleteThread(threadId: string) {
+    await this.ensureExists(threadId);
+    await this.prisma.feedbackThread.delete({ where: { id: threadId } });
+    return { success: true };
+  }
+
+  async getAssignees() {
+    const admins = await this.prisma.user.findMany({
+      where: {
+        roles: { some: { role: { name: { in: ASSIGNEE_ROLES } } } },
+      },
+      select: {
+        id: true,
+        username: true,
+        name: true,
+        surname: true,
+        email: true,
+        roles: {
+          select: { role: { select: { name: true } } },
+        },
+      },
+      orderBy: [{ name: "asc" }, { username: "asc" }],
+    });
+
+    return admins.map((admin) => ({
+      id: admin.id,
+      username: admin.username,
+      name: admin.name,
+      surname: admin.surname,
+      email: admin.email,
+      roles: admin.roles.map((r) => r.role.name),
+    }));
+  }
+
+  async exportThreads(dto: ExportAdminFeedbackDto) {
+    const { format = FeedbackExportFormat.JSON, ...filters } = dto;
+
+    const result = await this.getThreads({ ...filters, page: 1, limit: 10_000 });
+    const items = result.items;
+
+    if (format === FeedbackExportFormat.CSV) {
+      const headers = [
+        "ticketNumber",
+        "createdAt",
+        "updatedAt",
+        "type",
+        "status",
+        "priority",
+        "userEmail",
+        "userName",
+        "plan",
+        "assignee",
+        "title",
+        "latestMessage",
+      ];
+      const escape = (v: unknown) =>
+        `"${String(v ?? "").replace(/"/g, '""')}"`;
+      const rows = items.map((item) => {
+        const userName = [item.user.name, item.user.surname]
+          .filter(Boolean)
+          .join(" ")
+          .trim();
+        const assignee = item.assigneeAdmin
+          ? [item.assigneeAdmin.name, item.assigneeAdmin.surname]
+              .filter(Boolean)
+              .join(" ")
+              .trim() || item.assigneeAdmin.username
+          : "";
+        return [
+          item.ticketNumber,
+          item.createdAt.toISOString(),
+          item.updatedAt.toISOString(),
+          item.type,
+          item.status,
+          item.priority,
+          item.user.email ?? "",
+          userName || item.user.username || "",
+          item.user.activeSubscription?.plan.type ?? "FREE",
+          assignee,
+          item.title ?? "",
+          item.latestMessage?.body ?? "",
+        ]
+          .map(escape)
+          .join(",");
+      });
+      const csv = [headers.join(","), ...rows].join("\n");
+      return { format: FeedbackExportFormat.CSV as const, data: csv };
+    }
+
+    return { format: FeedbackExportFormat.JSON as const, data: items };
   }
 
   private async ensureExists(threadId: string) {

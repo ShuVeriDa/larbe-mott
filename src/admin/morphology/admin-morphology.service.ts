@@ -219,13 +219,17 @@ export class AdminMorphologyService {
     else if (query.status === "inactive") where.isActive = false;
     else if (query.status === "regex") where.isRegex = true;
 
+    const sortBy = query.sortBy ?? "priority";
+    const sortDir = query.sortOrder ?? "desc";
+    const orderBy: Prisma.MorphologyRuleOrderByWithRelationInput[] =
+      sortBy === "suffix"
+        ? [{ suffix: sortDir }]
+        : sortBy === "matchCount"
+          ? [{ matchCount: sortDir }, { suffix: "asc" }]
+          : [{ priority: sortDir }, { suffix: "asc" }];
+
     const [items, total] = await Promise.all([
-      this.prisma.morphologyRule.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: [{ priority: "desc" }, { suffix: "asc" }],
-      }),
+      this.prisma.morphologyRule.findMany({ where, skip, take: limit, orderBy }),
       this.prisma.morphologyRule.count({ where }),
     ]);
 
@@ -255,7 +259,7 @@ export class AdminMorphologyService {
         description: dto.description,
         isRegex: dto.isRegex ?? dto.type === MorphRuleType.REGEX,
         type: dto.type,
-        language: dto.language,
+        language: dto.language ?? Language.CHE,
         priority: dto.priority ?? 0,
         isActive: dto.isActive ?? true,
       },

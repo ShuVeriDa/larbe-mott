@@ -10,10 +10,14 @@ import {
   Patch,
   Post,
   Query,
+  Res,
+  Sse,
   UploadedFile,
   UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
+import type { Response } from "express";
+import { Observable } from "rxjs";
 import {
   ApiBearerAuth,
   ApiBody,
@@ -34,9 +38,11 @@ import { extname, join } from "path";
 import * as fs from "fs";
 import { CreateTextDto } from "src/admin/text/dto/create.dto";
 import { BulkTextIdsDto } from "src/admin/text/dto/bulk.dto";
+import { BulkImportTextsDto } from "src/admin/text/dto/bulk-import.dto";
 import { AdminListTextsQueryDto } from "src/admin/text/dto/list-query.dto";
 import { ProcessTextDto } from "src/admin/text/dto/process.dto";
 import { PatchTextDto } from "src/admin/text/dto/update.dto";
+import { VersionsQueryDto } from "src/admin/text/dto/versions-query.dto";
 import { AdminPermission } from "src/auth/decorators/admin-permission.decorator";
 import { User } from "src/user/decorators/user.decorator";
 import { AdminTextService } from "./admin-text.service";
@@ -137,6 +143,27 @@ export class AdminTextsController {
     return this.adminTextService.bulkDelete(dto.ids);
   }
 
+  @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
+  @Post("bulk-import")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Bulk import texts from a JSON payload (admin only)",
+    description:
+      "Each item is validated against CreateTextDto and created sequentially. Partial success is supported: failures are reported per-item and do not block the rest. Tokenization is queued in background per item if autoTokenize is not set to false.",
+  })
+  @ApiBody({ type: BulkImportTextsDto })
+  @ApiOkResponse({
+    description:
+      "{ total, created, failed, items: [{ index, status: 'ok'|'error', textId?, title?, error? }] }",
+  })
+  @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
+  async bulkImport(
+    @Body() dto: BulkImportTextsDto,
+    @User("id") userId: string,
+  ) {
+    return this.adminTextService.bulkImport(dto.items, userId);
+  }
+
   // ──────────────────────────────────────────────────────────────
   // VERSIONS (must be before /:id to avoid param conflicts)
   // ──────────────────────────────────────────────────────────────
@@ -147,12 +174,15 @@ export class AdminTextsController {
   @ApiParam({ name: "id", description: "Text UUID" })
   @ApiOkResponse({
     description:
-      "{ textId, total, successCount, errorCount, data: [ version with tokenCount, pageCount, logs summary ] }",
+      "{ textId, total, successCount, errorCount, data: [ version with tokenCount, pageCount, logs summary ] }. Counters always reflect the full history; ?status filters only the data array.",
   })
   @ApiNotFoundResponse({ description: "Text not found." })
   @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
-  async getVersions(@Param("id") textId: string) {
-    return this.adminTextService.getTextVersions(textId);
+  async getVersions(
+    @Param("id") textId: string,
+    @Query() query: VersionsQueryDto,
+  ) {
+    return this.adminTextService.getTextVersions(textId, query.status);
   }
 
   @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
@@ -188,6 +218,26 @@ export class AdminTextsController {
   }
 
   @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
+  @Post(":id/versions/:versionId/retry")
+  @ApiOperation({
+    summary: "Retry a previous version (re-runs processing with the same settings)",
+    description:
+      "Useful for failed (ERROR) versions. Creates a new version reusing useNormalization / useMorphAnalysis from the source version.",
+  })
+  @ApiParam({ name: "id", description: "Text UUID" })
+  @ApiParam({ name: "versionId", description: "Version UUID to copy settings from" })
+  @ApiOkResponse({ description: "{ textId, started: true }" })
+  @ApiNotFoundResponse({ description: "Text or version not found." })
+  @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
+  async retryVersion(
+    @Param("id") textId: string,
+    @Param("versionId") versionId: string,
+    @User("id") userId: string,
+  ) {
+    return this.adminTextService.retryVersion(textId, versionId, userId);
+  }
+
+  @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
   @Get(":id/versions/:versionId/download")
   @ApiOperation({ summary: "Download version data as JSON (admin only)" })
   @ApiParam({ name: "id", description: "Text UUID" })
@@ -198,8 +248,13 @@ export class AdminTextsController {
   async downloadVersion(
     @Param("id") textId: string,
     @Param("versionId") versionId: string,
+    @Res() res: Response,
   ) {
-    return this.adminTextService.downloadVersion(textId, versionId);
+    const payload = await this.adminTextService.downloadVersion(textId, versionId);
+    const filename = `text-${textId}-v${payload.version}.json`;
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.send(JSON.stringify(payload, null, 2));
   }
 
   // ──────────────────────────────────────────────────────────────
@@ -235,6 +290,70 @@ export class AdminTextsController {
     @User("id") userId: string,
   ) {
     return this.adminTextService.startProcessing(textId, dto, userId);
+  }
+
+  @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
+  @Sse(":id/process/stream")
+  @ApiOperation({
+    summary: "Server-Sent Events stream of the latest processing version status",
+    description:
+      "Emits one event every ~1.5s with { id, version, status, progress, errorMessage, durationMs, isCurrent, updatedAt }. Stream completes when status is COMPLETED or ERROR. If there is no version yet, emits a single { status: 'NONE' } event and stays open polling.",
+  })
+  @ApiParam({ name: "id", description: "Text UUID" })
+  streamProgress(@Param("id") textId: string): Observable<{ data: unknown }> {
+    return new Observable<{ data: unknown }>((subscriber) => {
+      let stopped = false;
+      const tick = async () => {
+        if (stopped) return;
+        try {
+          const snap = await this.adminTextService.getLatestVersionStatus(textId);
+          const payload = snap ?? { status: "NONE" as const };
+          subscriber.next({ data: payload });
+          if (snap && (snap.status === "COMPLETED" || snap.status === "ERROR")) {
+            subscriber.complete();
+            return;
+          }
+        } catch (err) {
+          subscriber.error(err);
+          return;
+        }
+        if (!stopped) setTimeout(tick, 1500);
+      };
+      void tick();
+      return () => {
+        stopped = true;
+      };
+    });
+  }
+
+  @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
+  @Post(":id/publish")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Publish a single text (admin only)",
+    description: "Sets publishedAt=now, archivedAt=null. Semantic alias for PATCH { status: 'published' }.",
+  })
+  @ApiParam({ name: "id", description: "Text UUID" })
+  @ApiOkResponse({ description: "{ textId, published: true }" })
+  @ApiNotFoundResponse({ description: "Text not found." })
+  @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
+  async publishOne(@Param("id") textId: string) {
+    return this.adminTextService.publishOne(textId);
+  }
+
+  @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
+  @Post(":id/unpublish")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: "Unpublish a single text (admin only)",
+    description: "Sets publishedAt=null. Semantic alias for PATCH { status: 'draft' }.",
+  })
+  @ApiParam({ name: "id", description: "Text UUID" })
+  @ApiOkResponse({ description: "{ textId, published: false }" })
+  @ApiNotFoundResponse({ description: "Text not found." })
+  @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
+  async unpublishOne(@Param("id") textId: string) {
+    return this.adminTextService.unpublishOne(textId);
   }
 
   @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)

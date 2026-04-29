@@ -9,15 +9,43 @@ import { Prisma, SubscriptionStatus, UserEventType } from "@prisma/client";
 import { normalizeToken } from "src/markup-engine/tokenizer/tokenizer.utils";
 import { PrismaService } from "src/prisma.service";
 import { TokenService } from "src/token/token.service";
+import { WordProgressService } from "src/progress/word-progress/word-progress.service";
 import { CreateDictionaryEntryDto } from "./dto/create-dictionary-entry.dto";
 import { DictionarySort, GetDictionaryEntriesDto } from "./dto/get-dictionary-entries.dto";
 import { UpdateDictionaryEntryDto } from "./dto/update-dictionary-entry.dto";
+
+// Mastery 0..100 derived from SM-2 state. Mirrors WordProgressService.KNOWN_INTERVAL = 21.
+const KNOWN_INTERVAL = 21;
+// Сколько успешных повторений нужно (приблизительно), чтобы интервал достиг KNOWN.
+// SM-2 при easeFactor=2.5: 1, 6, 15, 37 → 4-е повторение уводит в KNOWN. Округляем вверх.
+const TARGET_REPETITIONS = 4;
+
+function computeProgressPercent(
+  learningLevel: string,
+  progressStatus: string | null,
+  interval: number,
+): number {
+  if (learningLevel === "KNOWN" || progressStatus === "KNOWN") return 100;
+  if (interval <= 0) return 0;
+  return Math.min(100, Math.round((interval / KNOWN_INTERVAL) * 100));
+}
+
+const CASE_LABEL_RU: Record<string, string> = {
+  NOM: "Именительный",
+  GEN: "Родительный",
+  DAT: "Дательный",
+  ERG: "Эргативный",
+  INS: "Творительный",
+  LOC: "Местный",
+  ALL: "Направительный",
+};
 
 @Injectable()
 export class DictionaryService {
   constructor(
     private readonly prismaService: PrismaService,
     private readonly tokenService: TokenService,
+    private readonly wordProgressService: WordProgressService,
   ) {}
 
   async getUserDictionaryEntries(userId: string, query: GetDictionaryEntriesDto = {}) {
@@ -29,6 +57,7 @@ export class DictionaryService {
       sort = DictionarySort.ADDED,
       page = 1,
       limit = 20,
+      search,
     } = query;
 
     const where: Prisma.UserDictionaryEntryWhereInput = { userId };
@@ -38,6 +67,17 @@ export class DictionaryService {
       where.folderId = null;
     } else if (folderId) {
       where.folderId = folderId;
+    }
+    const trimmed = search?.trim();
+    if (trimmed) {
+      const normalized = normalizeToken(trimmed);
+      where.OR = [
+        { word: { contains: trimmed, mode: "insensitive" } },
+        { translation: { contains: trimmed, mode: "insensitive" } },
+        ...(normalized
+          ? [{ normalized: { contains: normalized } as Prisma.StringNullableFilter }]
+          : []),
+      ];
     }
 
     const orderBy = this.buildOrderBy(sort);
@@ -100,14 +140,21 @@ export class DictionaryService {
       .map((e) => e.lemmaId)
       .filter((id): id is string => id !== null);
 
-    const progressMap = new Map<string, { nextReview: Date | null; status: string }>();
+    const progressMap = new Map<
+      string,
+      { nextReview: Date | null; status: string; interval: number }
+    >();
     if (lemmaIds.length > 0) {
       const progresses = await this.prismaService.userWordProgress.findMany({
         where: { userId, lemmaId: { in: lemmaIds } },
-        select: { lemmaId: true, nextReview: true, status: true },
+        select: { lemmaId: true, nextReview: true, status: true, interval: true },
       });
       for (const p of progresses) {
-        progressMap.set(p.lemmaId, { nextReview: p.nextReview, status: p.status });
+        progressMap.set(p.lemmaId, {
+          nextReview: p.nextReview,
+          status: p.status,
+          interval: p.interval,
+        });
       }
     }
 
@@ -117,6 +164,11 @@ export class DictionaryService {
         ...entry,
         nextReview: progress?.nextReview ?? null,
         wordProgressStatus: progress?.status ?? null,
+        progressPercent: computeProgressPercent(
+          entry.learningLevel,
+          progress?.status ?? null,
+          progress?.interval ?? 0,
+        ),
       };
     });
 
@@ -174,8 +226,16 @@ export class DictionaryService {
             partOfSpeech: true,
             frequency: true,
             transliteration: true,
+            audioUrl: true,
+            declensionClass: true,
             morphForms: {
-              select: { form: true, grammarTag: true },
+              select: {
+                form: true,
+                grammarTag: true,
+                translation: true,
+                gramCase: true,
+                gramNumber: true,
+              },
               orderBy: { form: "asc" },
             },
             headwords: {
@@ -189,7 +249,14 @@ export class DictionaryService {
                         definition: true,
                         notes: true,
                         examples: {
-                          select: { text: true, translation: true },
+                          select: {
+                            id: true,
+                            text: true,
+                            translation: true,
+                            sourceText: true,
+                            sourceTextId: true,
+                            source: { select: { id: true, title: true } },
+                          },
                         },
                       },
                     },
@@ -209,6 +276,20 @@ export class DictionaryService {
                   select: { id: true, title: true, level: true },
                 },
               },
+            },
+            relations: {
+              select: {
+                type: true,
+                related: {
+                  select: {
+                    id: true,
+                    baseForm: true,
+                    transliteration: true,
+                    level: true,
+                  },
+                },
+              },
+              take: 12,
             },
           },
         },
@@ -241,35 +322,84 @@ export class DictionaryService {
           where: { userId, lemmaId: entry.lemmaId },
           orderBy: { createdAt: "desc" },
           take: 10,
-          select: { id: true, quality: true, correct: true, createdAt: true },
+          select: {
+            id: true,
+            quality: true,
+            correct: true,
+            intervalBefore: true,
+            intervalAfter: true,
+            createdAt: true,
+          },
         })
       : [];
 
     const successCount = reviewLogs.filter((r) => r.correct).length;
+    const logsWithDelta = reviewLogs.map((log) => {
+      const before = log.intervalBefore;
+      const after = log.intervalAfter;
+      const delta = before !== null && after !== null ? after - before : null;
+      return { ...log, intervalDelta: delta };
+    });
 
-    // Flatten senses from all headwords (deduplicate by id)
+    // Flatten senses from all headwords (deduplicate by id) and translate examples
     const seenSenseIds = new Set<string>();
-    const senses: Array<{
+    type SenseOut = {
       id: string;
       definition: string;
       notes: string | null;
-      examples: { text: string; translation: string | null }[];
-    }> = [];
+      examples: {
+        id: string;
+        text: string;
+        translation: string | null;
+        origin: string | null;
+        sourceTextId: string | null;
+      }[];
+    };
+    const senses: SenseOut[] = [];
     for (const hw of entry.lemma?.headwords ?? []) {
       for (const sense of hw.entry.senses) {
-        if (!seenSenseIds.has(sense.id)) {
-          seenSenseIds.add(sense.id);
-          senses.push(sense);
-        }
+        if (seenSenseIds.has(sense.id)) continue;
+        seenSenseIds.add(sense.id);
+        senses.push({
+          id: sense.id,
+          definition: sense.definition,
+          notes: sense.notes,
+          examples: sense.examples.map((ex) => ({
+            id: ex.id,
+            text: ex.text,
+            translation: ex.translation,
+            origin: ex.source?.title ?? ex.sourceText ?? null,
+            sourceTextId: ex.sourceTextId,
+          })),
+        });
       }
     }
+
+    const morphForms =
+      entry.lemma?.morphForms.map((m) => ({
+        form: m.form,
+        grammarTag: m.grammarTag,
+        translation: m.translation,
+        gramCase: m.gramCase,
+        gramNumber: m.gramNumber,
+        caseLabel: m.gramCase ? (CASE_LABEL_RU[m.gramCase] ?? null) : null,
+      })) ?? [];
+
+    const related =
+      entry.lemma?.relations.map((rel) => ({
+        type: rel.type,
+        lemmaId: rel.related.id,
+        baseForm: rel.related.baseForm,
+        transliteration: rel.related.transliteration,
+        level: rel.related.level,
+      })) ?? [];
 
     return {
       id: entry.id,
       word: entry.word,
       translation: entry.translation,
       normalized: entry.normalized,
-      learningLevel: entry.learningLevel,
+      learningLevel: progress?.status ?? entry.learningLevel,
       cefrLevel: entry.cefrLevel,
       addedAt: entry.addedAt,
       folder: entry.folder ?? null,
@@ -280,17 +410,111 @@ export class DictionaryService {
             partOfSpeech: entry.lemma.partOfSpeech,
             frequency: entry.lemma.frequency,
             transliteration: entry.lemma.transliteration,
-            morphForms: entry.lemma.morphForms,
+            audioUrl: entry.lemma.audioUrl,
+            declensionClass: entry.lemma.declensionClass,
+            morphForms,
             wordContexts: entry.lemma.wordContexts,
           }
         : null,
       senses,
-      sm2: progress ?? null,
+      related,
+      sm2: progress
+        ? { ...progress, targetRepetitions: TARGET_REPETITIONS }
+        : null,
+      progressPercent: computeProgressPercent(
+        entry.learningLevel,
+        progress?.status ?? null,
+        progress?.interval ?? 0,
+      ),
       reviewHistory: {
         totalReviews: reviewLogs.length,
         successCount,
-        logs: reviewLogs,
+        logs: logsWithDelta,
       },
+    };
+  }
+
+  // Возвращает соседние записи словаря в текущем фильтре/сортировке.
+  // Используется для кнопок prev/next в карточке слова.
+  async getUserDictionaryEntryNeighbors(
+    id: string,
+    userId: string,
+    query: GetDictionaryEntriesDto = {},
+  ) {
+    const current = await this.prismaService.userDictionaryEntry.findUnique({
+      where: { id },
+      select: { id: true, userId: true },
+    });
+    if (!current || current.userId !== userId) {
+      throw new NotFoundException("Dictionary entry not found");
+    }
+
+    const { status, cefrLevel, folderId, noFolder, sort = DictionarySort.ADDED, search } = query;
+    const where: Prisma.UserDictionaryEntryWhereInput = { userId };
+    if (status) where.learningLevel = status;
+    if (cefrLevel) where.cefrLevel = cefrLevel;
+    if (noFolder) where.folderId = null;
+    else if (folderId) where.folderId = folderId;
+    const trimmed = search?.trim();
+    if (trimmed) {
+      const normalized = normalizeToken(trimmed);
+      where.OR = [
+        { word: { contains: trimmed, mode: "insensitive" } },
+        { translation: { contains: trimmed, mode: "insensitive" } },
+        ...(normalized
+          ? [{ normalized: { contains: normalized } as Prisma.StringNullableFilter }]
+          : []),
+      ];
+    }
+
+    // Загружаем минимальный список и считаем индекс. Для REVIEW/STATUS Prisma не умеет
+    // сортировать по полям UserWordProgress, поэтому повторяем логику из getUserDictionaryEntries.
+    const entries = await this.prismaService.userDictionaryEntry.findMany({
+      where,
+      orderBy: this.buildOrderBy(sort),
+      select: { id: true, word: true, lemmaId: true, learningLevel: true },
+    });
+
+    let ordered = entries;
+    if (sort === DictionarySort.REVIEW || sort === DictionarySort.STATUS) {
+      const lemmaIds = entries
+        .map((e) => e.lemmaId)
+        .filter((id): id is string => id !== null);
+      const progresses = lemmaIds.length
+        ? await this.prismaService.userWordProgress.findMany({
+            where: { userId, lemmaId: { in: lemmaIds } },
+            select: { lemmaId: true, nextReview: true, status: true },
+          })
+        : [];
+      const progressMap = new Map(progresses.map((p) => [p.lemmaId, p]));
+      ordered = [...entries];
+      if (sort === DictionarySort.REVIEW) {
+        ordered.sort((a, b) => {
+          const ar = a.lemmaId ? progressMap.get(a.lemmaId)?.nextReview ?? null : null;
+          const br = b.lemmaId ? progressMap.get(b.lemmaId)?.nextReview ?? null : null;
+          if (!ar && !br) return 0;
+          if (!ar) return 1;
+          if (!br) return -1;
+          return ar.getTime() - br.getTime();
+        });
+      } else {
+        const priority: Record<string, number> = { NEW: 0, LEARNING: 1, KNOWN: 2 };
+        ordered.sort(
+          (a, b) =>
+            (priority[a.learningLevel] ?? 0) - (priority[b.learningLevel] ?? 0),
+        );
+      }
+    }
+
+    const idx = ordered.findIndex((e) => e.id === id);
+    const prev = idx > 0 ? ordered[idx - 1] : null;
+    const next = idx >= 0 && idx < ordered.length - 1 ? ordered[idx + 1] : null;
+
+    return {
+      prev: prev ? { id: prev.id, word: prev.word } : null,
+      next: next ? { id: next.id, word: next.word } : null,
+      position: idx >= 0 ? idx + 1 : null,
+      total: ordered.length,
     };
   }
 
@@ -339,7 +563,7 @@ export class DictionaryService {
     dto: CreateDictionaryEntryDto,
     userId: string,
   ) {
-    // Enforce maxVocabularyWords plan limit
+    // Enforce wordsInDictionary plan limit (-1 = безлимит)
     const [currentCount, subscription] = await Promise.all([
       this.prismaService.userDictionaryEntry.count({ where: { userId } }),
       this.prismaService.subscription.findFirst({
@@ -352,14 +576,14 @@ export class DictionaryService {
       }),
     ]);
     const planLimits = subscription?.plan?.limits as Record<string, number> | null;
-    const maxVocabularyWords = planLimits?.maxVocabularyWords ?? 500;
-    if (currentCount >= maxVocabularyWords) {
+    const wordsInDictionary = planLimits?.wordsInDictionary ?? 500;
+    if (wordsInDictionary !== -1 && currentCount >= wordsInDictionary) {
       throw new ForbiddenException(
-        `Vocabulary limit of ${maxVocabularyWords} words reached. Upgrade your plan to add more.`,
+        `Vocabulary limit of ${wordsInDictionary} words reached. Upgrade your plan to add more.`,
       );
     }
 
-    const { tokenId, word, translation, folderId } = dto;
+    const { tokenId, word, translation, folderId, cefrLevel } = dto;
     let resolvedWord = word;
     let resolvedTranslation = translation;
     let lemmaId: string | null = null;
@@ -403,6 +627,7 @@ export class DictionaryService {
       translation: resolvedTranslation ?? "",
       normalized,
       user: { connect: { id: userId } },
+      ...(cefrLevel && { cefrLevel }),
       ...(folderId && { folder: { connect: { id: folderId } } }),
       ...(lemmaId && { lemma: { connect: { id: lemmaId } } }),
     };
@@ -468,10 +693,29 @@ export class DictionaryService {
           : { connect: { id: folderId } };
     }
 
-    return await this.prismaService.userDictionaryEntry.update({
+    const updated = await this.prismaService.userDictionaryEntry.update({
       where: { id },
       data,
     });
+
+    // Keep SM-2 schedule in UserWordProgress consistent when learning status changes.
+    if (
+      learningLevel !== undefined &&
+      learningLevel !== existingEntry.learningLevel &&
+      updated.lemmaId
+    ) {
+      try {
+        await this.wordProgressService.setWordStatus(
+          userId,
+          updated.lemmaId,
+          learningLevel,
+        );
+      } catch {
+        // SM-2 sync is best-effort; the entry update already succeeded.
+      }
+    }
+
+    return updated;
   }
 
   async deleteUserDictionaryEntryById(id: string, userId: string) {
@@ -482,6 +726,55 @@ export class DictionaryService {
     });
 
     return "Dictionary entry deleted";
+  }
+
+  async bulkAssignEntriesToFolder(
+    assignments: { id: string; folderId?: string | null }[],
+    userId: string,
+  ) {
+    const entryIds = assignments.map((a) => a.id);
+    const uniqueFolderIds = Array.from(
+      new Set(
+        assignments
+          .map((a) => a.folderId)
+          .filter((id): id is string => typeof id === "string"),
+      ),
+    );
+
+    const [ownedEntries, ownedFolders] = await Promise.all([
+      this.prismaService.userDictionaryEntry.findMany({
+        where: { id: { in: entryIds }, userId },
+        select: { id: true },
+      }),
+      uniqueFolderIds.length > 0
+        ? this.prismaService.userDictionaryFolder.findMany({
+            where: { id: { in: uniqueFolderIds }, userId },
+            select: { id: true },
+          })
+        : Promise.resolve([] as { id: string }[]),
+    ]);
+
+    if (ownedEntries.length !== entryIds.length) {
+      throw new BadRequestException(
+        "Some dictionary entries do not belong to user or do not exist",
+      );
+    }
+    if (ownedFolders.length !== uniqueFolderIds.length) {
+      throw new BadRequestException(
+        "Some folders do not belong to user or do not exist",
+      );
+    }
+
+    await this.prismaService.$transaction(
+      assignments.map(({ id, folderId }) =>
+        this.prismaService.userDictionaryEntry.update({
+          where: { id },
+          data: { folderId: folderId ?? null },
+        }),
+      ),
+    );
+
+    return { updated: assignments.length };
   }
 
   async getDueWords(userId: string) {

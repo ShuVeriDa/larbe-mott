@@ -88,6 +88,18 @@ export class AdminLogsController {
   }
 
   @AdminPermission(PermissionCode.CAN_VIEW_LOGS)
+  @Get("services")
+  @ApiOperation({
+    summary: "Available log services",
+    description:
+      "Returns the static list of service names emitted by the logs system, used to populate the service filter.",
+  })
+  @ApiOkResponse({ description: "{ services: string[] }" })
+  getServices(): { services: string[] } {
+    return this.logsService.getServices();
+  }
+
+  @AdminPermission(PermissionCode.CAN_VIEW_LOGS)
   @Get(":id")
   @ApiOperation({
     summary: "System log details",

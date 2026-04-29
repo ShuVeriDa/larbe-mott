@@ -75,6 +75,22 @@ export class WordsController {
     return this.wordExamplesService.getExamples(lemmaId);
   }
 
+  @Auth()
+  @Get(":lemmaId/related")
+  @ApiOperation({
+    summary: "Связанные слова (синонимы / антонимы / однокоренные)",
+    description:
+      "Возвращает все WordRelation для данной леммы (в обе стороны), сгруппированные по типу. Используется в карточке слова в разделе «Родственные слова».",
+  })
+  @ApiParam({ name: "lemmaId", description: "Lemma ID" })
+  @ApiOkResponse({
+    description:
+      "[{ type, lemmaId, baseForm, transliteration, level, translation? }]",
+  })
+  async getRelated(@Param("lemmaId", ParseUUIDPipe) lemmaId: string) {
+    return this.wordsService.getRelated(lemmaId);
+  }
+
   @Post("lookup-by-word")
   @Auth()
   @ApiOperation({

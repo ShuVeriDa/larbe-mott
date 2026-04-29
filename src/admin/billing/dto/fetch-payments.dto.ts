@@ -42,6 +42,20 @@ export class FetchPaymentsDto {
   @IsDateString()
   dateTo?: string;
 
+  @ApiPropertyOptional({ description: "Minimum amount in cents (inclusive)" })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  amountMin?: number;
+
+  @ApiPropertyOptional({ description: "Maximum amount in cents (inclusive)" })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  amountMax?: number;
+
   @ApiPropertyOptional({ description: "Page number (1-based)", default: 1 })
   @IsOptional()
   @Type(() => Number)

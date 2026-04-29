@@ -117,9 +117,14 @@ export class PatchTextDto {
   @MaxLength(50, { message: "Author must be no more than 50 characters long" })
   author?: string;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({
+    required: false,
+    description: "Source URL (must include http(s):// protocol if provided)",
+  })
   @IsOptional()
-  @IsString()
+  @ValidateIf((_o, v) => v != null && v !== "")
+  @IsUrl({ require_protocol: true }, { message: "source must be a valid URL with protocol" })
+  @MaxLength(500)
   source?: string;
 
   @ApiProperty({
@@ -145,13 +150,17 @@ export class PatchTextDto {
   archivedAt?: string | null;
 
   @ApiProperty({
-    description: "Cover image URL. Null to remove.",
+    description:
+      "Cover image URL. Either a full URL (https://...) or a relative path returned by POST /admin/uploads/cover or POST /admin/texts/:id/cover (e.g. /uploads/covers/foo.png). Pass null to remove.",
     required: false,
     nullable: true,
   })
   @IsOptional()
-  @ValidateIf((_o, v) => v != null)
-  @IsUrl({}, { message: "imageUrl must be a valid URL" })
+  @ValidateIf((_o, v) => v != null && v !== "")
+  @Matches(/^(\/uploads\/[\w\-./]+|https?:\/\/.+)$/, {
+    message:
+      "imageUrl must be a relative /uploads/... path or a full http(s) URL",
+  })
   imageUrl?: string | null;
 
   @ApiProperty({
@@ -200,7 +209,8 @@ export class PatchTextDto {
 
   @ApiProperty({
     type: [String],
-    description: "Array of tag UUIDs to assign to the text. Replaces existing tags.",
+    description:
+      "Array of tag UUIDs to assign to the text. If `tagIds` and/or `tagNames` is sent, ALL existing tags on the text are replaced with the union of resolved IDs.",
     required: false,
     example: ["uuid-1", "uuid-2"],
   })
@@ -208,6 +218,18 @@ export class PatchTextDto {
   @IsArray()
   @IsUUID("4", { each: true })
   tagIds?: string[];
+
+  @ApiProperty({
+    type: [String],
+    description:
+      "Array of tag NAMES to assign. Tags not yet present in the database will be created (find-or-create). Merged with tagIds. Sending tagIds and tagNames together replaces existing tags with their union.",
+    required: false,
+    example: ["История", "Грамматика"],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  tagNames?: string[];
 
   @ApiProperty({
     enum: TextStatusUpdate,

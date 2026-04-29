@@ -1,6 +1,19 @@
-import { Controller, Delete, Get, Param, ParseIntPipe, ParseUUIDPipe, Post, Query } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseIntPipe,
+  ParseUUIDPipe,
+  Post,
+  Query,
+} from "@nestjs/common";
 import {
   ApiBearerAuth,
+  ApiBody,
+  ApiConflictResponse,
+  ApiCreatedResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -14,6 +27,7 @@ import { Auth } from "src/auth/decorators/auth.decorator";
 import { OptionalAuth } from "src/auth/decorators/optional-auth.decorator";
 import { User } from "src/user/decorators/user.decorator";
 import { GetTextsResponseDto } from "./dto/get-texts-response.dto";
+import { ReportTextDto } from "./dto/report-text.dto";
 import { TextService } from "./text.service";
 import type { TextProgressStatus, TextSortOrder } from "./text.service";
 
@@ -172,6 +186,47 @@ export class TextController {
   @ApiOkResponse({ description: "{ bookmarked: true } or { bookmarked: false }" })
   async toggleBookmark(@Param("id", ParseUUIDPipe) textId: string, @User("id") userId: string) {
     return this.textService.toggleBookmark(textId, userId);
+  }
+
+  @Delete(":id/progress")
+  @Auth()
+  @ApiOperation({
+    summary: "Reset progress for a text",
+    description:
+      "Removes the user's UserTextProgress row for this text (resets progressPercent to 0 and clears lastOpened/completedAt). " +
+      "Does not affect bookmarks or per-word progress.",
+  })
+  @ApiParam({ name: "id", description: "Text ID (UUID)" })
+  @ApiOkResponse({ description: "{ ok: true }" })
+  @ApiNotFoundResponse({ description: "Text with the given ID was not found." })
+  async resetProgress(@Param("id", ParseUUIDPipe) textId: string, @User("id") userId: string) {
+    return this.textService.resetProgress(textId, userId);
+  }
+
+  @Post(":id/report")
+  @Auth()
+  @ApiOperation({
+    summary: "Report a text",
+    description:
+      "Создаёт жалобу на текст в виде FeedbackThread (type=COMPLAINT, contextType=TEXT). " +
+      "Возвращает 409, если у пользователя уже есть незакрытая жалоба на этот текст — в теле ошибки threadId/ticketNumber. " +
+      "Категория жалобы попадает в FeedbackThread.contextAction; пользовательский комментарий — в первое сообщение.",
+  })
+  @ApiParam({ name: "id", description: "Text ID (UUID)" })
+  @ApiBody({ type: ReportTextDto })
+  @ApiCreatedResponse({
+    description: "{ id, ticketNumber, status, createdAt } созданного thread'а.",
+  })
+  @ApiNotFoundResponse({ description: "Text with the given ID was not found." })
+  @ApiConflictResponse({
+    description: "У пользователя уже есть открытая жалоба на этот текст.",
+  })
+  async reportText(
+    @Param("id", ParseUUIDPipe) textId: string,
+    @User("id") userId: string,
+    @Body() dto: ReportTextDto,
+  ) {
+    return this.textService.reportText(textId, userId, dto);
   }
 
   @Get(":id/related")

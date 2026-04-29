@@ -130,13 +130,16 @@ export class AdminUnknownWordsService {
       }),
     ]);
 
-    const textsByNormalized = await this.getTextsForNormalizedList(
-      items.map((i) => i.normalized),
-    );
+    const normalizedList = items.map((i) => i.normalized);
+    const [textsByNormalized, firstContextByNormalized] = await Promise.all([
+      this.getTextsForNormalizedList(normalizedList),
+      this.getFirstContextForNormalizedList(normalizedList),
+    ]);
 
     const itemsWithTexts = items.map((item) => ({
       ...item,
       texts: textsByNormalized.get(item.normalized) ?? [],
+      firstContext: firstContextByNormalized.get(item.normalized) ?? null,
     }));
 
     return {
@@ -232,6 +235,7 @@ export class AdminUnknownWordsService {
       level: dto.level,
       notes: dto.notes,
       forms: dto.forms,
+      domain: dto.domain,
     };
     const lemma = await this.dictionaryService.createEntry(createDto, userId);
 
@@ -311,6 +315,146 @@ export class AdminUnknownWordsService {
   }
 
   // ─── Private helpers ─────────────────────────────────────────────────────────
+
+  private async getFirstContextForNormalizedList(
+    normalizers: string[],
+  ): Promise<
+    Map<
+      string,
+      {
+        tokenId: string;
+        original: string;
+        position: number;
+        startOffset: number | null;
+        endOffset: number | null;
+        snippet: string | null;
+        textId: string;
+        textTitle: string;
+        pageNumber: number | null;
+      }
+    >
+  > {
+    if (!normalizers.length) return new Map();
+
+    const tokens = await this.prisma.textToken.findMany({
+      where: { normalized: { in: normalizers } },
+      select: {
+        id: true,
+        normalized: true,
+        original: true,
+        position: true,
+        startOffset: true,
+        endOffset: true,
+        version: {
+          select: { text: { select: { id: true, title: true } } },
+        },
+        page: { select: { pageNumber: true, contentRaw: true } },
+      },
+      orderBy: [{ normalized: "asc" }, { position: "asc" }],
+    });
+
+    const result = new Map<
+      string,
+      {
+        tokenId: string;
+        original: string;
+        position: number;
+        startOffset: number | null;
+        endOffset: number | null;
+        snippet: string | null;
+        textId: string;
+        textTitle: string;
+        pageNumber: number | null;
+      }
+    >();
+
+    for (const t of tokens) {
+      if (result.has(t.normalized)) continue;
+      let snippet: string | null = null;
+      if (t.page?.contentRaw && t.startOffset != null && t.endOffset != null) {
+        const raw = t.page.contentRaw;
+        const from = Math.max(0, t.startOffset - 60);
+        const to = Math.min(raw.length, t.endOffset + 60);
+        snippet = raw.slice(from, to);
+      }
+      result.set(t.normalized, {
+        tokenId: t.id,
+        original: t.original,
+        position: t.position,
+        startOffset: t.startOffset,
+        endOffset: t.endOffset,
+        snippet,
+        textId: t.version.text.id,
+        textTitle: t.version.text.title,
+        pageNumber: t.page?.pageNumber ?? null,
+      });
+    }
+
+    return result;
+  }
+
+  // ─── Export ──────────────────────────────────────────────────────────────────
+
+  async exportPending() {
+    const items = await this.prisma.unknownWord.findMany({
+      where: { status: UnknownWordStatus.PENDING },
+      orderBy: [{ seenCount: "desc" }, { lastSeen: "desc" }],
+    });
+
+    const textsByNormalized = await this.getTextsForNormalizedList(
+      items.map((i) => i.normalized),
+    );
+
+    return {
+      exportedAt: new Date().toISOString(),
+      total: items.length,
+      items: items.map((i) => ({
+        word: i.word,
+        normalized: i.normalized,
+        seenCount: i.seenCount,
+        firstSeen: i.firstSeen,
+        lastSeen: i.lastSeen,
+        texts: textsByNormalized.get(i.normalized) ?? [],
+      })),
+    };
+  }
+
+  exportPendingCsv(data: {
+    exportedAt: string;
+    total: number;
+    items: Array<{
+      word: string;
+      normalized: string;
+      seenCount: number;
+      firstSeen: Date;
+      lastSeen: Date;
+      texts: { id: string; title: string }[];
+    }>;
+  }) {
+    const escape = (v: unknown) => {
+      const s = v == null ? "" : String(v);
+      return /[",\n;]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const header = [
+      "word",
+      "normalized",
+      "seenCount",
+      "firstSeen",
+      "lastSeen",
+      "texts",
+    ].join(";");
+    const rows = data.items.map((i) =>
+      [
+        escape(i.word),
+        escape(i.normalized),
+        i.seenCount,
+        new Date(i.firstSeen).toISOString(),
+        new Date(i.lastSeen).toISOString(),
+        escape(i.texts.map((t) => t.title).join(" | ")),
+      ].join(";"),
+    );
+    return [header, ...rows].join("\n");
+  }
 
   private async getTextsForNormalizedList(
     normalizers: string[],

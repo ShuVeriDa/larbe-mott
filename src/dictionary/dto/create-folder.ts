@@ -27,4 +27,13 @@ export class CreateDictionaryFolderDto {
   @IsOptional()
   @IsHexColor()
   color?: string;
+
+  @ApiPropertyOptional({
+    description: "Icon key (frontend renders the corresponding SVG)",
+    example: "book",
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  icon?: string;
 }

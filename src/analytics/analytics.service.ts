@@ -17,6 +17,12 @@ export interface WordStats {
   known: number;
 }
 
+export interface DueTodayBreakdown {
+  total: number;
+  new: number;
+  learning: number;
+}
+
 @Injectable()
 export class AnalyticsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -70,7 +76,7 @@ export class AnalyticsService {
     const [wordStats, dueToday, textStats, streakDetails, activity] =
       await Promise.all([
         this.getWordStats(userId),
-        this.getDueTodayCount(userId),
+        this.getDueTodayBreakdown(userId),
         this.getTextStats(userId),
         this.getStreakDetails(userId, offsetMinutes),
         this.getActivityLast30Days(userId),
@@ -109,15 +115,37 @@ export class AnalyticsService {
     };
   }
 
-  private async getDueTodayCount(userId: string): Promise<number> {
+  /**
+   * Слова к повторению на сегодня с разбивкой по статусу:
+   * - new: NEW + due
+   * - learning: LEARNING + due
+   * - total: сумма
+   * Используется и для бейджа в greeting'е, и для пилл в review-banner на главной.
+   */
+  async getDueTodayBreakdown(userId: string): Promise<DueTodayBreakdown> {
     const now = this.nowUtc();
-    return this.prisma.userWordProgress.count({
+    const grouped = await this.prisma.userWordProgress.groupBy({
+      by: ["status"],
       where: {
         userId,
         status: { not: WordStatus.KNOWN },
         OR: [{ nextReview: null }, { nextReview: { lte: now } }],
       },
+      _count: { status: true },
     });
+
+    const map = Object.fromEntries(
+      grouped.map((g) => [g.status, g._count.status]),
+    ) as Partial<Record<WordStatus, number>>;
+
+    const newCount = map[WordStatus.NEW] ?? 0;
+    const learningCount = map[WordStatus.LEARNING] ?? 0;
+
+    return {
+      total: newCount + learningCount,
+      new: newCount,
+      learning: learningCount,
+    };
   }
 
   // ─── texts ───────────────────────────────────────────────────────────────────

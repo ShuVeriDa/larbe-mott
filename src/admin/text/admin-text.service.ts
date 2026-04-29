@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma, ProcessingTrigger } from "@prisma/client";
+import { Prisma, ProcessingStatus, ProcessingTrigger } from "@prisma/client";
 import { CreateTextDto } from "src/admin/text/dto/create.dto";
 import {
   AdminListTextsQueryDto,
@@ -13,6 +13,7 @@ import {
 } from "src/admin/text/dto/list-query.dto";
 import { ProcessTextDto } from "src/admin/text/dto/process.dto";
 import { PatchTextDto, TextStatusUpdate } from "src/admin/text/dto/update.dto";
+import { BulkImportResultItem } from "src/admin/text/dto/bulk-import.dto";
 import { extractTextFromTiptap } from "src/common/utils/extractTextFromTiptap";
 import { ProcessTextOpts, TokenizerProcessor } from "src/markup-engine/tokenizer/tokenizer.processor";
 import { PrismaService } from "src/prisma.service";
@@ -216,20 +217,38 @@ export class AdminTextService {
     });
 
     let tokenCount = 0;
+    let wordCount = 0;
     const tokenCountByPageId = new Map<string, number>();
+    const wordCountByPageId = new Map<string, number>();
 
     if (latestVersion) {
-      const [total, perPage] = await Promise.all([
+      const [total, totalWords, perPage, perPageWords] = await Promise.all([
         this.prisma.textToken.count({ where: { versionId: latestVersion.id } }),
+        this.prisma.textToken.count({
+          where: { versionId: latestVersion.id, normalized: { not: "" } },
+        }),
         this.prisma.textToken.groupBy({
           by: ["pageId"],
           where: { versionId: latestVersion.id, pageId: { not: null } },
           _count: { id: true },
         }),
+        this.prisma.textToken.groupBy({
+          by: ["pageId"],
+          where: {
+            versionId: latestVersion.id,
+            pageId: { not: null },
+            normalized: { not: "" },
+          },
+          _count: { id: true },
+        }),
       ]);
       tokenCount = total;
+      wordCount = totalWords;
       for (const row of perPage) {
         if (row.pageId) tokenCountByPageId.set(row.pageId, row._count.id);
+      }
+      for (const row of perPageWords) {
+        if (row.pageId) wordCountByPageId.set(row.pageId, row._count.id);
       }
     }
 
@@ -239,8 +258,10 @@ export class AdminTextService {
       pages: text.pages.map((p) => ({
         ...p,
         tokenCount: tokenCountByPageId.get(p.id) ?? 0,
+        wordCount: wordCountByPageId.get(p.id) ?? 0,
       })),
       tokenCount,
+      wordCount,
       latestVersion: latestVersion ?? null,
     };
   }
@@ -250,8 +271,17 @@ export class AdminTextService {
   // ────────────────────────────────────────────────────────────────────────────
 
   async addNewText(dto: CreateTextDto, userId: string) {
-    const shouldPublish = dto.publish === true;
     const shouldTokenize = dto.autoTokenize !== false;
+
+    let publishedAt: Date | null = null;
+    let archivedAt: Date | null = null;
+    if (dto.status === TextStatusUpdate.PUBLISHED) {
+      publishedAt = new Date();
+    } else if (dto.status === TextStatusUpdate.ARCHIVED) {
+      archivedAt = new Date();
+    } else if (dto.status === undefined && dto.publish === true) {
+      publishedAt = new Date();
+    }
 
     const text = await this.prisma.$transaction(async (tx) => {
       const created = await tx.text.create({
@@ -262,7 +292,9 @@ export class AdminTextService {
           level: dto.level,
           author: dto.author,
           source: dto.source,
-          publishedAt: shouldPublish ? new Date() : null,
+          imageUrl: dto.imageUrl ?? null,
+          publishedAt,
+          archivedAt,
           createdById: userId,
           autoTokenizeOnSave: dto.autoTokenizeOnSave ?? true,
           useNormalization: dto.useNormalization ?? true,
@@ -283,9 +315,14 @@ export class AdminTextService {
         });
       }
 
-      if (dto.tagIds?.length) {
+      const resolvedTagIds = await this.resolveTagIds(
+        tx,
+        dto.tagIds,
+        dto.tagNames,
+      );
+      if (resolvedTagIds.length) {
         await tx.textTag.createMany({
-          data: dto.tagIds.map((tagId) => ({ textId: created.id, tagId })),
+          data: resolvedTagIds.map((tagId) => ({ textId: created.id, tagId })),
         });
       }
 
@@ -384,11 +421,16 @@ export class AdminTextService {
         }
       }
 
-      if (dto.tagIds !== undefined) {
+      if (dto.tagIds !== undefined || dto.tagNames !== undefined) {
         await tx.textTag.deleteMany({ where: { textId } });
-        if (dto.tagIds.length > 0) {
+        const resolvedTagIds = await this.resolveTagIds(
+          tx,
+          dto.tagIds,
+          dto.tagNames,
+        );
+        if (resolvedTagIds.length > 0) {
           await tx.textTag.createMany({
-            data: dto.tagIds.map((tagId) => ({ textId, tagId })),
+            data: resolvedTagIds.map((tagId) => ({ textId, tagId })),
           });
         }
       }
@@ -472,6 +514,28 @@ export class AdminTextService {
     return { textId, started: true };
   }
 
+  /**
+   * Lightweight snapshot of the latest processing version (for SSE polling).
+   * Returns null if no version exists yet.
+   */
+  async getLatestVersionStatus(textId: string) {
+    const v = await this.prisma.textProcessingVersion.findFirst({
+      where: { textId },
+      orderBy: { version: "desc" },
+      select: {
+        id: true,
+        version: true,
+        status: true,
+        progress: true,
+        errorMessage: true,
+        durationMs: true,
+        isCurrent: true,
+        updatedAt: true,
+      },
+    });
+    return v;
+  }
+
   // Keep for backward compatibility
   async retokenizeText(textId: string, initiatorId?: string) {
     return this.startProcessing(
@@ -481,23 +545,63 @@ export class AdminTextService {
     );
   }
 
+  /**
+   * Retry a previous (typically ERROR) version: copies its useNormalization /
+   * useMorphAnalysis settings into a new processing run.
+   */
+  async retryVersion(textId: string, versionId: string, initiatorId: string) {
+    const version = await this.prisma.textProcessingVersion.findFirst({
+      where: { id: versionId, textId },
+      select: { useNormalization: true, useMorphAnalysis: true },
+    });
+    if (!version) throw new NotFoundException("Version not found");
+
+    return this.startProcessing(
+      textId,
+      {
+        useNormalization: version.useNormalization,
+        useMorphAnalysis: version.useMorphAnalysis,
+      },
+      initiatorId,
+    );
+  }
+
   // ────────────────────────────────────────────────────────────────────────────
   // VERSIONS — list
   // ────────────────────────────────────────────────────────────────────────────
 
-  async getTextVersions(textId: string) {
+  async getTextVersions(textId: string, statusFilter?: ProcessingStatus) {
     const text = await this.prisma.text.findUnique({ where: { id: textId } });
     if (!text) throw new NotFoundException("Text not found");
 
-    const versions = await this.prisma.textProcessingVersion.findMany({
+    // Counters always reflect the full history (so the filter tabs show real totals).
+    const counters = await this.prisma.textProcessingVersion.groupBy({
+      by: ["status"],
       where: { textId },
+      _count: { _all: true },
+    });
+    const totalAll = counters.reduce((s, c) => s + c._count._all, 0);
+    const successCountAll =
+      counters.find((c) => c.status === "COMPLETED")?._count._all ?? 0;
+    const errorCountAll = counters.find((c) => c.status === "ERROR")?._count._all ?? 0;
+
+    const versions = await this.prisma.textProcessingVersion.findMany({
+      where: { textId, ...(statusFilter ? { status: statusFilter } : {}) },
       orderBy: { version: "desc" },
       include: {
         initiator: { select: { id: true, name: true, surname: true } },
       },
     });
 
-    if (!versions.length) return { textId, total: 0, data: [] };
+    if (!versions.length) {
+      return {
+        textId,
+        total: totalAll,
+        successCount: successCountAll,
+        errorCount: errorCountAll,
+        data: [],
+      };
+    }
 
     const versionIds = versions.map((v) => v.id);
 
@@ -527,15 +631,11 @@ export class AdminTextService {
       pageCountByVersionId.set(row.versionId, (pageCountByVersionId.get(row.versionId) ?? 0) + 1);
     }
 
-    const total = versions.length;
-    const successCount = versions.filter((v) => v.status === "COMPLETED").length;
-    const errorCount = versions.filter((v) => v.status === "ERROR").length;
-
     return {
       textId,
-      total,
-      successCount,
-      errorCount,
+      total: totalAll,
+      successCount: successCountAll,
+      errorCount: errorCountAll,
       data: versions.map((v) => ({
         id: v.id,
         version: v.version,
@@ -575,12 +675,18 @@ export class AdminTextService {
     if (!version) throw new NotFoundException("Version not found");
 
     // Per-page stats
-    const [tokensByPage, pages] = await Promise.all([
+    const [tokensByPage, wordsByPage, pages] = await Promise.all([
       this.prisma.textToken.groupBy({
         by: ["pageId"],
         where: { versionId, pageId: { not: null } },
         _count: { id: true },
         _min: { position: true },
+      }),
+      // Words = tokens where normalized is not empty (punctuation normalizes to "")
+      this.prisma.textToken.groupBy({
+        by: ["pageId"],
+        where: { versionId, pageId: { not: null }, normalized: { not: "" } },
+        _count: { id: true },
       }),
       this.prisma.textPage.findMany({
         where: { textId },
@@ -590,9 +696,11 @@ export class AdminTextService {
     ]);
 
     const tokenCountByPageId = new Map(tokensByPage.map((r) => [r.pageId!, r._count.id]));
+    const wordCountByPageId = new Map(wordsByPage.map((r) => [r.pageId!, r._count.id]));
 
     const pageStats = pages.map((p) => {
       const tokenCount = tokenCountByPageId.get(p.id) ?? 0;
+      const wordCount = wordCountByPageId.get(p.id) ?? 0;
       const charCount = p.contentRaw?.length ?? 0;
       let status: "OK" | "ERROR" | "SKIPPED" = "OK";
       if (version.status === "ERROR") {
@@ -603,10 +711,15 @@ export class AdminTextService {
         pageId: p.id,
         pageNumber: p.pageNumber,
         tokenCount,
+        wordCount,
         charCount,
         status,
       };
     });
+
+    const totalTokenCount = pageStats.reduce((sum, p) => sum + p.tokenCount, 0);
+    const totalWordCount = pageStats.reduce((sum, p) => sum + p.wordCount, 0);
+    const totalCharCount = pageStats.reduce((sum, p) => sum + p.charCount, 0);
 
     return {
       id: version.id,
@@ -625,6 +738,9 @@ export class AdminTextService {
       useMorphAnalysis: version.useMorphAnalysis,
       createdAt: version.createdAt,
       updatedAt: version.updatedAt,
+      totalTokenCount,
+      totalWordCount,
+      totalCharCount,
       pages: pageStats,
       logs: version.logs.map((l) => ({
         id: l.id,
@@ -802,8 +918,89 @@ export class AdminTextService {
   }
 
   // ────────────────────────────────────────────────────────────────────────────
+  // BULK IMPORT (JSON)
+  // ────────────────────────────────────────────────────────────────────────────
+
+  async bulkImport(items: CreateTextDto[], userId: string) {
+    const results: BulkImportResultItem[] = [];
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      try {
+        const created = await this.addNewText(item, userId);
+        results.push({
+          index: i,
+          status: "ok",
+          textId: created.id,
+          title: created.title,
+        });
+      } catch (err) {
+        results.push({
+          index: i,
+          status: "error",
+          title: item.title,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    const created = results.filter((r) => r.status === "ok").length;
+    return {
+      total: items.length,
+      created,
+      failed: items.length - created,
+      items: results,
+    };
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // PUBLISH / UNPUBLISH (single)
+  // ────────────────────────────────────────────────────────────────────────────
+
+  async publishOne(textId: string) {
+    const text = await this.prisma.text.findUnique({ where: { id: textId } });
+    if (!text) throw new NotFoundException("Text not found");
+    await this.prisma.text.update({
+      where: { id: textId },
+      data: { publishedAt: new Date(), archivedAt: null },
+    });
+    return { textId, published: true };
+  }
+
+  async unpublishOne(textId: string) {
+    const text = await this.prisma.text.findUnique({ where: { id: textId } });
+    if (!text) throw new NotFoundException("Text not found");
+    await this.prisma.text.update({
+      where: { id: textId },
+      data: { publishedAt: null },
+    });
+    return { textId, published: false };
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
   // PRIVATE
   // ────────────────────────────────────────────────────────────────────────────
+
+  private async resolveTagIds(
+    tx: Prisma.TransactionClient,
+    tagIds?: string[],
+    tagNames?: string[],
+  ): Promise<string[]> {
+    const ids: string[] = [...(tagIds ?? [])];
+    if (tagNames?.length) {
+      for (const raw of tagNames) {
+        const name = raw.trim();
+        if (!name) continue;
+        const tag = await tx.tag.upsert({
+          where: { name },
+          create: { name },
+          update: {},
+        });
+        ids.push(tag.id);
+      }
+    }
+    return [...new Set(ids)];
+  }
 
   private async deleteTextById(textId: string) {
     await this.prisma.$transaction(async (tx) => {

@@ -33,6 +33,16 @@ export class PlanLimits {
   @Min(-1)
   statisticsDays?: number;
 
+  @ApiPropertyOptional({
+    description: "Максимум папок словаря (-1 = безлимит, 0 = недоступно)",
+    example: 20,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(-1)
+  maxFolders?: number;
+
   // ─── Чтение ──────────────────────────────────────────────────────────────────
 
   @ApiProperty({ description: "Чтение текстов", example: true })
@@ -62,6 +72,16 @@ export class PlanLimits {
   @ApiProperty({ description: "Папки в личном словаре", example: false })
   @IsBoolean()
   dictionaryFolders: boolean;
+
+  // ─── Контент ─────────────────────────────────────────────────────────────────
+
+  @ApiProperty({
+    description:
+      "Доступ к сложным текстам (B2+/C-уровень). Соответствует строке «Сложные тексты» в дизайне сравнения планов.",
+    example: false,
+  })
+  @IsBoolean()
+  hasComplexTexts: boolean;
 
   // ─── Прогресс ────────────────────────────────────────────────────────────────
 

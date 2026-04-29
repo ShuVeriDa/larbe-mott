@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
@@ -12,29 +13,42 @@ import {
   SubscriptionStatus,
   UserStatus,
 } from "@prisma/client";
+import { MailService } from "src/mail/mail.service";
 import { PrismaService } from "src/prisma.service";
+import { CancelSubscriptionDto } from "./dto/cancel-subscription.dto";
 import { CreateCouponDto } from "./dto/create-coupon.dto";
+import { CreateManualSubscriptionDto } from "./dto/create-manual-subscription.dto";
 import { CreatePlanDto } from "./dto/create-plan.dto";
 import { CreateSubscriptionDto } from "./dto/create-subscription.dto";
 import { ExtendSubscriptionDto } from "./dto/extend-subscription.dto";
 import { FetchCouponsDto } from "./dto/fetch-coupons.dto";
 import { FetchPaymentsDto } from "./dto/fetch-payments.dto";
+import { FetchPlansDto } from "./dto/fetch-plans.dto";
 import { FetchSubscriptionsDto } from "./dto/fetch-subscriptions.dto";
 import { RefundPaymentDto } from "./dto/refund-payment.dto";
 import { UpdateCouponDto } from "./dto/update-coupon.dto";
 import { UpdatePlanDto } from "./dto/update-plan.dto";
+import { UpdatePlanLimitsDto } from "./dto/update-plan-limits.dto";
 
 @Injectable()
 export class AdminBillingService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mail: MailService,
+  ) {}
 
   // ─────────────────────────────────────────────────────────────
   // Plans
   // ─────────────────────────────────────────────────────────────
 
-  async getPlans() {
+  async getPlans(dto: FetchPlansDto = {}) {
+    const where: Prisma.PlanWhereInput = {};
+    if (dto.onlyActive) where.isActive = true;
+    if (dto.type) where.type = dto.type;
+    if (dto.groupCode) where.groupCode = dto.groupCode;
+
     const [plans, subCounts] = await Promise.all([
-      this.prisma.plan.findMany({ orderBy: { createdAt: "asc" } }),
+      this.prisma.plan.findMany({ where, orderBy: { createdAt: "asc" } }),
       this.prisma.subscription.groupBy({
         by: ["planId"],
         where: { status: { in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING] } },
@@ -60,6 +74,12 @@ export class AdminBillingService {
         currency: dto.currency ?? "RUB",
         interval: dto.interval ?? null,
         isActive: dto.isActive ?? true,
+        description: dto.description ?? null,
+        trialDays: dto.trialDays ?? 0,
+        groupCode: dto.groupCode ?? null,
+        displayColor: dto.displayColor ?? null,
+        iconKey: dto.iconKey ?? null,
+        highlightFeatures: dto.highlightFeatures ?? [],
         limits: (dto.limits ?? null) as unknown as Prisma.InputJsonValue,
       },
     });
@@ -78,10 +98,65 @@ export class AdminBillingService {
         ...(dto.currency !== undefined && { currency: dto.currency }),
         ...(dto.interval !== undefined && { interval: dto.interval }),
         ...(dto.isActive !== undefined && { isActive: dto.isActive }),
+        ...(dto.description !== undefined && { description: dto.description }),
+        ...(dto.trialDays !== undefined && { trialDays: dto.trialDays }),
+        ...(dto.groupCode !== undefined && { groupCode: dto.groupCode }),
+        ...(dto.displayColor !== undefined && { displayColor: dto.displayColor }),
+        ...(dto.iconKey !== undefined && { iconKey: dto.iconKey }),
+        ...(dto.highlightFeatures !== undefined && {
+          highlightFeatures: dto.highlightFeatures,
+        }),
         ...(dto.limits !== undefined && {
           limits: dto.limits as unknown as Prisma.InputJsonValue,
         }),
       },
+    });
+  }
+
+  async deactivatePlan(id: string) {
+    const plan = await this.prisma.plan.findUnique({ where: { id } });
+    if (!plan) throw new NotFoundException("Plan not found");
+    if (!plan.isActive) return plan;
+
+    return this.prisma.plan.update({
+      where: { id },
+      data: { isActive: false },
+    });
+  }
+
+  async deletePlan(id: string) {
+    const plan = await this.prisma.plan.findUnique({ where: { id } });
+    if (!plan) throw new NotFoundException("Plan not found");
+
+    const subscriberCount = await this.prisma.subscription.count({
+      where: { planId: id },
+    });
+    if (subscriberCount > 0) {
+      throw new ConflictException(
+        `Cannot delete plan with ${subscriberCount} subscription(s). Use deactivate instead.`,
+      );
+    }
+
+    await this.prisma.plan.delete({ where: { id } });
+  }
+
+  async updatePlanLimits(id: string, dto: UpdatePlanLimitsDto) {
+    const plan = await this.prisma.plan.findUnique({ where: { id } });
+    if (!plan) throw new NotFoundException("Plan not found");
+
+    const { replace, ...limitsPatch } = dto;
+    const current =
+      plan.limits && typeof plan.limits === "object" && !Array.isArray(plan.limits)
+        ? (plan.limits as Prisma.JsonObject)
+        : {};
+
+    const merged = replace
+      ? (limitsPatch as Prisma.JsonObject)
+      : ({ ...current, ...(limitsPatch as Prisma.JsonObject) } as Prisma.JsonObject);
+
+    return this.prisma.plan.update({
+      where: { id },
+      data: { limits: merged as unknown as Prisma.InputJsonValue },
     });
   }
 
@@ -90,7 +165,9 @@ export class AdminBillingService {
   // ─────────────────────────────────────────────────────────────
 
   async getBillingStats() {
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const now = Date.now();
+    const thirtyDaysAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
+    const sixtyDaysAgo = new Date(now - 60 * 24 * 60 * 60 * 1000);
 
     const [
       totalUsers,
@@ -99,6 +176,12 @@ export class AdminBillingService {
       newUsersLast30,
       newPaidLast30,
       activeAtPeriodStart,
+      // ── для дельт за предыдущий 30-дневный период ────────────────────────────
+      pastPayingSubsWithPlan,
+      canceledPrev30,
+      newUsersPrev30,
+      newPaidPrev30,
+      activeAtPrevPeriodStart,
     ] = await Promise.all([
       this.prisma.user.count({
         where: { status: { not: UserStatus.DELETED } },
@@ -134,31 +217,79 @@ export class AdminBillingService {
           plan: { type: { not: PlanType.FREE } },
         },
       }),
+
+      // Платные подписки, активные на момент thirtyDaysAgo — для payingDeltaLast30 и MRR 30 дней назад.
+      this.prisma.subscription.findMany({
+        where: {
+          startDate: { lte: thirtyDaysAgo },
+          OR: [{ canceledAt: null }, { canceledAt: { gt: thirtyDaysAgo } }],
+          plan: { type: { not: PlanType.FREE } },
+        },
+        select: {
+          isLifetime: true,
+          plan: { select: { type: true, priceCents: true, interval: true } },
+        },
+      }),
+      this.prisma.subscription.count({
+        where: {
+          status: SubscriptionStatus.CANCELED,
+          canceledAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo },
+        },
+      }),
+      this.prisma.user.count({
+        where: { signupAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo } },
+      }),
+      this.prisma.subscription.count({
+        where: {
+          createdAt: { gte: sixtyDaysAgo, lt: thirtyDaysAgo },
+          status: { in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING] },
+          plan: { type: { not: PlanType.FREE } },
+        },
+      }),
+      this.prisma.subscription.count({
+        where: {
+          startDate: { lte: sixtyDaysAgo },
+          OR: [{ canceledAt: null }, { canceledAt: { gt: sixtyDaysAgo } }],
+          plan: { type: { not: PlanType.FREE } },
+        },
+      }),
     ]);
 
     const payingCount = activeSubsWithPlan.filter(
       (s) => s.plan.type !== PlanType.FREE,
     ).length;
 
-    let mrrCents = 0;
-    for (const sub of activeSubsWithPlan) {
-      if (sub.isLifetime || sub.plan.type === PlanType.FREE) continue;
-      if (sub.plan.interval === "month") {
-        mrrCents += sub.plan.priceCents;
-      } else if (sub.plan.interval === "year") {
-        mrrCents += Math.round(sub.plan.priceCents / 12);
-      }
-    }
+    const mrrCents = computeMrrCents(activeSubsWithPlan);
+    const pastMrrCents = computeMrrCents(pastPayingSubsWithPlan);
 
     const conversionRate =
       newUsersLast30 > 0
         ? Math.round((newPaidLast30 / newUsersLast30) * 1000) / 10
+        : 0;
+    const prevConversionRate =
+      newUsersPrev30 > 0
+        ? Math.round((newPaidPrev30 / newUsersPrev30) * 1000) / 10
         : 0;
 
     const churnRate =
       activeAtPeriodStart > 0
         ? Math.round((canceledLast30 / activeAtPeriodStart) * 1000) / 10
         : 0;
+    const prevChurnRate =
+      activeAtPrevPeriodStart > 0
+        ? Math.round((canceledPrev30 / activeAtPrevPeriodStart) * 1000) / 10
+        : 0;
+
+    // Дельты для KPI-плиток (UI показывает «+18 / +12% / +1.2 пп / +0.3 пп»).
+    const payingDeltaLast30 = payingCount - activeAtPeriodStart;
+    const mrrGrowthPct =
+      pastMrrCents > 0
+        ? Math.round(((mrrCents - pastMrrCents) / pastMrrCents) * 1000) / 10
+        : null;
+    const conversionDeltaPp =
+      Math.round((conversionRate - prevConversionRate) * 10) / 10;
+    const churnDeltaPp =
+      Math.round((churnRate - prevChurnRate) * 10) / 10;
 
     return {
       payingCount,
@@ -167,6 +298,10 @@ export class AdminBillingService {
       arrCents: mrrCents * 12,
       conversionRate,
       churnRate,
+      payingDeltaLast30,
+      mrrGrowthPct,
+      conversionDeltaPp,
+      churnDeltaPp,
     };
   }
 
@@ -220,21 +355,43 @@ export class AdminBillingService {
   // ─────────────────────────────────────────────────────────────
 
   async getSubscriptionStats() {
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const sevenDaysAhead = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-    const [activeCount, trialingCount, canceledCount, expiredCount, canceledLast30, expiredLast30] =
-      await Promise.all([
-        this.prisma.subscription.count({ where: { status: SubscriptionStatus.ACTIVE } }),
-        this.prisma.subscription.count({ where: { status: SubscriptionStatus.TRIALING } }),
-        this.prisma.subscription.count({ where: { status: SubscriptionStatus.CANCELED } }),
-        this.prisma.subscription.count({ where: { status: SubscriptionStatus.EXPIRED } }),
-        this.prisma.subscription.count({
-          where: { status: SubscriptionStatus.CANCELED, canceledAt: { gte: thirtyDaysAgo } },
-        }),
-        this.prisma.subscription.count({
-          where: { status: SubscriptionStatus.EXPIRED, updatedAt: { gte: thirtyDaysAgo } },
-        }),
-      ]);
+    const [
+      activeCount,
+      trialingCount,
+      canceledCount,
+      expiredCount,
+      canceledLast30,
+      expiredLast30,
+      activeLast30,
+      trialingExpiringIn7d,
+    ] = await Promise.all([
+      this.prisma.subscription.count({ where: { status: SubscriptionStatus.ACTIVE } }),
+      this.prisma.subscription.count({ where: { status: SubscriptionStatus.TRIALING } }),
+      this.prisma.subscription.count({ where: { status: SubscriptionStatus.CANCELED } }),
+      this.prisma.subscription.count({ where: { status: SubscriptionStatus.EXPIRED } }),
+      this.prisma.subscription.count({
+        where: { status: SubscriptionStatus.CANCELED, canceledAt: { gte: thirtyDaysAgo } },
+      }),
+      this.prisma.subscription.count({
+        where: { status: SubscriptionStatus.EXPIRED, updatedAt: { gte: thirtyDaysAgo } },
+      }),
+      this.prisma.subscription.count({
+        where: {
+          status: SubscriptionStatus.ACTIVE,
+          startDate: { gte: thirtyDaysAgo },
+        },
+      }),
+      this.prisma.subscription.count({
+        where: {
+          status: SubscriptionStatus.TRIALING,
+          endDate: { gte: now, lte: sevenDaysAhead },
+        },
+      }),
+    ]);
 
     return {
       activeCount,
@@ -243,6 +400,8 @@ export class AdminBillingService {
       expiredCount,
       canceledLast30,
       expiredLast30,
+      activeLast30,
+      trialingExpiringIn7d,
       total: activeCount + trialingCount + canceledCount + expiredCount,
     };
   }
@@ -256,28 +415,15 @@ export class AdminBillingService {
     const limit = Math.min(100, Math.max(1, dto.limit ?? 25));
     const skip = (page - 1) * limit;
 
-    const where: Prisma.SubscriptionWhereInput = {};
-    if (dto.status) where.status = dto.status;
-    if (dto.provider) where.provider = dto.provider;
-    if (dto.planId) where.planId = dto.planId;
-    if (dto.userId) where.userId = dto.userId;
-    if (dto.search) {
-      where.user = {
-        OR: [
-          { email: { contains: dto.search, mode: "insensitive" } },
-          { name: { contains: dto.search, mode: "insensitive" } },
-          { surname: { contains: dto.search, mode: "insensitive" } },
-          { id: dto.search },
-        ],
-      };
-    }
+    const where = this.buildSubscriptionsWhere(dto);
+    const orderBy = this.buildSubscriptionsOrderBy(dto.sort);
 
     const [items, total] = await Promise.all([
       this.prisma.subscription.findMany({
         where,
         skip,
         take: limit,
-        orderBy: { endDate: "asc" },
+        orderBy,
         include: {
           plan: { select: { id: true, code: true, name: true, type: true, priceCents: true, currency: true, interval: true } },
           user: {
@@ -292,12 +438,148 @@ export class AdminBillingService {
               signupAt: true,
             },
           },
+          payments: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+            select: {
+              id: true,
+              amountCents: true,
+              currency: true,
+              status: true,
+              provider: true,
+              createdAt: true,
+            },
+          },
         },
       }),
       this.prisma.subscription.count({ where }),
     ]);
 
     return { items, total, page, limit };
+  }
+
+  private buildSubscriptionsWhere(
+    dto: FetchSubscriptionsDto,
+  ): Prisma.SubscriptionWhereInput {
+    const where: Prisma.SubscriptionWhereInput = {};
+    if (dto.status) where.status = dto.status;
+    if (dto.provider) where.provider = dto.provider;
+    if (dto.planId) where.planId = dto.planId;
+    if (dto.userId) where.userId = dto.userId;
+
+    const planFilter: Prisma.PlanWhereInput = {};
+    if (dto.planType) planFilter.type = dto.planType;
+    if (dto.planCode) {
+      planFilter.code = { equals: dto.planCode, mode: "insensitive" };
+    }
+    if (Object.keys(planFilter).length > 0) {
+      where.plan = planFilter;
+    }
+
+    if (dto.search) {
+      where.user = {
+        OR: [
+          { email: { contains: dto.search, mode: "insensitive" } },
+          { name: { contains: dto.search, mode: "insensitive" } },
+          { surname: { contains: dto.search, mode: "insensitive" } },
+          { id: dto.search },
+        ],
+      };
+    }
+
+    return where;
+  }
+
+  private buildSubscriptionsOrderBy(
+    sort: FetchSubscriptionsDto["sort"],
+  ): Prisma.SubscriptionOrderByWithRelationInput {
+    switch (sort) {
+      case "nextBilling_desc":
+        return { endDate: "desc" };
+      case "amount_asc":
+        return { plan: { priceCents: "asc" } };
+      case "amount_desc":
+        return { plan: { priceCents: "desc" } };
+      case "createdAt_asc":
+        return { createdAt: "asc" };
+      case "createdAt_desc":
+        return { createdAt: "desc" };
+      case "nextBilling_asc":
+      default:
+        return { endDate: "asc" };
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Subscriptions — CSV / JSON export
+  // ─────────────────────────────────────────────────────────────
+
+  async exportSubscriptions(
+    dto: FetchSubscriptionsDto,
+  ): Promise<{ data: unknown; format: "json" | "csv" }> {
+    const where = this.buildSubscriptionsWhere(dto);
+    const orderBy = this.buildSubscriptionsOrderBy(dto.sort);
+
+    const rows = await this.prisma.subscription.findMany({
+      where,
+      orderBy,
+      take: 10_000,
+      include: {
+        plan: { select: { code: true, name: true, type: true, priceCents: true, currency: true, interval: true } },
+        user: { select: { id: true, email: true, name: true, surname: true } },
+      },
+    });
+
+    if (dto.format === "csv") {
+      const headers = [
+        "id",
+        "userId",
+        "email",
+        "name",
+        "surname",
+        "planCode",
+        "planName",
+        "planType",
+        "status",
+        "provider",
+        "isLifetime",
+        "amount",
+        "currency",
+        "interval",
+        "startDate",
+        "endDate",
+        "canceledAt",
+      ];
+      const escape = (v: unknown) =>
+        `"${String(v ?? "").replace(/"/g, '""')}"`;
+      const csvRows = rows.map((s) =>
+        [
+          s.id,
+          s.userId,
+          s.user.email,
+          s.user.name ?? "",
+          s.user.surname ?? "",
+          s.plan.code,
+          s.plan.name,
+          s.plan.type,
+          s.status,
+          s.provider,
+          s.isLifetime,
+          (s.plan.priceCents / 100).toFixed(2),
+          s.plan.currency,
+          s.plan.interval ?? "",
+          s.startDate.toISOString(),
+          s.endDate?.toISOString() ?? "",
+          s.canceledAt?.toISOString() ?? "",
+        ]
+          .map(escape)
+          .join(","),
+      );
+      const csv = [headers.join(","), ...csvRows].join("\n");
+      return { data: csv, format: "csv" };
+    }
+
+    return { data: rows, format: "json" };
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -328,7 +610,7 @@ export class AdminBillingService {
         },
         payments: {
           orderBy: { createdAt: "desc" },
-          take: 5,
+          take: 10,
           include: {
             subscription: {
               select: { plan: { select: { code: true, name: true, type: true } } },
@@ -359,12 +641,12 @@ export class AdminBillingService {
   }
 
   async createUserSubscription(userId: string, dto: CreateSubscriptionDto) {
-    const plan = await this.prisma.plan.findUnique({ where: { id: dto.planId } });
-    if (!plan) throw new NotFoundException("Plan not found");
+    const plan = await this.resolvePlan(dto.planId, dto.planCode);
 
     const now = new Date();
     const isLifetime = dto.isLifetime ?? false;
     const trialDays = dto.trialDays;
+    const durationDays = dto.durationDays;
 
     let status: SubscriptionStatus = dto.status ?? SubscriptionStatus.ACTIVE;
     let endDate: Date | null = null;
@@ -375,13 +657,15 @@ export class AdminBillingService {
     } else if (trialDays) {
       status = SubscriptionStatus.TRIALING;
       endDate = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
+    } else if (durationDays) {
+      endDate = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000);
     }
 
     return this.prisma.$transaction(async (tx) => {
       const sub = await tx.subscription.create({
         data: {
           userId,
-          planId: dto.planId,
+          planId: plan.id,
           status,
           isLifetime,
           startDate: now,
@@ -397,7 +681,11 @@ export class AdminBillingService {
           type: trialDays
             ? SubscriptionEventType.TRIAL_STARTED
             : SubscriptionEventType.SUBSCRIBED,
-          metadata: { planCode: plan.code, provider: sub.provider },
+          metadata: {
+            planCode: plan.code,
+            provider: sub.provider,
+            ...(dto.reason ? { reason: dto.reason } : {}),
+          },
         },
       });
 
@@ -405,7 +693,12 @@ export class AdminBillingService {
     });
   }
 
-  async cancelSubscription(id: string) {
+  async createManualSubscription(dto: CreateManualSubscriptionDto) {
+    const userId = await this.resolveUserId(dto.userId, dto.email);
+    return this.createUserSubscription(userId, dto);
+  }
+
+  async cancelSubscription(id: string, dto?: CancelSubscriptionDto) {
     const existing = await this.prisma.subscription.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException("Subscription not found");
 
@@ -417,7 +710,11 @@ export class AdminBillingService {
       });
 
       await tx.subscriptionEvent.create({
-        data: { subscriptionId: id, type: SubscriptionEventType.CANCELED },
+        data: {
+          subscriptionId: id,
+          type: SubscriptionEventType.CANCELED,
+          ...(dto?.reason ? { metadata: { reason: dto.reason } } : {}),
+        },
       });
 
       return sub;
@@ -445,7 +742,11 @@ export class AdminBillingService {
         data: {
           subscriptionId: id,
           type: SubscriptionEventType.EXTENDED,
-          metadata: { extendDays: dto.extendDays, newEndDate: endDate },
+          metadata: {
+            extendDays: dto.extendDays,
+            newEndDate: endDate,
+            ...(dto.reason ? { reason: dto.reason } : {}),
+          },
         },
       });
 
@@ -463,59 +764,80 @@ export class AdminBillingService {
     const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
 
-    const [thisMonthPayments, lastMonthRevenue, refunds, failed] = await Promise.all([
+    const [thisMonth, lastMonth] = await Promise.all([
       this.prisma.payment.findMany({
         where: {
           createdAt: { gte: startOfMonth },
-          status: { in: [PaymentStatus.SUCCEEDED, PaymentStatus.REFUNDED] },
+          status: {
+            in: [PaymentStatus.SUCCEEDED, PaymentStatus.REFUNDED, PaymentStatus.FAILED],
+          },
         },
         select: { amountCents: true, refundedCents: true, status: true },
       }),
-      this.prisma.payment.aggregate({
+      this.prisma.payment.findMany({
         where: {
           createdAt: { gte: startOfLastMonth, lte: endOfLastMonth },
-          status: PaymentStatus.SUCCEEDED,
+          status: {
+            in: [PaymentStatus.SUCCEEDED, PaymentStatus.REFUNDED, PaymentStatus.FAILED],
+          },
         },
-        _sum: { amountCents: true },
-      }),
-      this.prisma.payment.findMany({
-        where: { createdAt: { gte: startOfMonth }, status: PaymentStatus.REFUNDED },
-        select: { refundedCents: true },
-      }),
-      this.prisma.payment.count({
-        where: { createdAt: { gte: startOfMonth }, status: PaymentStatus.FAILED },
+        select: { amountCents: true, refundedCents: true, status: true },
       }),
     ]);
 
-    const totalCount = thisMonthPayments.length;
-    const succeededPayments = thisMonthPayments.filter(
-      (p) => p.status === PaymentStatus.SUCCEEDED,
-    );
-    const succeededCount = succeededPayments.length;
-    const revenueCents = succeededPayments.reduce(
-      (sum, p) => sum + p.amountCents - p.refundedCents,
-      0,
-    );
+    const aggregate = (
+      rows: { amountCents: number; refundedCents: number; status: PaymentStatus }[],
+    ) => {
+      const succeeded = rows.filter((p) => p.status === PaymentStatus.SUCCEEDED);
+      const refunded = rows.filter((p) => p.status === PaymentStatus.REFUNDED);
+      const failed = rows.filter((p) => p.status === PaymentStatus.FAILED);
+      const revenueCents = succeeded.reduce(
+        (sum, p) => sum + p.amountCents - p.refundedCents,
+        0,
+      );
+      const refundCents = refunded.reduce((sum, r) => sum + r.refundedCents, 0);
+      const succeededCount = succeeded.length;
+      const refundCount = refunded.length;
+      const failedCount = failed.length;
+      const transactionCount = succeededCount + refundCount;
+      const avgTicketCents =
+        succeededCount > 0 ? Math.round(revenueCents / succeededCount) : 0;
+      return {
+        revenueCents,
+        refundCents,
+        succeededCount,
+        refundCount,
+        failedCount,
+        transactionCount,
+        avgTicketCents,
+      };
+    };
 
-    const lastMonthRevenueCents = lastMonthRevenue._sum.amountCents ?? 0;
-    const revenueGrowth =
-      lastMonthRevenueCents > 0
-        ? Math.round(((revenueCents - lastMonthRevenueCents) / lastMonthRevenueCents) * 1000) / 10
-        : 0;
+    const cur = aggregate(thisMonth);
+    const prev = aggregate(lastMonth);
 
-    const refundCount = refunds.length;
-    const refundCents = refunds.reduce((sum, r) => sum + r.refundedCents, 0);
-    const avgTicketCents =
-      succeededCount > 0 ? Math.round(revenueCents / succeededCount) : 0;
+    const pctGrowth = (current: number, previous: number) =>
+      previous > 0
+        ? Math.round(((current - previous) / previous) * 1000) / 10
+        : current > 0
+          ? 100
+          : 0;
+    const absDelta = (current: number, previous: number) => current - previous;
 
     return {
-      revenueCents,
-      revenueGrowth,
-      transactionCount: totalCount,
-      refundCount,
-      refundCents,
-      failedCount: failed,
-      avgTicketCents,
+      revenueCents: cur.revenueCents,
+      revenueGrowth: pctGrowth(cur.revenueCents, prev.revenueCents),
+      transactionCount: cur.transactionCount,
+      transactionGrowth: absDelta(cur.transactionCount, prev.transactionCount),
+      succeededCount: cur.succeededCount,
+      succeededGrowth: absDelta(cur.succeededCount, prev.succeededCount),
+      refundCount: cur.refundCount,
+      refundGrowth: absDelta(cur.refundCount, prev.refundCount),
+      refundCents: cur.refundCents,
+      failedCount: cur.failedCount,
+      failedGrowth: absDelta(cur.failedCount, prev.failedCount),
+      avgTicketCents: cur.avgTicketCents,
+      avgTicketGrowth: pctGrowth(cur.avgTicketCents, prev.avgTicketCents),
     };
   }
 
@@ -604,8 +926,14 @@ export class AdminBillingService {
     if (dto?.planId) {
       where.subscription = { planId: dto.planId };
     }
+    if (dto?.amountMin !== undefined || dto?.amountMax !== undefined) {
+      where.amountCents = {
+        ...(dto?.amountMin !== undefined && { gte: dto.amountMin }),
+        ...(dto?.amountMax !== undefined && { lte: dto.amountMax }),
+      };
+    }
     if (dto?.search) {
-      where.OR = [
+      const orClauses: Prisma.PaymentWhereInput[] = [
         { providerPaymentId: { contains: dto.search, mode: "insensitive" } },
         {
           user: {
@@ -617,6 +945,12 @@ export class AdminBillingService {
           },
         },
       ];
+      const numeric = Number(dto.search.replace(/[\s,]/g, ""));
+      if (Number.isFinite(numeric) && numeric > 0) {
+        orClauses.push({ amountCents: numeric });
+        orClauses.push({ amountCents: Math.round(numeric * 100) });
+      }
+      where.OR = orClauses;
     }
 
     const [items, total] = await Promise.all([
@@ -721,7 +1055,12 @@ export class AdminBillingService {
           data: {
             subscriptionId: payment.subscriptionId,
             type: SubscriptionEventType.REFUNDED,
-            metadata: { paymentId: id, refundedCents: toRefund },
+            metadata: {
+              paymentId: id,
+              refundedCents: toRefund,
+              ...(dto.reason && { reason: dto.reason }),
+              ...(dto.reasonNote && { reasonNote: dto.reasonNote }),
+            },
           },
         });
       }
@@ -731,52 +1070,236 @@ export class AdminBillingService {
   }
 
   // ─────────────────────────────────────────────────────────────
+  // Payments — CSV export
+  // ─────────────────────────────────────────────────────────────
+
+  async exportPaymentsCsv(dto?: FetchPaymentsDto) {
+    const { items } = await this.getPayments({
+      ...(dto ?? {}),
+      page: 1,
+      limit: 10_000,
+    });
+
+    const headers = [
+      "id",
+      "providerPaymentId",
+      "createdAt",
+      "userEmail",
+      "userName",
+      "planCode",
+      "planName",
+      "interval",
+      "provider",
+      "status",
+      "amountCents",
+      "refundedCents",
+      "currency",
+    ];
+    const escape = (v: unknown) =>
+      `"${String(v ?? "").replace(/"/g, '""')}"`;
+
+    const rows = items.map((p) => {
+      const fullName = [p.user?.name, p.user?.surname]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+      const plan = p.subscription?.plan;
+      return [
+        p.id,
+        p.providerPaymentId ?? "",
+        p.createdAt.toISOString(),
+        p.user?.email ?? "",
+        fullName,
+        plan?.code ?? "",
+        plan?.name ?? "",
+        plan?.interval ?? "",
+        p.provider,
+        p.status,
+        p.amountCents,
+        p.refundedCents,
+        p.currency,
+      ]
+        .map(escape)
+        .join(",");
+    });
+
+    return [headers.join(","), ...rows].join("\n");
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Payments — send receipt to email
+  // ─────────────────────────────────────────────────────────────
+
+  async sendPaymentReceipt(id: string, overrideEmail?: string) {
+    const payment = await this.prisma.payment.findUnique({
+      where: { id },
+      include: {
+        user: { select: { email: true, name: true, surname: true } },
+        subscription: {
+          include: { plan: { select: { name: true, code: true, interval: true } } },
+        },
+      },
+    });
+    if (!payment) throw new NotFoundException("Payment not found");
+
+    const to = overrideEmail?.trim() || payment.user?.email;
+    if (!to) {
+      throw new BadRequestException("No recipient email available for this payment");
+    }
+
+    const recipientName =
+      [payment.user?.name, payment.user?.surname].filter(Boolean).join(" ").trim() ||
+      to;
+
+    const plan = payment.subscription?.plan;
+    const periodLabel =
+      plan?.interval === "month"
+        ? "1 мес"
+        : plan?.interval === "year"
+          ? "1 год"
+          : payment.subscription?.isLifetime
+            ? "∞"
+            : null;
+
+    await this.mail.sendPaymentReceiptEmail({
+      to,
+      recipientName,
+      email: to,
+      paymentId: payment.id,
+      providerPaymentId: payment.providerPaymentId,
+      provider: payment.provider,
+      status: payment.status,
+      planName: plan?.name ?? null,
+      planCode: plan?.code ?? null,
+      period: periodLabel,
+      amountCents: payment.amountCents,
+      refundedCents: payment.refundedCents,
+      currency: payment.currency,
+      paidAt: payment.createdAt,
+    });
+
+    return { sent: true, to };
+  }
+
+  // ─────────────────────────────────────────────────────────────
   // Coupons — KPI stats
   // ─────────────────────────────────────────────────────────────
 
   async getCouponStats() {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfPrevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const last30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const prev30 = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
 
-    const [allCoupons, usagesThisMonth, prevMonthUsages] = await Promise.all([
+    const [
+      allCoupons,
+      usagesThisMonth,
+      prevMonthUsages,
+      redemptionsWithPayment,
+      paidLast30,
+      paidWithCouponLast30,
+      paidPrev30,
+      paidWithCouponPrev30,
+    ] = await Promise.all([
       this.prisma.coupon.findMany({
         select: {
           isActive: true,
           redeemedCount: true,
           maxRedemptions: true,
           validUntil: true,
+          type: true,
+          amount: true,
         },
       }),
       this.prisma.couponRedemption.count({ where: { redeemedAt: { gte: startOfMonth } } }),
       this.prisma.couponRedemption.count({
+        where: { redeemedAt: { gte: startOfPrevMonth, lt: startOfMonth } },
+      }),
+      this.prisma.couponRedemption.findMany({
+        where: { paymentId: { not: null } },
+        select: {
+          coupon: { select: { type: true, amount: true } },
+          payment: { select: { amountCents: true } },
+        },
+      }),
+      this.prisma.payment.count({
+        where: { status: PaymentStatus.SUCCEEDED, createdAt: { gte: last30 } },
+      }),
+      this.prisma.payment.count({
         where: {
-          redeemedAt: {
-            gte: new Date(now.getFullYear(), now.getMonth() - 1, 1),
-            lt: startOfMonth,
-          },
+          status: PaymentStatus.SUCCEEDED,
+          createdAt: { gte: last30 },
+          couponRedemptions: { some: {} },
+        },
+      }),
+      this.prisma.payment.count({
+        where: {
+          status: PaymentStatus.SUCCEEDED,
+          createdAt: { gte: prev30, lt: last30 },
+        },
+      }),
+      this.prisma.payment.count({
+        where: {
+          status: PaymentStatus.SUCCEEDED,
+          createdAt: { gte: prev30, lt: last30 },
+          couponRedemptions: { some: {} },
         },
       }),
     ]);
 
-    const activeCount = allCoupons.filter((c) => {
-      if (!c.isActive) return false;
-      if (c.validUntil && c.validUntil < now) return false;
-      if (c.maxRedemptions !== null && c.redeemedCount >= c.maxRedemptions) return false;
-      return true;
-    }).length;
+    let activeCount = 0;
+    let expiredCount = 0;
+    let exhaustedCount = 0;
+    let disabledCount = 0;
+    for (const c of allCoupons) {
+      if (!c.isActive) {
+        disabledCount++;
+        continue;
+      }
+      if (c.validUntil && c.validUntil < now) {
+        expiredCount++;
+        continue;
+      }
+      if (c.maxRedemptions !== null && c.redeemedCount >= c.maxRedemptions) {
+        exhaustedCount++;
+        continue;
+      }
+      activeCount++;
+    }
 
     const totalRedemptions = allCoupons.reduce((s, c) => s + c.redeemedCount, 0);
     const usageGrowth =
-      prevMonthUsages > 0
-        ? usagesThisMonth - prevMonthUsages
-        : usagesThisMonth;
+      prevMonthUsages > 0 ? usagesThisMonth - prevMonthUsages : usagesThisMonth;
+
+    let totalDiscountCents = 0;
+    for (const r of redemptionsWithPayment) {
+      if (!r.payment) continue;
+      if (r.coupon.type === CouponType.PERCENT) {
+        totalDiscountCents += Math.round(
+          (r.payment.amountCents * r.coupon.amount) / 100,
+        );
+      } else {
+        totalDiscountCents += r.coupon.amount;
+      }
+    }
+
+    const conversionRate = paidLast30 > 0 ? paidWithCouponLast30 / paidLast30 : 0;
+    const prevConversion = paidPrev30 > 0 ? paidWithCouponPrev30 / paidPrev30 : 0;
+    const conversionDelta = conversionRate - prevConversion;
 
     return {
       activeCount,
+      expiredCount,
+      exhaustedCount,
+      disabledCount,
       totalCreated: allCoupons.length,
       totalRedemptions,
       usagesThisMonth,
       usageGrowth,
+      totalDiscountCents,
+      conversionRate,
+      conversionDelta,
     };
   }
 
@@ -788,41 +1311,73 @@ export class AdminBillingService {
     const page = Math.max(1, dto?.page ?? 1);
     const limit = Math.min(100, Math.max(1, dto?.limit ?? 25));
     const skip = (page - 1) * limit;
+    const sortBy = dto?.sortBy ?? "createdAt";
+    const sortOrder = dto?.sortOrder ?? "desc";
 
     const where: Prisma.CouponWhereInput = {};
+    const andClauses: Prisma.CouponWhereInput[] = [];
+
     if (dto?.type) where.type = dto.type;
-    if (dto?.plan) {
-      where.OR = [
-        { applicablePlans: { has: dto.plan } },
-        { applicablePlans: { isEmpty: true } },
-      ];
-    }
-    if (dto?.search) {
-      where.OR = [
-        { code: { contains: dto.search, mode: "insensitive" } },
-        { name: { contains: dto.search, mode: "insensitive" } },
-      ];
+
+    const planNorm = dto?.plan?.trim().toUpperCase();
+    if (planNorm && planNorm !== "ALL") {
+      andClauses.push({
+        OR: [
+          { applicablePlans: { has: planNorm } },
+          { applicablePlans: { isEmpty: true } },
+        ],
+      });
     }
 
-    const now = new Date();
-    if (dto?.status === "active") {
-      where.isActive = true;
-      where.AND = [
-        { OR: [{ validUntil: null }, { validUntil: { gte: now } }] },
-      ];
-    } else if (dto?.status === "expired") {
-      where.validUntil = { lt: now };
-    } else if (dto?.status === "exhausted") {
-      where.maxRedemptions = { not: null };
-      where.redeemedCount = { gte: 1 };
+    if (dto?.search) {
+      andClauses.push({
+        OR: [
+          { code: { contains: dto.search, mode: "insensitive" } },
+          { name: { contains: dto.search, mode: "insensitive" } },
+        ],
+      });
     }
+
+    // Status filter — done via id whitelist for "exhausted" because Prisma
+    // can't compare two columns. For consistency we route all status filters
+    // through the same path so where-clause stays simple.
+    const now = new Date();
+    if (dto?.status) {
+      const candidates = await this.prisma.coupon.findMany({
+        select: {
+          id: true,
+          isActive: true,
+          validUntil: true,
+          maxRedemptions: true,
+          redeemedCount: true,
+        },
+      });
+      const matchedIds = candidates
+        .filter(
+          (c) =>
+            this.computeCouponStatus({
+              isActive: c.isActive,
+              validUntil: c.validUntil,
+              maxRedemptions: c.maxRedemptions,
+              redeemedCount: c.redeemedCount,
+            }) === dto.status,
+        )
+        .map((c) => c.id);
+      andClauses.push({ id: { in: matchedIds } });
+    }
+
+    if (andClauses.length) where.AND = andClauses;
+
+    const orderBy: Prisma.CouponOrderByWithRelationInput = {
+      [sortBy]: sortOrder,
+    };
 
     const [items, total] = await Promise.all([
       this.prisma.coupon.findMany({
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: "desc" },
+        orderBy,
         include: { _count: { select: { redemptions: true } } },
       }),
       this.prisma.coupon.count({ where }),
@@ -895,7 +1450,7 @@ export class AdminBillingService {
         isStackable: dto.isStackable ?? false,
         validFrom: dto.validFrom ? new Date(dto.validFrom) : null,
         validUntil: dto.validUntil ? new Date(dto.validUntil) : null,
-        applicablePlans: dto.applicablePlans ?? [],
+        applicablePlans: this.normalizePlanCodes(dto.applicablePlans),
         isActive: dto.isActive ?? true,
       },
     });
@@ -926,7 +1481,9 @@ export class AdminBillingService {
         ...(dto.validUntil !== undefined && {
           validUntil: dto.validUntil ? new Date(dto.validUntil) : null,
         }),
-        ...(dto.applicablePlans !== undefined && { applicablePlans: dto.applicablePlans }),
+        ...(dto.applicablePlans !== undefined && {
+          applicablePlans: this.normalizePlanCodes(dto.applicablePlans),
+        }),
         ...(dto.isActive !== undefined && { isActive: dto.isActive }),
       },
     });
@@ -940,6 +1497,80 @@ export class AdminBillingService {
       where: { id },
       data: { isActive: false },
     });
+  }
+
+  async activateCoupon(id: string) {
+    const coupon = await this.prisma.coupon.findUnique({ where: { id } });
+    if (!coupon) throw new NotFoundException("Coupon not found");
+
+    return this.prisma.coupon.update({
+      where: { id },
+      data: { isActive: true },
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Coupons — CSV export
+  // ─────────────────────────────────────────────────────────────
+
+  async exportCouponsCsv(dto?: FetchCouponsDto): Promise<string> {
+    const all = await this.getCoupons({
+      ...dto,
+      page: 1,
+      limit: 100,
+    });
+    // If there are more pages, fetch them too — callers shouldn't paginate exports.
+    const items = [...all.items];
+    const totalPages = Math.ceil(all.total / 100);
+    for (let p = 2; p <= totalPages; p++) {
+      const next = await this.getCoupons({ ...dto, page: p, limit: 100 });
+      items.push(...next.items);
+    }
+
+    const header = [
+      "code",
+      "name",
+      "type",
+      "amount",
+      "redeemedCount",
+      "maxRedemptions",
+      "maxPerUser",
+      "newUsersOnly",
+      "isStackable",
+      "applicablePlans",
+      "validFrom",
+      "validUntil",
+      "isActive",
+      "computedStatus",
+      "createdAt",
+    ];
+    const escape = (v: unknown): string => {
+      if (v === null || v === undefined) return "";
+      const s = String(v);
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const rows = items.map((c) =>
+      [
+        c.code,
+        c.name ?? "",
+        c.type,
+        c.amount,
+        c.redeemedCount,
+        c.maxRedemptions ?? "",
+        c.maxPerUser ?? "",
+        c.newUsersOnly,
+        c.isStackable,
+        (c.applicablePlans ?? []).join("|"),
+        c.validFrom?.toISOString() ?? "",
+        c.validUntil?.toISOString() ?? "",
+        c.isActive,
+        c.computedStatus,
+        c.createdAt.toISOString(),
+      ]
+        .map(escape)
+        .join(","),
+    );
+    return [header.join(","), ...rows].join("\n");
   }
 
   async deleteCoupon(id: string) {
@@ -1001,6 +1632,42 @@ export class AdminBillingService {
   // Helpers
   // ─────────────────────────────────────────────────────────────
 
+  private async resolvePlan(planId?: string, planCode?: string) {
+    if (planId) {
+      const plan = await this.prisma.plan.findUnique({ where: { id: planId } });
+      if (!plan) throw new NotFoundException("Plan not found");
+      return plan;
+    }
+    if (planCode) {
+      const plan = await this.prisma.plan.findUnique({
+        where: { code: planCode.toUpperCase() },
+      });
+      if (!plan) throw new NotFoundException("Plan not found");
+      return plan;
+    }
+    throw new BadRequestException("Either planId or planCode is required");
+  }
+
+  private async resolveUserId(userId?: string, email?: string): Promise<string> {
+    if (userId) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true },
+      });
+      if (!user) throw new NotFoundException("User not found");
+      return user.id;
+    }
+    if (email) {
+      const user = await this.prisma.user.findUnique({
+        where: { email: email.toLowerCase() },
+        select: { id: true },
+      });
+      if (!user) throw new NotFoundException("User not found by email");
+      return user.id;
+    }
+    throw new BadRequestException("Either userId or email is required");
+  }
+
   private computeCouponStatus(c: {
     isActive: boolean;
     validUntil: Date | null;
@@ -1013,4 +1680,35 @@ export class AdminBillingService {
     if (c.maxRedemptions !== null && c.redeemedCount >= c.maxRedemptions) return "exhausted";
     return "active";
   }
+
+  private normalizePlanCodes(plans: string[] | undefined | null): string[] {
+    if (!plans) return [];
+    return Array.from(
+      new Set(
+        plans
+          .map((p) => p?.trim().toUpperCase())
+          .filter((p): p is string => !!p && p !== "ALL"),
+      ),
+    );
+  }
+}
+
+// Считает MRR в копейках по списку подписок: только не-FREE и не-lifetime,
+// годовые тарифы делятся на 12.
+function computeMrrCents(
+  subs: ReadonlyArray<{
+    isLifetime: boolean;
+    plan: { type: PlanType; priceCents: number; interval: string | null };
+  }>,
+): number {
+  let mrr = 0;
+  for (const sub of subs) {
+    if (sub.isLifetime || sub.plan.type === PlanType.FREE) continue;
+    if (sub.plan.interval === "month") {
+      mrr += sub.plan.priceCents;
+    } else if (sub.plan.interval === "year") {
+      mrr += Math.round(sub.plan.priceCents / 12);
+    }
+  }
+  return mrr;
 }

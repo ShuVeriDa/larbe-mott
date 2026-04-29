@@ -19,11 +19,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate({ id, iat }: { id: string; iat: number }) {
+  async validate({ id, iat, sid }: { id: string; iat: number; sid?: string }) {
     const blacklistTs = await this.redis.get(`session:blacklist:${id}`);
     if (blacklistTs && iat * 1000 < Number(blacklistTs)) {
       throw new UnauthorizedException("Token revoked");
     }
-    return this.userService.getUserById(id);
+    const user = await this.userService.getUserById(id);
+    return { ...user, sessionId: sid };
   }
 }

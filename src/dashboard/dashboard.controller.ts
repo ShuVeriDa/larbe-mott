@@ -22,11 +22,11 @@ export class DashboardController {
   @ApiOperation({
     summary: "Get dashboard data",
     description:
-      "Returns all data needed for the main dashboard: stats (textsRead, wordsInDictionary, streak, dueToday, words breakdown) and continue reading list.",
+      "Returns all data needed for the main dashboard: stats (textsRead, wordsInDictionary, streak, streakDays, dueToday breakdown, words breakdown), continue reading list, and current plan snapshot for the sidebar plan badge.",
   })
   @ApiOkResponse({
     description:
-      "stats: { textsRead, wordsInDictionary, streak, dueToday, words }, continueReading: []",
+      "stats: { textsRead, wordsInDictionary, streak, streakRecord, streakDays, dueToday: { total, new, learning }, words }, continueReading: [], plan: { code, name, type, status, isPremium, translationsToday, translationsLimit }",
   })
   async getDashboard(@User("id") userId: string) {
     return this.dashboardService.getDashboard(userId);

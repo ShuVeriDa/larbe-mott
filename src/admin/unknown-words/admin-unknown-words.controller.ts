@@ -8,6 +8,7 @@ import {
   Param,
   Post,
   Query,
+  Res,
 } from "@nestjs/common";
 import {
   ApiBearerAuth,
@@ -18,9 +19,11 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiParam,
+  ApiQuery,
   ApiTags,
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
+import type { Response } from "express";
 import { PermissionCode } from "@prisma/client";
 import { AdminPermission } from "src/auth/decorators/admin-permission.decorator";
 import { User } from "src/user/decorators/user.decorator";
@@ -72,6 +75,48 @@ export class AdminUnknownWordsController {
   })
   getUnknownWords(@Query() query: FetchUnknownWordsDto) {
     return this.adminUnknownWordsService.getUnknownWords(query);
+  }
+
+  // ─── Export ──────────────────────────────────────────────────────────────────
+
+  @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
+  @Get("export")
+  @ApiOperation({
+    summary: "Export pending unknown words",
+    description:
+      "Downloads all PENDING unknown words as JSON (default) or CSV. Use ?format=csv for CSV.",
+  })
+  @ApiQuery({
+    name: "format",
+    required: false,
+    enum: ["json", "csv"],
+    description: "Output format (default: json)",
+  })
+  @ApiOkResponse({ description: "File download." })
+  async export(
+    @Query("format") format: "json" | "csv" | undefined,
+    @Res() res: Response,
+  ) {
+    const data = await this.adminUnknownWordsService.exportPending();
+    const stamp = Date.now();
+    if (format === "csv") {
+      const csv = this.adminUnknownWordsService.exportPendingCsv(data);
+      res
+        .setHeader("Content-Type", "text/csv; charset=utf-8")
+        .setHeader(
+          "Content-Disposition",
+          `attachment; filename="unknown-words-${stamp}.csv"`,
+        )
+        .send("﻿" + csv);
+      return;
+    }
+    res
+      .setHeader("Content-Type", "application/json")
+      .setHeader(
+        "Content-Disposition",
+        `attachment; filename="unknown-words-${stamp}.json"`,
+      )
+      .json(data);
   }
 
   // ─── Clear all ───────────────────────────────────────────────────────────────

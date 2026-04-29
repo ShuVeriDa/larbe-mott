@@ -1,11 +1,26 @@
-import { Body, Controller, Get, Param, Patch, Post, Query } from "@nestjs/common";
-import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Res,
+} from "@nestjs/common";
+import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { PermissionCode } from "@prisma/client";
+import type { Response } from "express";
 import { AdminPermission } from "src/auth/decorators/admin-permission.decorator";
 import { User } from "src/user/decorators/user.decorator";
 import { AdminFeedbackService } from "./admin-feedback.service";
 import { AdminReplyDto } from "./dto/admin-reply.dto";
 import { AssignFeedbackDto } from "./dto/assign-feedback.dto";
+import {
+  ExportAdminFeedbackDto,
+  FeedbackExportFormat,
+} from "./dto/export-feedback.dto";
 import { FetchAdminFeedbackDto } from "./dto/fetch-admin-feedback.dto";
 import { TransferFeedbackDto } from "./dto/transfer-feedback.dto";
 import { UpdateFeedbackPriorityDto } from "./dto/update-priority.dto";
@@ -22,6 +37,35 @@ export class AdminFeedbackController {
   @ApiOperation({ summary: "Feedback stats: total, by status, by type" })
   getStats() {
     return this.adminFeedbackService.getStats();
+  }
+
+  @Get("assignees")
+  @AdminPermission(PermissionCode.CAN_MANAGE_FEEDBACK)
+  @ApiOperation({
+    summary: "List admin users eligible for thread assignment",
+    description: "Returns users with SUPPORT, ADMIN or SUPERADMIN role",
+  })
+  @ApiOkResponse({ description: "Flat list of admin users (id, name, surname, username, email, roles[])" })
+  getAssignees() {
+    return this.adminFeedbackService.getAssignees();
+  }
+
+  @Get("export")
+  @AdminPermission(PermissionCode.CAN_MANAGE_FEEDBACK)
+  @ApiOperation({
+    summary: "Export feedback threads",
+    description: "Export threads matching the filters. Add ?format=csv for CSV file download.",
+  })
+  @ApiOkResponse({ description: "JSON array or CSV file" })
+  async exportThreads(@Query() dto: ExportAdminFeedbackDto, @Res() res: Response) {
+    const result = await this.adminFeedbackService.exportThreads(dto);
+    if (result.format === FeedbackExportFormat.CSV) {
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", 'attachment; filename="feedback.csv"');
+      res.send(result.data);
+    } else {
+      res.json(result.data);
+    }
   }
 
   @Get()
@@ -98,5 +142,15 @@ export class AdminFeedbackController {
     @Body() dto: TransferFeedbackDto,
   ) {
     return this.adminFeedbackService.transfer(adminId, threadId, dto);
+  }
+
+  @Delete(":threadId")
+  @AdminPermission(PermissionCode.CAN_MANAGE_FEEDBACK)
+  @ApiOperation({
+    summary: "Delete thread permanently",
+    description: "Hard-deletes the thread together with all its messages",
+  })
+  deleteThread(@Param("threadId") threadId: string) {
+    return this.adminFeedbackService.deleteThread(threadId);
   }
 }

@@ -1,14 +1,26 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { PaymentProvider, SubscriptionStatus } from "@prisma/client";
+import { PaymentProvider, PlanType, SubscriptionStatus } from "@prisma/client";
 import { Type } from "class-transformer";
 import {
   IsEnum,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
   Max,
   Min,
 } from "class-validator";
+
+export const SUBSCRIPTIONS_SORT_VALUES = [
+  "nextBilling_asc",
+  "nextBilling_desc",
+  "amount_asc",
+  "amount_desc",
+  "createdAt_asc",
+  "createdAt_desc",
+] as const;
+
+export type SubscriptionsSort = (typeof SUBSCRIPTIONS_SORT_VALUES)[number];
 
 export class FetchSubscriptionsDto {
   @ApiPropertyOptional({ description: "Filter by status", enum: SubscriptionStatus })
@@ -21,10 +33,23 @@ export class FetchSubscriptionsDto {
   @IsEnum(PaymentProvider)
   provider?: PaymentProvider;
 
-  @ApiPropertyOptional({ description: "Filter by plan id" })
+  @ApiPropertyOptional({ description: "Filter by plan id (UUID)" })
   @IsOptional()
   @IsString()
   planId?: string;
+
+  @ApiPropertyOptional({
+    description: "Filter by plan type (FREE/BASIC/PRO/PREMIUM/LIFETIME)",
+    enum: PlanType,
+  })
+  @IsOptional()
+  @IsEnum(PlanType)
+  planType?: PlanType;
+
+  @ApiPropertyOptional({ description: "Filter by plan code (case-insensitive)" })
+  @IsOptional()
+  @IsString()
+  planCode?: string;
 
   @ApiPropertyOptional({ description: "Filter by user id" })
   @IsOptional()
@@ -35,6 +60,15 @@ export class FetchSubscriptionsDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @ApiPropertyOptional({
+    description: "Sort order",
+    enum: SUBSCRIPTIONS_SORT_VALUES,
+    default: "nextBilling_asc",
+  })
+  @IsOptional()
+  @IsIn(SUBSCRIPTIONS_SORT_VALUES as unknown as string[])
+  sort?: SubscriptionsSort;
 
   @ApiPropertyOptional({ description: "Page number (1-based)", default: 1 })
   @IsOptional()
@@ -50,4 +84,9 @@ export class FetchSubscriptionsDto {
   @Min(1)
   @Max(100)
   limit?: number = 25;
+
+  @ApiPropertyOptional({ description: "Export format. Use 'csv' for CSV file download.", enum: ["json", "csv"] })
+  @IsOptional()
+  @IsIn(["json", "csv"])
+  format?: "json" | "csv";
 }

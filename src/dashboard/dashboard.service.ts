@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { AnalyticsService } from "src/analytics/analytics.service";
 import { PrismaService } from "src/prisma.service";
+import { SubscriptionService } from "src/subscription/subscription.service";
 import { TextService } from "src/text/text.service";
 
 @Injectable()
@@ -9,13 +10,15 @@ export class DashboardService {
     private readonly prisma: PrismaService,
     private readonly analyticsService: AnalyticsService,
     private readonly textService: TextService,
+    private readonly subscriptionService: SubscriptionService,
   ) {}
 
   async getDashboard(userId: string) {
-    const [stats, continueReading, dictionaryStats] = await Promise.all([
+    const [stats, continueReading, dictionaryStats, plan] = await Promise.all([
       this.analyticsService.getUserAnalytics(userId),
       this.textService.getContinueReading(userId),
       this.getDictionaryStats(userId),
+      this.getPlanSnapshot(userId),
     ]);
 
     return {
@@ -29,6 +32,7 @@ export class DashboardService {
         words: stats.words,
       },
       continueReading,
+      plan,
     };
   }
 
@@ -38,5 +42,31 @@ export class DashboardService {
       _count: true,
     });
     return { total: agg._count };
+  }
+
+  /**
+   * Минимально достаточный для сайдбарной плашки тарифа снимок:
+   * текущий план + дневное использование переводов и его лимит.
+   * Позволяет фронту нарисовать главную одним запросом.
+   */
+  private async getPlanSnapshot(userId: string) {
+    const usage = await this.subscriptionService.getUsage(userId);
+    const subscription = await this.subscriptionService.getMySubscription(userId);
+
+    const limits = (usage.limits ?? {}) as Record<string, unknown>;
+    const translationsLimit =
+      typeof limits.translationsPerDay === "number"
+        ? (limits.translationsPerDay as number)
+        : null;
+
+    return {
+      code: subscription?.plan?.code ?? "FREE",
+      name: subscription?.plan?.name ?? "Бесплатный план",
+      type: subscription?.plan?.type ?? "FREE",
+      status: subscription?.status ?? null,
+      isPremium: !!subscription && subscription.plan?.type !== "FREE",
+      translationsToday: usage.translationsToday,
+      translationsLimit,
+    };
   }
 }

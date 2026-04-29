@@ -1,6 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { Level, Prisma, ProcessingTrigger, TokenStatus } from "@prisma/client";
-import { TokenizerProcessor } from "src/markup-engine/tokenizer/tokenizer.processor";
+import { AnalysisSource, Level, Prisma, ProcessingTrigger, TokenStatus } from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
 import { BulkTokenizationDto } from "./dto/bulk.dto";
 import {
@@ -11,12 +10,13 @@ import {
 import { RunScope, RunTokenizationDto } from "./dto/run.dto";
 import { ProblematicTokensQueryDto } from "./dto/tokens-query.dto";
 import { UpdateTokenizationSettingsDto } from "./dto/update-settings.dto";
+import { TokenizationQueueService } from "./tokenization-queue.service";
 
 @Injectable()
 export class AdminTokenizationService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly tokenizerProcessor: TokenizerProcessor,
+    private readonly queue: TokenizationQueueService,
   ) {}
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -418,6 +418,9 @@ export class AdminTokenizationService {
     const tokenWhere: Prisma.TextTokenWhereInput = {
       versionId: currentVersion.id,
       status: { in: statusFilter },
+      ...(query.source
+        ? { analyses: { some: { isPrimary: true, source: query.source as AnalysisSource } } }
+        : {}),
     };
 
     const [tokens, total] = await Promise.all([
@@ -492,7 +495,7 @@ export class AdminTokenizationService {
       }
     }
 
-    return this._startBulkProcessing(textIds, userId);
+    return this.queue.enqueue(textIds, { trigger: ProcessingTrigger.MANUAL, initiatorId: userId });
   }
 
   async runProcessingForText(textId: string, userId: string) {
@@ -502,25 +505,18 @@ export class AdminTokenizationService {
     });
     if (!text) throw new NotFoundException("Text not found");
 
-    void this.tokenizerProcessor
-      .processText(textId, { trigger: ProcessingTrigger.MANUAL, initiatorId: userId })
-      .catch(() => {});
-
+    await this.queue.enqueue([textId], { trigger: ProcessingTrigger.MANUAL, initiatorId: userId });
     return { textId, started: true };
   }
 
   async cancelProcessing(textId: string) {
     const text = await this.prisma.text.findUnique({
       where: { id: textId },
-      select: { id: true, processingStatus: true },
+      select: { id: true },
     });
     if (!text) throw new NotFoundException("Text not found");
 
-    await this.prisma.text.update({
-      where: { id: textId },
-      data: { processingStatus: "IDLE", processingProgress: 0 },
-    });
-
+    await this.queue.cancel(textId);
     return { textId, cancelled: true };
   }
 
@@ -549,7 +545,7 @@ export class AdminTokenizationService {
   // ────────────────────────────────────────────────────────────────────────────
 
   async bulkRun(dto: BulkTokenizationDto, userId: string) {
-    return this._startBulkProcessing(dto.textIds, userId);
+    return this.queue.enqueue(dto.textIds, { trigger: ProcessingTrigger.MANUAL, initiatorId: userId });
   }
 
   async bulkReset(dto: BulkTokenizationDto) {
@@ -563,39 +559,12 @@ export class AdminTokenizationService {
     return { reset: dto.textIds.length };
   }
 
-  private async _startBulkProcessing(textIds: string[], userId: string) {
-    for (const textId of textIds) {
-      void this.tokenizerProcessor
-        .processText(textId, { trigger: ProcessingTrigger.MANUAL, initiatorId: userId })
-        .catch(() => {});
-    }
-    return { started: textIds.length, textIds };
-  }
-
   // ────────────────────────────────────────────────────────────────────────────
   // QUEUE
   // ────────────────────────────────────────────────────────────────────────────
 
   async getQueue() {
-    const processing = await this.prisma.text.findMany({
-      where: { processingStatus: "RUNNING" },
-      orderBy: { updatedAt: "asc" },
-      select: {
-        id: true,
-        title: true,
-        processingProgress: true,
-      },
-    });
-
-    return {
-      items: processing.map((t) => ({
-        textId: t.id,
-        title: t.title,
-        progress: t.processingProgress,
-        queueStatus: "PROCESSING" as const,
-      })),
-      count: processing.length,
-    };
+    return this.queue.getQueue();
   }
 
   // ────────────────────────────────────────────────────────────────────────────

@@ -29,6 +29,7 @@ const ROLE_MATRIX: Record<RoleName, PermissionCode[]> = {
     PermissionCode.CAN_VIEW_ANALYTICS,
     PermissionCode.CAN_VIEW_LOGS,
     PermissionCode.CAN_MANAGE_FEEDBACK,
+    PermissionCode.CAN_MANAGE_LEGAL,
   ],
   SUPERADMIN: [
     PermissionCode.CAN_EDIT_TEXTS,
@@ -40,6 +41,7 @@ const ROLE_MATRIX: Record<RoleName, PermissionCode[]> = {
     PermissionCode.CAN_VIEW_LOGS,
     PermissionCode.CAN_MANAGE_FEATURE_FLAGS,
     PermissionCode.CAN_MANAGE_FEEDBACK,
+    PermissionCode.CAN_MANAGE_LEGAL,
   ],
 };
 

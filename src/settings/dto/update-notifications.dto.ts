@@ -38,8 +38,16 @@ export class UpdateNotificationsDto {
   @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: "reminderTime must be HH:MM" })
   reminderTime?: string;
 
-  @ApiPropertyOptional({ example: "UTC+3" })
+  @ApiPropertyOptional({
+    example: "Europe/Moscow",
+    description:
+      "Часовой пояс в формате IANA (Area/City). Используется крон-планировщиком email-напоминаний.",
+  })
   @IsOptional()
   @IsString()
+  @Matches(/^[A-Za-z]+(?:\/[A-Za-z_+\-0-9]+){1,2}$/, {
+    message:
+      "timezone must be a valid IANA zone (e.g. 'Europe/Moscow', 'America/New_York', 'Asia/Tashkent')",
+  })
   timezone?: string;
 }

@@ -1,6 +1,16 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
 import { Level, WordStatus } from "@prisma/client";
-import { IsBoolean, IsEnum, IsInt, IsOptional, IsUUID, Max, Min } from "class-validator";
+import {
+  IsBoolean,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  MaxLength,
+  Min,
+} from "class-validator";
 import { Transform } from "class-transformer";
 
 export enum DictionarySort {
@@ -51,6 +61,15 @@ export class GetDictionaryEntriesDto {
   @IsOptional()
   @IsEnum(DictionarySort)
   sort?: DictionarySort;
+
+  @ApiPropertyOptional({
+    description: "Substring search over word, normalized form and translation (case-insensitive)",
+  })
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => (typeof value === "string" ? value.trim() : value))
+  @MaxLength(200)
+  search?: string;
 
   @ApiPropertyOptional({
     description: "Page number (default 1)",
