@@ -237,18 +237,19 @@ export class AdminMorphologyService {
   }
 
   async createRule(dto: CreateMorphologyRuleDto) {
+    const language = dto.language ?? Language.CHE;
     const existing = await this.prisma.morphologyRule.findUnique({
       where: {
         suffix_type_language: {
           suffix: dto.suffix,
           type: dto.type,
-          language: dto.language,
+          language,
         },
       },
     });
     if (existing) {
       throw new ConflictException(
-        `Rule "${dto.suffix}" (${dto.type}/${dto.language}) already exists`,
+        `Rule "${dto.suffix}" (${dto.type}/${language}) already exists`,
       );
     }
     const rule = await this.prisma.morphologyRule.create({
@@ -259,7 +260,7 @@ export class AdminMorphologyService {
         description: dto.description,
         isRegex: dto.isRegex ?? dto.type === MorphRuleType.REGEX,
         type: dto.type,
-        language: dto.language ?? Language.CHE,
+        language,
         priority: dto.priority ?? 0,
         isActive: dto.isActive ?? true,
       },
