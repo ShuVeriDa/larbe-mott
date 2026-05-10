@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import { Prisma, UserStatus } from "@prisma/client";
 import { hash } from "argon2";
+import { PermissionsService } from "src/auth/permissions/permissions.service";
 import { PrismaService } from "../prisma.service";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { DeleteAccountDto } from "./dto/delete-account.dto";
@@ -16,7 +17,10 @@ import { UpdateUserDto } from "./dto/update-user.dto";
 
 @Injectable()
 export class UserService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly permissionsService: PermissionsService,
+  ) {}
 
   async getUserById(id: string) {
     const user = await this.prisma.user.findUnique({
@@ -33,7 +37,12 @@ export class UserService {
       hashedRefreshToken?: string | null;
     };
 
-    return safeUser;
+    const permissionsSet = await this.permissionsService.getUserPermissions(id);
+
+    return {
+      ...safeUser,
+      permissions: [...permissionsSet],
+    };
   }
 
   async getByEmail(email: string) {
@@ -113,9 +122,8 @@ export class UserService {
   async updateUser(dto: UpdateUserDto, userId: string) {
     const user = await this.getUserById(userId);
 
-    let createdUser: Awaited<ReturnType<typeof this.prisma.user.update>>;
     try {
-      createdUser = await this.prisma.user.update({
+      await this.prisma.user.update({
         where: { id: user.id },
         data: {
           name: dto.name,
@@ -135,15 +143,7 @@ export class UserService {
       throw e;
     }
 
-    const {
-      password: _,
-      hashedRefreshToken: __,
-      ...safeUser
-    } = createdUser as typeof createdUser & {
-      hashedRefreshToken?: string | null;
-    };
-
-    return safeUser;
+    return this.getUserById(userId);
   }
 
   private userObj = async (dto: CreateUserDto) => {

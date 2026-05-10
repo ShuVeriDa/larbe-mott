@@ -24,6 +24,7 @@ import { PermissionsService } from "src/auth/permissions/permissions.service";
 import { User } from "./decorators/user.decorator";
 import { DeleteAccountDto } from "./dto/delete-account.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
+import { UserResponseDto } from "./dto/user-response.dto";
 import { UserService } from "./user.service";
 
 @ApiTags("users")
@@ -43,7 +44,7 @@ export class UserController {
     description:
       "Возвращает профиль авторизованного пользователя без необходимости знать его id. Используется приветствием на главной, шапкой и т.д.",
   })
-  @ApiOkResponse({ description: "Returns the current user profile" })
+  @ApiOkResponse({ type: UserResponseDto })
   async getMe(@User("id") userId: string) {
     return this.userService.getUserById(userId);
   }

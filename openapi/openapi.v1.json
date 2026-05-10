@@ -8,7 +8,14 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": "Returns the current user profile"
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponseDto"
+                }
+              }
+            }
           },
           "401": {
             "description": "Missing or invalid bearer token"
@@ -906,6 +913,43 @@
           }
         ],
         "summary": "Report a text",
+        "tags": [
+          "texts"
+        ]
+      }
+    },
+    "/api/texts/{id}/toc": {
+      "get": {
+        "description": "Returns all pages with their pageNumber and title.",
+        "operationId": "TextController_getTableOfContents",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Text ID (UUID)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of { pageNumber, title }."
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "404": {
+            "description": "Text with the given ID was not found."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get table of contents",
         "tags": [
           "texts"
         ]
@@ -14789,6 +14833,292 @@
         ]
       }
     },
+    "/api/highlights": {
+      "get": {
+        "operationId": "HighlightController_getForPage",
+        "parameters": [
+          {
+            "name": "textId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageNumber",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get highlights for a page",
+        "tags": [
+          "highlights"
+        ]
+      },
+      "post": {
+        "operationId": "HighlightController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateHighlightDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a highlight",
+        "tags": [
+          "highlights"
+        ]
+      }
+    },
+    "/api/highlights/{id}": {
+      "patch": {
+        "operationId": "HighlightController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateHighlightDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update highlight color",
+        "tags": [
+          "highlights"
+        ]
+      },
+      "delete": {
+        "operationId": "HighlightController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a highlight",
+        "tags": [
+          "highlights"
+        ]
+      }
+    },
+    "/api/notes": {
+      "get": {
+        "operationId": "NoteController_getForPage",
+        "parameters": [
+          {
+            "name": "textId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageNumber",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get notes for a page",
+        "tags": [
+          "notes"
+        ]
+      },
+      "post": {
+        "operationId": "NoteController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateNoteDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a note",
+        "tags": [
+          "notes"
+        ]
+      }
+    },
+    "/api/notes/{id}": {
+      "patch": {
+        "operationId": "NoteController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateNoteDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update note body",
+        "tags": [
+          "notes"
+        ]
+      },
+      "delete": {
+        "operationId": "NoteController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a note",
+        "tags": [
+          "notes"
+        ]
+      }
+    },
     "/api/phrasebook/stats": {
       "get": {
         "description": "Returns total phrase count, category count, and saved count for the current user.",
@@ -15460,6 +15790,91 @@
           "legal"
         ]
       }
+    },
+    "/api/page-bookmarks": {
+      "get": {
+        "operationId": "PageBookmarkController_getAll",
+        "parameters": [
+          {
+            "name": "textId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "page-bookmarks"
+        ]
+      }
+    },
+    "/api/page-bookmarks/toggle": {
+      "post": {
+        "operationId": "PageBookmarkController_toggle",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePageBookmarkDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "page-bookmarks"
+        ]
+      }
+    },
+    "/api/page-bookmarks/{id}": {
+      "delete": {
+        "operationId": "PageBookmarkController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "page-bookmarks"
+        ]
+      }
     }
   },
   "info": {
@@ -15487,6 +15902,88 @@
       }
     },
     "schemas": {
+      "UserResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          },
+          "name": {
+            "type": "object",
+            "nullable": true
+          },
+          "surname": {
+            "type": "object",
+            "nullable": true
+          },
+          "phone": {
+            "type": "object",
+            "nullable": true
+          },
+          "avatar": {
+            "type": "object",
+            "nullable": true
+          },
+          "language": {
+            "type": "object",
+            "nullable": true
+          },
+          "level": {
+            "type": "object",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ACTIVE",
+              "BLOCKED",
+              "FROZEN",
+              "DELETED"
+            ]
+          },
+          "createdAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "updatedAt": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "CAN_EDIT_TEXTS",
+                "CAN_EDIT_DICTIONARY",
+                "CAN_EDIT_MORPHOLOGY",
+                "CAN_MANAGE_USERS",
+                "CAN_MANAGE_BILLING",
+                "CAN_VIEW_ANALYTICS",
+                "CAN_VIEW_LOGS",
+                "CAN_MANAGE_FEATURE_FLAGS",
+                "CAN_MANAGE_FEEDBACK",
+                "CAN_MANAGE_LEGAL"
+              ]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "email",
+          "username",
+          "status",
+          "createdAt",
+          "updatedAt",
+          "permissions"
+        ]
+      },
       "UpdateUserDto": {
         "type": "object",
         "properties": {
@@ -19344,6 +19841,91 @@
           "type"
         ]
       },
+      "CreateHighlightDto": {
+        "type": "object",
+        "properties": {
+          "textId": {
+            "type": "string"
+          },
+          "pageNumber": {
+            "type": "number"
+          },
+          "color": {
+            "type": "string",
+            "enum": [
+              "yellow",
+              "green",
+              "blue",
+              "pink"
+            ]
+          },
+          "startOffset": {
+            "type": "number"
+          },
+          "endOffset": {
+            "type": "number"
+          },
+          "selectedText": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "textId",
+          "pageNumber",
+          "color",
+          "startOffset",
+          "endOffset",
+          "selectedText"
+        ]
+      },
+      "UpdateHighlightDto": {
+        "type": "object",
+        "properties": {
+          "color": {
+            "type": "string",
+            "enum": [
+              "yellow",
+              "green",
+              "blue",
+              "pink"
+            ]
+          }
+        }
+      },
+      "CreateNoteDto": {
+        "type": "object",
+        "properties": {
+          "textId": {
+            "type": "string"
+          },
+          "pageNumber": {
+            "type": "number"
+          },
+          "selectedText": {
+            "type": "string",
+            "description": "Highlighted text fragment the note is attached to"
+          },
+          "body": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "textId",
+          "pageNumber",
+          "body"
+        ]
+      },
+      "UpdateNoteDto": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "body"
+        ]
+      },
       "SuggestPhraseDto": {
         "type": "object",
         "properties": {
@@ -19444,6 +20026,69 @@
           "enableDecks": {
             "type": "boolean",
             "description": "Premium-фича: включить авторские деки заучивания (NEW / OLD / RETIRED). При установке в true требуется активная Premium-подписка."
+          },
+          "readerFontFamily": {
+            "type": "string",
+            "enum": [
+              "sans",
+              "serif",
+              "mono"
+            ]
+          },
+          "readerFontSize": {
+            "type": "string",
+            "enum": [
+              "xs",
+              "sm",
+              "md",
+              "lg",
+              "xl"
+            ]
+          },
+          "readerColumnWidth": {
+            "type": "string",
+            "enum": [
+              "xs",
+              "sm",
+              "md",
+              "lg",
+              "full"
+            ]
+          },
+          "readerPagePadding": {
+            "type": "string",
+            "enum": [
+              "compact",
+              "normal",
+              "wide"
+            ]
+          },
+          "readerLineHeight": {
+            "type": "string",
+            "enum": [
+              "compact",
+              "normal",
+              "relaxed"
+            ]
+          },
+          "readerLetterSpacing": {
+            "type": "string",
+            "enum": [
+              "tight",
+              "normal",
+              "wide"
+            ]
+          },
+          "readerTheme": {
+            "type": "string",
+            "enum": [
+              "default",
+              "sepia",
+              "custom"
+            ]
+          },
+          "readerBgColor": {
+            "type": "string"
           }
         }
       },
@@ -19538,6 +20183,10 @@
           "correct",
           "wrong"
         ]
+      },
+      "CreatePageBookmarkDto": {
+        "type": "object",
+        "properties": {}
       }
     }
   }

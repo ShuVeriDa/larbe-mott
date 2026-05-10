@@ -1373,6 +1373,21 @@ model UserTextBookmark {
   @@map("user_text_bookmark")
 }
 
+model UserPageBookmark {
+  id         String   @id @default(uuid())
+  userId     String
+  textId     String
+  pageNumber Int
+  snippet    String   // first ~100 chars of page contentRaw
+  createdAt  DateTime @default(now())
+
+  user UserPreferences @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@unique([userId, textId, pageNumber])
+  @@index([userId, textId])
+  @@map("user_page_bookmark")
+}
+
 //////////////////////////////////////////////////////
 // DECK METHOD (авторский метод заучивания слов)
 //////////////////////////////////////////////////////
@@ -1697,9 +1712,67 @@ model UserPreferences {
   // Premium-фича: авторская система деков заучивания (NEW / OLD / RETIRED)
   enableDecks Boolean @default(false)
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Типографика ридера
+  readerFontFamily    String @default("sans")    // sans | serif | mono
+  readerFontSize      String @default("md")       // xs | sm | md | lg | xl
+  readerColumnWidth   String @default("md")       // xs | sm | md | lg | full
+  readerPagePadding   String @default("normal")   // compact | normal | wide
+  readerLineHeight    String @default("normal")   // compact | normal | relaxed
+  readerLetterSpacing String @default("normal")   // tight | normal | wide
+
+  // Типографика ридера — тема
+  readerTheme       String  @default("default")  // default | sepia | custom
+  readerBgColor     String  @default("")          // hex color for custom theme
+
+  user               User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  textHighlights     UserTextHighlight[]
+  textNotes          UserTextNote[]
+  pageBookmarks      UserPageBookmark[]
 
   @@map("user_preferences")
+}
+
+//////////////////////////////////////////////////////
+// HIGHLIGHTS & NOTES
+//////////////////////////////////////////////////////
+
+model UserTextHighlight {
+  id         String @id @default(uuid())
+  userId     String
+  textId     String
+  pageNumber Int
+  color      String // yellow | green | blue | pink
+
+  // Позиция в тексте (символьные смещения внутри contentRaw страницы)
+  startOffset   Int
+  endOffset     Int
+  selectedText  String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user        UserPreferences @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@index([userId, textId, pageNumber])
+  @@map("user_text_highlight")
+}
+
+model UserTextNote {
+  id         String  @id @default(uuid())
+  userId     String
+  textId     String
+  pageNumber Int
+
+  selectedText String? // выделенный фрагмент, к которому привязана заметка (может быть null)
+  body         String  // текст заметки
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user        UserPreferences @relation(fields: [userId], references: [userId], onDelete: Cascade)
+
+  @@index([userId, textId, pageNumber])
+  @@map("user_text_note")
 }
 
 model UserGoals {

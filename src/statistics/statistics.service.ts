@@ -202,7 +202,7 @@ export class StatisticsService {
     const sumMinutes = async (from: Date, to: Date): Promise<number> => {
       const result = await this.prisma.$queryRaw<[{ seconds: string | null }]>`
         SELECT SUM((metadata->>'durationSeconds')::float) AS seconds
-        FROM "UserEvent"
+        FROM "user_event"
         WHERE "userId" = ${userId}
           AND type::text = 'READ_SESSION'
           AND "createdAt" >= ${from}

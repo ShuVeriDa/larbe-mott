@@ -229,6 +229,19 @@ export class TextController {
     return this.textService.reportText(textId, userId, dto);
   }
 
+  @Get(":id/toc")
+  @OptionalAuth()
+  @ApiOperation({
+    summary: "Get table of contents",
+    description: "Returns all pages with their pageNumber and title.",
+  })
+  @ApiParam({ name: "id", description: "Text ID (UUID)" })
+  @ApiOkResponse({ description: "Array of { pageNumber, title }." })
+  @ApiNotFoundResponse({ description: "Text with the given ID was not found." })
+  async getTableOfContents(@Param("id", ParseUUIDPipe) textId: string) {
+    return this.textService.getTableOfContents(textId);
+  }
+
   @Get(":id/related")
   @OptionalAuth()
   @ApiOperation({

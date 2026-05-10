@@ -54,6 +54,14 @@ export class TextService {
     return this.prisma.tag.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } });
   }
 
+  async getTableOfContents(textId: string) {
+    return this.prisma.textPage.findMany({
+      where: { textId },
+      select: { pageNumber: true, title: true },
+      orderBy: { pageNumber: "asc" },
+    });
+  }
+
   /**
    * Список опубликованных текстов с тегами, фильтрацией, сортировкой, прогрессом и счётчиками.
    */
@@ -386,6 +394,8 @@ export class TextService {
           normalized: true,
           status: true,
           vocabId: true,
+          startOffset: true,
+          endOffset: true,
         },
       }),
       this.prisma.textToken.count({ where: { versionId: latestVersion.id } }),

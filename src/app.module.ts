@@ -16,8 +16,11 @@ import { ObservabilityModule } from "./common/observability/observability.module
 import { DeckModule } from "./deck/deck.module";
 import { DictionaryModule } from "./dictionary/dictionary.module";
 import { FeedbackModule } from "./feedback/feedback.module";
+import { HighlightModule } from "./highlight/highlight.module";
+import { NoteModule } from "./note/note.module";
 import { HealthModule } from "./health/health.module";
 import { LegalModule } from "./legal/legal.module";
+import { PageBookmarkModule } from "./page-bookmark/page-bookmark.module";
 import { PhrasebookModule } from "./phrasebook/phrasebook.module";
 import { SettingsModule } from "./settings/settings.module";
 import { StatisticsModule } from "./statistics/statistics.module";
@@ -74,11 +77,14 @@ import { envValidationSchema } from "./config/env.validation";
     DashboardModule,
     DeckModule,
     FeedbackModule,
+    HighlightModule,
+    NoteModule,
     PhrasebookModule,
     SettingsModule,
     StatisticsModule,
     HealthModule,
     LegalModule,
+    PageBookmarkModule,
   ],
   controllers: [],
   providers: [

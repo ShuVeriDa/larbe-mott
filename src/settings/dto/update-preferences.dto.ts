@@ -82,4 +82,46 @@ export class UpdatePreferencesDto {
   @IsOptional()
   @IsBoolean()
   enableDecks?: boolean;
+
+  // ─── Reader typography ────────────────────────────────────────────────────────
+
+  @ApiPropertyOptional({ enum: ["sans", "serif", "mono"] })
+  @IsOptional()
+  @IsIn(["sans", "serif", "mono"])
+  readerFontFamily?: string;
+
+  @ApiPropertyOptional({ enum: ["xs", "sm", "md", "lg", "xl"] })
+  @IsOptional()
+  @IsIn(["xs", "sm", "md", "lg", "xl"])
+  readerFontSize?: string;
+
+  @ApiPropertyOptional({ enum: ["xs", "sm", "md", "lg", "full"] })
+  @IsOptional()
+  @IsIn(["xs", "sm", "md", "lg", "full"])
+  readerColumnWidth?: string;
+
+  @ApiPropertyOptional({ enum: ["compact", "normal", "wide"] })
+  @IsOptional()
+  @IsIn(["compact", "normal", "wide"])
+  readerPagePadding?: string;
+
+  @ApiPropertyOptional({ enum: ["compact", "normal", "relaxed"] })
+  @IsOptional()
+  @IsIn(["compact", "normal", "relaxed"])
+  readerLineHeight?: string;
+
+  @ApiPropertyOptional({ enum: ["tight", "normal", "wide"] })
+  @IsOptional()
+  @IsIn(["tight", "normal", "wide"])
+  readerLetterSpacing?: string;
+
+  @ApiPropertyOptional({ enum: ["default", "sepia", "custom"] })
+  @IsOptional()
+  @IsIn(["default", "sepia", "custom"])
+  readerTheme?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  readerBgColor?: string;
 }

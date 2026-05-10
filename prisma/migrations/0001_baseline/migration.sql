@@ -1,0 +1,2 @@
+-- Baseline migration: marks the existing database state as the starting point.
+-- All tables already exist in the database; this migration is intentionally empty.
