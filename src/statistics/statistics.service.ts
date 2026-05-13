@@ -368,15 +368,15 @@ export class StatisticsService {
     >(
       Prisma.sql`
         SELECT t.id AS "textId", COALESCE(COUNT(tt.id), 0)::int AS "wordCount"
-        FROM "Text" t
+        FROM "text" t
         LEFT JOIN LATERAL (
           SELECT tpv.id
-          FROM "TextProcessingVersion" tpv
+          FROM "text_processing_version" tpv
           WHERE tpv."textId" = t.id
           ORDER BY tpv.version DESC
           LIMIT 1
         ) lv ON true
-        LEFT JOIN "TextToken" tt ON tt."versionId" = lv.id
+        LEFT JOIN "text_token" tt ON tt."versionId" = lv.id
         WHERE t.id IN (${Prisma.join(textIds)})
         GROUP BY t.id
       `,

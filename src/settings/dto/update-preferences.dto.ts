@@ -115,6 +115,11 @@ export class UpdatePreferencesDto {
   @IsIn(["tight", "normal", "wide"])
   readerLetterSpacing?: string;
 
+  @ApiPropertyOptional({ enum: ["none", "compact", "normal", "relaxed"] })
+  @IsOptional()
+  @IsIn(["none", "compact", "normal", "relaxed"])
+  readerParagraphSpacing?: string;
+
   @ApiPropertyOptional({ enum: ["default", "sepia", "custom"] })
   @IsOptional()
   @IsIn(["default", "sepia", "custom"])

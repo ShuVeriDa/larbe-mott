@@ -1718,7 +1718,8 @@ model UserPreferences {
   readerColumnWidth   String @default("md")       // xs | sm | md | lg | full
   readerPagePadding   String @default("normal")   // compact | normal | wide
   readerLineHeight    String @default("normal")   // compact | normal | relaxed
-  readerLetterSpacing String @default("normal")   // tight | normal | wide
+  readerLetterSpacing    String @default("normal")   // tight | normal | wide
+  readerParagraphSpacing String @default("none")     // none | compact | normal | relaxed
 
   // Типографика ридера — тема
   readerTheme       String  @default("default")  // default | sepia | custom

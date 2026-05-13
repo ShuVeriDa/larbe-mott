@@ -332,6 +332,7 @@ export class TextService {
         language: true,
         author: true,
         source: true,
+        tags: { include: { tag: { select: { id: true, name: true } } } },
       },
     });
     if (!text) throw new NotFoundException("Text not found");
@@ -366,6 +367,7 @@ export class TextService {
     if (!latestVersion) {
       return {
         ...text,
+        tags: text.tags.map((tt) => tt.tag),
         totalPages,
         wordCount: 0,
         contentRich: page.contentRich,
@@ -453,6 +455,7 @@ export class TextService {
 
     return {
       ...text,
+      tags: text.tags.map((tt) => tt.tag),
       totalPages,
       wordCount,
       contentRich: page.contentRich,

@@ -20079,6 +20079,15 @@
               "wide"
             ]
           },
+          "readerParagraphSpacing": {
+            "type": "string",
+            "enum": [
+              "none",
+              "compact",
+              "normal",
+              "relaxed"
+            ]
+          },
           "readerTheme": {
             "type": "string",
             "enum": [
