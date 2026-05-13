@@ -46,7 +46,7 @@ export class CreateDictionaryEntryDto {
   folderId?: string;
 
   @ApiPropertyOptional({
-    description: "CEFR level of the word (A1, A2, B1, B2)",
+    description: "Level of the word (A, B, C)",
     enum: Level,
   })
   @IsOptional()

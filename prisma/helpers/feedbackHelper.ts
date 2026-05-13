@@ -19,14 +19,28 @@ const prisma = new PrismaClient({ adapter });
 export const seedFeedback = async () => {
   // Берём сеяных пользователей
   const [user1, user2, user3, admin] = await Promise.all([
-    prisma.user.findUnique({ where: { email: "user1@example.com" }, select: { id: true } }),
-    prisma.user.findUnique({ where: { email: "user2@example.com" }, select: { id: true } }),
-    prisma.user.findUnique({ where: { email: "user3@example.com" }, select: { id: true } }),
-    prisma.user.findUnique({ where: { email: "tallar@tallar.du" }, select: { id: true } }),
+    prisma.user.findUnique({
+      where: { email: "user1@example.com" },
+      select: { id: true },
+    }),
+    prisma.user.findUnique({
+      where: { email: "user2@example.com" },
+      select: { id: true },
+    }),
+    prisma.user.findUnique({
+      where: { email: "user3@example.com" },
+      select: { id: true },
+    }),
+    prisma.user.findUnique({
+      where: { email: "tallarho@nakhcho.vu" },
+      select: { id: true },
+    }),
   ]);
 
   if (!user1 || !user2 || !user3 || !admin) {
-    console.warn("⚠️  Feedback seed: не найдены нужные пользователи. Сначала запустите основной seed.");
+    console.warn(
+      "⚠️  Feedback seed: не найдены нужные пользователи. Сначала запустите основной seed.",
+    );
     return;
   }
 
@@ -203,20 +217,20 @@ export const seedFeedback = async () => {
 
   if (lemma1) {
     reactionData.push(
-      { userId: user1.id, type: ReactionType.HELPFUL,     lemmaId: lemma1.id },
-      { userId: user2.id, type: ReactionType.HELPFUL,     lemmaId: lemma1.id },
-      { userId: user3.id, type: ReactionType.DIFFICULT,   lemmaId: lemma1.id },
+      { userId: user1.id, type: ReactionType.HELPFUL, lemmaId: lemma1.id },
+      { userId: user2.id, type: ReactionType.HELPFUL, lemmaId: lemma1.id },
+      { userId: user3.id, type: ReactionType.DIFFICULT, lemmaId: lemma1.id },
     );
   }
   if (lemma2) {
     reactionData.push(
       { userId: user1.id, type: ReactionType.NOT_HELPFUL, lemmaId: lemma2.id },
-      { userId: user3.id, type: ReactionType.DIFFICULT,   lemmaId: lemma2.id },
+      { userId: user3.id, type: ReactionType.DIFFICULT, lemmaId: lemma2.id },
     );
   }
   if (text1) {
     reactionData.push(
-      { userId: user1.id, type: ReactionType.DIFFICULT,   textId: text1.id },
+      { userId: user1.id, type: ReactionType.DIFFICULT, textId: text1.id },
       { userId: user2.id, type: ReactionType.NOT_HELPFUL, textId: text1.id },
     );
   }
@@ -228,5 +242,8 @@ export const seedFeedback = async () => {
     });
   }
 
-  console.log("✅  Feedback seed: создано тредов — 6, сообщений — 9, реакций —", reactionData.length);
+  console.log(
+    "✅  Feedback seed: создано тредов — 6, сообщений — 9, реакций —",
+    reactionData.length,
+  );
 };

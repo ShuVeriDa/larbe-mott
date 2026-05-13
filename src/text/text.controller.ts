@@ -71,7 +71,7 @@ export class TextController {
     name: "orderBy",
     enum: ["newest", "oldest", "alpha", "progress", "length", "level"],
     required: false,
-    description: "Sort order. Default: newest. 'level' sorts A1→C2.",
+    description: "Sort order. Default: newest. 'level' sorts A→C.",
   })
   @ApiQuery({ name: "search", required: false, description: "Search by title or author" })
   @ApiQuery({ name: "page", required: false, description: "Page number (default 1)" })

@@ -83,16 +83,11 @@ export class CreateTextDto {
 
   @ApiProperty({
     enum: Level,
-    description: `${Level.A1} | ${Level.A2} | ${Level.B1} | ${Level.B2} | ${Level.C1} | ${Level.C2}`,
+    description: `${Level.A} | ${Level.B} | ${Level.C}`,
     required: false,
   })
   @IsOptional()
-  @Matches(
-    `^${Object.values(Level)
-      .filter((v) => typeof v !== "number")
-      .join("|")}$`,
-    "i",
-  )
+  @IsEnum(Level)
   level?: Level;
 
   @ApiProperty({ required: false, description: "Short description / annotation of the text" })

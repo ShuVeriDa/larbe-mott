@@ -12,11 +12,11 @@ const prisma = new PrismaClient({ adapter });
 
 export const createTallarUser = async () => {
   const user = {
-    email: "tallar@tallar.du",
-    username: "tallar",
+    email: "tallarho@nakhcho.vu",
+    username: "tallarho",
     password: "123456Bb.",
     phone: "+79635940530",
-    name: "Tallar",
+    name: "Tallarho",
     surname: "Vu So",
   };
 

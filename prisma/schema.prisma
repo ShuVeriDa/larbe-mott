@@ -152,12 +152,9 @@ enum GrammaticalNumber {
 }
 
 enum Level {
-  A1
-  A2
-  B1
-  B2
-  C1
-  C2
+  A
+  B
+  C
 }
 
 enum WordStatus {
@@ -297,7 +294,7 @@ model User {
 
   status   UserStatus @default(ACTIVE)
   language Language?  @default(CHE)
-  level    Level?     @default(A1)
+  level    Level?     @default(A)
 
   lastActiveAt DateTime?
   trialEndsAt  DateTime? //пригодится для trial

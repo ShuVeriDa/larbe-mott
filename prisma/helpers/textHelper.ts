@@ -16,15 +16,15 @@ const prisma = new PrismaClient({ adapter });
 export const createText = async () => {
   const user = await prisma.user.findFirst({
     where: {
-      username: "tallar",
+      username: "tallarho",
     },
   });
 
   if (!user) {
-    throw new Error("User 'tallar' not found. Seed users first.");
+    throw new Error("User 'tallarho' not found. Seed users first.");
   }
 
-  const { pages, ...textDataWithoutPages } = textData;
+  const { pages, tags, ...textDataWithoutPages } = textData;
 
   const text = await prisma.$transaction(async (tx) => {
     const created = await tx.text.create({
@@ -32,6 +32,16 @@ export const createText = async () => {
         ...textDataWithoutPages,
         level: textDataWithoutPages.level as Level,
         createdById: user.id,
+        tags: {
+          create: tags.map((tag) => ({
+            tag: {
+              connectOrCreate: {
+                where: { name: tag.name },
+                create: { name: tag.name },
+              },
+            },
+          })),
+        },
       },
     });
 

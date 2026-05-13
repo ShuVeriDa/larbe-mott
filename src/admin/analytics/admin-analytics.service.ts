@@ -47,22 +47,12 @@ interface PrefetchedEvent {
   createdAt: Date;
 }
 
-const LEVEL_ORDER: Level[] = [
-  Level.A1,
-  Level.A2,
-  Level.B1,
-  Level.B2,
-  Level.C1,
-  Level.C2,
-];
+const LEVEL_ORDER: Level[] = [Level.A, Level.B, Level.C];
 
 const LEVEL_LABELS: Record<Level, string> = {
-  [Level.A1]: "Начинающий",
-  [Level.A2]: "Элементарный",
-  [Level.B1]: "Средний",
-  [Level.B2]: "Выше среднего",
-  [Level.C1]: "Продвинутый",
-  [Level.C2]: "Свободный",
+  [Level.A]: "Начальный",
+  [Level.B]: "Средний",
+  [Level.C]: "Продвинутый",
 };
 
 const HEATMAP_DAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];

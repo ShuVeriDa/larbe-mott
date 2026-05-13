@@ -551,7 +551,7 @@
             "name": "orderBy",
             "required": false,
             "in": "query",
-            "description": "Sort order. Default: newest. 'level' sorts A1→C2.",
+            "description": "Sort order. Default: newest. 'level' sorts A→C.",
             "schema": {
               "enum": [
                 "newest",
@@ -612,12 +612,9 @@
               "items": {
                 "type": "string",
                 "enum": [
-                  "A1",
-                  "A2",
-                  "B1",
-                  "B2",
-                  "C1",
-                  "C2"
+                  "A",
+                  "B",
+                  "C"
                 ]
               }
             }
@@ -1592,12 +1589,9 @@
             "schema": {
               "type": "string",
               "enum": [
-                "A1",
-                "A2",
-                "B1",
-                "B2",
-                "C1",
-                "C2"
+                "A",
+                "B",
+                "C"
               ]
             }
           },
@@ -2116,12 +2110,9 @@
             "schema": {
               "type": "string",
               "enum": [
-                "A1",
-                "A2",
-                "B1",
-                "B2",
-                "C1",
-                "C2"
+                "A",
+                "B",
+                "C"
               ]
             }
           },
@@ -2341,12 +2332,9 @@
             "schema": {
               "type": "string",
               "enum": [
-                "A1",
-                "A2",
-                "B1",
-                "B2",
-                "C1",
-                "C2"
+                "A",
+                "B",
+                "C"
               ]
             }
           },
@@ -3570,12 +3558,9 @@
             "schema": {
               "type": "string",
               "enum": [
-                "A1",
-                "A2",
-                "B1",
-                "B2",
-                "C1",
-                "C2"
+                "A",
+                "B",
+                "C"
               ]
             }
           },
@@ -5360,12 +5345,9 @@
             "schema": {
               "type": "string",
               "enum": [
-                "A1",
-                "A2",
-                "B1",
-                "B2",
-                "C1",
-                "C2"
+                "A",
+                "B",
+                "C"
               ]
             }
           },
@@ -5669,12 +5651,9 @@
             "schema": {
               "type": "string",
               "enum": [
-                "A1",
-                "A2",
-                "B1",
-                "B2",
-                "C1",
-                "C2"
+                "A",
+                "B",
+                "C"
               ]
             }
           },
@@ -16017,12 +15996,9 @@
           "level": {
             "type": "string",
             "enum": [
-              "A1",
-              "A2",
-              "B1",
-              "B2",
-              "C1",
-              "C2"
+              "A",
+              "B",
+              "C"
             ],
             "description": "Уровень владения языком (CEFR)"
           }
@@ -16243,12 +16219,9 @@
           "level": {
             "type": "string",
             "enum": [
-              "A1",
-              "A2",
-              "B1",
-              "B2",
-              "C1",
-              "C2"
+              "A",
+              "B",
+              "C"
             ],
             "nullable": true
           },
@@ -16481,14 +16454,11 @@
           },
           "cefrLevel": {
             "type": "string",
-            "description": "CEFR level of the word (A1, A2, B1, B2)",
+            "description": "Level of the word (A, B, C)",
             "enum": [
-              "A1",
-              "A2",
-              "B1",
-              "B2",
-              "C1",
-              "C2"
+              "A",
+              "B",
+              "C"
             ]
           }
         }
@@ -16616,12 +16586,9 @@
             "type": "string",
             "description": "CEFR level of the word (A1, A2, B1, B2)",
             "enum": [
-              "A1",
-              "A2",
-              "B1",
-              "B2",
-              "C1",
-              "C2"
+              "A",
+              "B",
+              "C"
             ]
           },
           "folderId": {
@@ -16705,14 +16672,11 @@
           "level": {
             "type": "string",
             "enum": [
-              "A1",
-              "A2",
-              "B1",
-              "B2",
-              "C1",
-              "C2"
+              "A",
+              "B",
+              "C"
             ],
-            "description": "A1 | A2 | B1 | B2 | C1 | C2"
+            "description": "A | B | C"
           },
           "description": {
             "type": "string",
@@ -16902,14 +16866,11 @@
           "level": {
             "type": "string",
             "enum": [
-              "A1",
-              "A2",
-              "B1",
-              "B2",
-              "C1",
-              "C2"
+              "A",
+              "B",
+              "C"
             ],
-            "description": "A1 | A2 | B1 | B2 | C1 | C2"
+            "description": "A | B | C"
           },
           "description": {
             "type": "string",
@@ -17132,12 +17093,9 @@
           "level": {
             "type": "string",
             "enum": [
-              "A1",
-              "A2",
-              "B1",
-              "B2",
-              "C1",
-              "C2"
+              "A",
+              "B",
+              "C"
             ],
             "description": "CEFR level"
           },
@@ -17185,12 +17143,9 @@
           "level": {
             "type": "string",
             "enum": [
-              "A1",
-              "A2",
-              "B1",
-              "B2",
-              "C1",
-              "C2"
+              "A",
+              "B",
+              "C"
             ],
             "description": "CEFR level"
           },
@@ -17406,12 +17361,9 @@
           "level": {
             "type": "string",
             "enum": [
-              "A1",
-              "A2",
-              "B1",
-              "B2",
-              "C1",
-              "C2"
+              "A",
+              "B",
+              "C"
             ],
             "description": "CEFR level"
           },
@@ -17498,12 +17450,9 @@
             "type": "string",
             "description": "CEFR level",
             "enum": [
-              "A1",
-              "A2",
-              "B1",
-              "B2",
-              "C1",
-              "C2"
+              "A",
+              "B",
+              "C"
             ]
           },
           "notes": {
@@ -17639,12 +17588,9 @@
             "type": "string",
             "description": "User language level",
             "enum": [
-              "A1",
-              "A2",
-              "B1",
-              "B2",
-              "C1",
-              "C2"
+              "A",
+              "B",
+              "C"
             ],
             "nullable": true
           },
@@ -17883,12 +17829,9 @@
             "type": "string",
             "description": "Language level (CEFR)",
             "enum": [
-              "A1",
-              "A2",
-              "B1",
-              "B2",
-              "C1",
-              "C2"
+              "A",
+              "B",
+              "C"
             ]
           },
           "textsCount": {
@@ -18018,12 +17961,9 @@
             "type": "string",
             "description": "User language level",
             "enum": [
-              "A1",
-              "A2",
-              "B1",
-              "B2",
-              "C1",
-              "C2"
+              "A",
+              "B",
+              "C"
             ],
             "nullable": true
           },

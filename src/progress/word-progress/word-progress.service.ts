@@ -41,11 +41,19 @@ export class WordProgressService {
     const nextReview = new Date();
     nextReview.setUTCDate(nextReview.getUTCDate() + newInterval);
 
-    return { repetitions: newRep, easeFactor: newEF, interval: newInterval, nextReview };
+    return {
+      repetitions: newRep,
+      easeFactor: newEF,
+      interval: newInterval,
+      nextReview,
+    };
   }
 
   // Применяет эффект частоты: чем больше уникальных текстов, тем короче интервал
-  private applyFrequencyEffect(interval: number, uniqueTextsCount: number): number {
+  private applyFrequencyEffect(
+    interval: number,
+    uniqueTextsCount: number,
+  ): number {
     if (uniqueTextsCount >= 3) return Math.max(1, Math.round(interval * 0.8));
     if (uniqueTextsCount >= 2) return Math.max(1, Math.round(interval * 0.9));
     return interval;
@@ -138,7 +146,14 @@ export class WordProgressService {
     const [result] = await this.prisma.$transaction([
       this.prisma.userWordProgress.upsert({
         where: { userId_lemmaId: { userId, lemmaId } },
-        update: { repetitions, easeFactor, interval, nextReview, status: newStatus, lastSeen: new Date() },
+        update: {
+          repetitions,
+          easeFactor,
+          interval,
+          nextReview,
+          status: newStatus,
+          lastSeen: new Date(),
+        },
         create: {
           userId,
           lemmaId,
@@ -198,7 +213,12 @@ export class WordProgressService {
             morphForms: {
               take: 8,
               orderBy: [{ gramCase: "asc" }, { gramNumber: "asc" }],
-              select: { form: true, grammarTag: true, gramCase: true, gramNumber: true },
+              select: {
+                form: true,
+                grammarTag: true,
+                gramCase: true,
+                gramNumber: true,
+              },
             },
           },
         },
@@ -234,7 +254,10 @@ export class WordProgressService {
             orderBy: { position: "asc" },
             select: { original: true },
           });
-          snippet = neighbors.map((t) => t.original).join(" ").trim();
+          snippet = neighbors
+            .map((t) => t.original)
+            .join(" ")
+            .trim();
         }
       } catch (error) {
         // Контекст не критичен для бизнес-потока, но ошибка полезна для диагностики.
@@ -261,7 +284,11 @@ export class WordProgressService {
   }
 
   // Ручная установка статуса слова (NEW / LEARNING / KNOWN) из ридера
-  async setWordStatus(userId: string, lemmaId: string, status: "NEW" | "LEARNING" | "KNOWN") {
+  async setWordStatus(
+    userId: string,
+    lemmaId: string,
+    status: "NEW" | "LEARNING" | "KNOWN",
+  ) {
     const now = new Date();
 
     if (status === "NEW") {
@@ -367,15 +394,24 @@ export class WordProgressService {
   async getWordContexts(
     userId: string,
     lemmaId: string,
-    opts: { page?: string | number; limit?: string | number; level?: string } = {},
+    opts: {
+      page?: string | number;
+      limit?: string | number;
+      level?: string;
+    } = {},
   ) {
-    const pageNum = Math.max(1, Number.parseInt(String(opts.page ?? 1), 10) || 1);
+    const pageNum = Math.max(
+      1,
+      Number.parseInt(String(opts.page ?? 1), 10) || 1,
+    );
     const limitNum = Math.min(
       100,
       Math.max(1, Number.parseInt(String(opts.limit ?? 20), 10) || 20),
     );
-    const allowedLevels = ["A1", "A2", "B1", "B2", "C1", "C2"] as const;
-    const level = allowedLevels.includes(opts.level as (typeof allowedLevels)[number])
+    const allowedLevels = ["A", "B", "C"] as const;
+    const level = allowedLevels.includes(
+      opts.level as (typeof allowedLevels)[number],
+    )
       ? (opts.level as (typeof allowedLevels)[number])
       : undefined;
 
@@ -396,7 +432,9 @@ export class WordProgressService {
           word: true,
           snippet: true,
           seenAt: true,
-          text: { select: { id: true, title: true, language: true, level: true } },
+          text: {
+            select: { id: true, title: true, language: true, level: true },
+          },
         },
       }),
       this.prisma.wordContext.count({ where }),
@@ -428,21 +466,34 @@ export class WordProgressService {
     const dayKey = (d: Date) => d.toISOString().slice(0, 10);
     const doneDays = new Map<string, boolean>(); // key -> any correct?
     for (const log of logs) {
-      const key = dayKey(new Date(Date.UTC(
-        log.createdAt.getUTCFullYear(),
-        log.createdAt.getUTCMonth(),
-        log.createdAt.getUTCDate(),
-      )));
+      const key = dayKey(
+        new Date(
+          Date.UTC(
+            log.createdAt.getUTCFullYear(),
+            log.createdAt.getUTCMonth(),
+            log.createdAt.getUTCDate(),
+          ),
+        ),
+      );
       doneDays.set(key, (doneDays.get(key) ?? false) || log.correct);
     }
     const todayKey = dayKey(today);
-    const nextReviewKey = progress?.nextReview ? dayKey(new Date(Date.UTC(
-      progress.nextReview.getUTCFullYear(),
-      progress.nextReview.getUTCMonth(),
-      progress.nextReview.getUTCDate(),
-    ))) : null;
+    const nextReviewKey = progress?.nextReview
+      ? dayKey(
+          new Date(
+            Date.UTC(
+              progress.nextReview.getUTCFullYear(),
+              progress.nextReview.getUTCMonth(),
+              progress.nextReview.getUTCDate(),
+            ),
+          ),
+        )
+      : null;
 
-    const result: { date: string; status: "done" | "empty" | "today" | "next" }[] = [];
+    const result: {
+      date: string;
+      status: "done" | "empty" | "today" | "next";
+    }[] = [];
     for (let i = 0; i < days; i++) {
       const d = new Date(start);
       d.setUTCDate(d.getUTCDate() + i);
@@ -456,7 +507,10 @@ export class WordProgressService {
     return result;
   }
 
-  private async syncTextProgressForLemma(userId: string, lemmaId: string): Promise<void> {
+  private async syncTextProgressForLemma(
+    userId: string,
+    lemmaId: string,
+  ): Promise<void> {
     const lemmaTokens = await this.prisma.tokenAnalysis.findMany({
       where: { lemmaId, isPrimary: true },
       select: { token: { select: { version: { select: { textId: true } } } } },
@@ -484,7 +538,8 @@ export class WordProgressService {
     });
     const latestVersionByTextId = new Map<string, string>();
     for (const v of versions) {
-      if (!latestVersionByTextId.has(v.textId)) latestVersionByTextId.set(v.textId, v.id);
+      if (!latestVersionByTextId.has(v.textId))
+        latestVersionByTextId.set(v.textId, v.id);
     }
 
     const versionIds = [...latestVersionByTextId.values()];
@@ -526,7 +581,9 @@ export class WordProgressService {
     const completedTextIds: string[] = [];
     const updates = trackedTextIds.map((textId) => {
       const versionId = latestVersionByTextId.get(textId);
-      const lemmaSet = versionId ? (lemmaIdsByVersion.get(versionId) ?? new Set<string>()) : new Set<string>();
+      const lemmaSet = versionId
+        ? (lemmaIdsByVersion.get(versionId) ?? new Set<string>())
+        : new Set<string>();
       const total = lemmaSet.size;
       const known = [...lemmaSet].filter((id) => knownLemmaIds.has(id)).length;
       const progressPercent = total === 0 ? 0 : (known / total) * 100;
