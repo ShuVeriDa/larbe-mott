@@ -21,14 +21,21 @@ export class WordsService {
       info.baseForm != null;
 
     let translation: string | null;
-    let tranAlt: string | null;
     let grammar: string | null;
     let baseForm: string | null;
     let tags: string[];
+    let wordLevel: string | null = null;
+    let grammarForms: import("./word-lookup-by-word.service").WordLookupGrammar | null = null;
+    let nounClass: string | null = null;
+    let nounClassPlural: string | null = null;
+    let variants: string[] = [];
+    let sources: string[] = [];
+    let attested = false;
+    let setPhrases: { nah: string; ru: string }[] | null = null;
+    let byWordMeanings: import("./word-lookup-by-word.service").WordLookupMeaning[] = [];
 
     if (hasData) {
       translation = info.translation ?? null;
-      tranAlt = info.tranAlt ?? null;
       grammar = info.grammar ?? null;
       baseForm = info.baseForm ?? null;
       tags = info.tags ?? [];
@@ -38,10 +45,18 @@ export class WordsService {
         textId: info.textId,
       });
       translation = byWord.translation ?? null;
-      tranAlt = byWord.tranAlt ?? null;
       grammar = byWord.grammar ?? null;
+      grammarForms = byWord.grammarForms ?? null;
+      nounClass = byWord.nounClass ?? null;
+      nounClassPlural = byWord.nounClassPlural ?? null;
       baseForm = byWord.baseForm ?? null;
-      tags = grammar ? [grammar] : [];
+      tags = byWord.tags.length > 0 ? byWord.tags : (grammar ? [grammar] : []);
+      wordLevel = byWord.wordLevel ?? null;
+      variants = byWord.variants ?? [];
+      sources = byWord.sources ?? [];
+      attested = byWord.attested ?? false;
+      setPhrases = byWord.setPhrases ?? null;
+      byWordMeanings = byWord.meanings ?? [];
 
       const notFound = translation == null && grammar == null && baseForm == null;
       if (notFound) {
@@ -54,8 +69,8 @@ export class WordsService {
     const lemmaId = info.lemmaId ?? null;
     const forms: string[] = info.forms ?? [];
 
-    // examples from DictionaryEntry senses
-    let examples: { text: string; translation: string | null }[] = [];
+    // meanings: prefer DB senses (rich), fallback to byWord/online data
+    let meanings: import("./word-lookup-by-word.service").WordLookupMeaning[] = [];
     if (lemmaId) {
       const headwords = await this.prisma.headword.findMany({
         where: { lemmaId },
@@ -63,19 +78,27 @@ export class WordsService {
           entry: {
             select: {
               senses: {
+                orderBy: { order: "asc" },
                 select: {
+                  definition: true,
                   examples: { select: { text: true, translation: true }, take: 5 },
                 },
-                take: 3,
               },
             },
           },
         },
       });
-      examples = headwords
-        .flatMap((h) => h.entry.senses)
-        .flatMap((s) => s.examples)
-        .slice(0, 10);
+      const allSenses = headwords.flatMap((h) => h.entry.senses);
+      meanings = allSenses
+        .filter((s) => s.definition)
+        .map((s) => ({
+          translation: s.definition!,
+          note: null,
+          examples: s.examples.map((e) => ({ text: e.text, translation: e.translation ?? null })),
+        }));
+    }
+    if (meanings.length === 0) {
+      meanings = byWordMeanings;
     }
 
     // userStatus from UserWordProgress + inDictionary from UserDictionaryEntry
@@ -101,12 +124,19 @@ export class WordsService {
     return {
       lemmaId,
       translation,
-      tranAlt,
       grammar,
+      grammarForms,
+      nounClass,
+      nounClassPlural,
       baseForm,
       forms,
       tags,
-      examples,
+      wordLevel,
+      variants,
+      sources,
+      attested,
+      setPhrases,
+      meanings,
       userStatus,
       inDictionary,
       dictionaryEntryId,

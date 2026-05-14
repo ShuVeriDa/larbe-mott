@@ -111,6 +111,40 @@
 | `Tag` | Тег для категоризации текстов |
 | `TextTag` | Связь текст ↔ тег |
 | `UserTextBookmark` | Закладка пользователя на текст |
+| `TextPhrase` | Глобальный справочник фраз/словосочетаний. Уникален по `(normalized, language)`. Поля: `original`, `normalized` (lowercase trim), `translation`, `language`, `notes?` |
+| `TextPhraseOccurrence` | Позиция конкретной фразы в конкретном тексте на конкретной странице. Уникален по `(phraseId, textId, pageNumber, startTokenPosition)`. Позиция задаётся через `TextToken.position` (inclusive range) |
+
+#### Детали: TextPhrase
+
+```
+id          String   @id (uuid)
+original    String   — оригинал на языке текста (отображается пользователю)
+normalized  String   — original.trim().toLowerCase() (используется для дедупликации)
+translation String   — перевод фразы
+language    Language — язык оригинала (CHE, RUS, ...)
+notes       String?  — необязательный контекст/пояснение
+createdAt   DateTime
+updatedAt   DateTime
+
+@@unique([normalized, language])
+@@index([language])
+```
+
+#### Детали: TextPhraseOccurrence
+
+```
+id                 String @id (uuid)
+phraseId           String → TextPhrase (onDelete: Cascade)
+textId             String → Text       (onDelete: Cascade)
+pageNumber         Int    — номер страницы (1-based)
+startTokenPosition Int    — TextToken.position первого токена фразы
+endTokenPosition   Int    — TextToken.position последнего токена (inclusive)
+createdAt          DateTime
+
+@@unique([phraseId, textId, pageNumber, startTokenPosition])
+```
+
+> **Важно:** `startTokenPosition` и `endTokenPosition` — это `TextToken.position` (порядковый номер токена в пределах страницы конкретной версии токенизации), а **не** символьный offset. При повторной токенизации позиции могут сдвинуться. Фраза при этом не удаляется автоматически — её нужно пересоздать через `auto-occurrence`.
 
 ### Обработка текстов и токенизация
 
@@ -253,7 +287,8 @@ Text
  │    └── TextVocabulary ── Lemma
  ├── FeedbackThread (контекст)
  ├── FeedbackReaction
- └── Example (sourceTextId)
+ ├── Example (sourceTextId)
+ └── TextPhraseOccurrence    (вхождения фраз с переводами)
 
 DictionaryEntry
  ├── Headword ── Lemma

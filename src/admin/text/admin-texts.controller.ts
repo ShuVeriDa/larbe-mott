@@ -357,6 +357,15 @@ export class AdminTextsController {
   }
 
   @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
+  @Post(":id/clear-cache")
+  @ApiOperation({ summary: "Clear dictionary cache for words in this text (admin only)" })
+  @ApiParam({ name: "id", description: "Text UUID" })
+  @ApiOkResponse({ description: "{ deleted: number }" })
+  async clearDictionaryCache(@Param("id") textId: string) {
+    return this.adminTextService.clearDictionaryCache(textId);
+  }
+
+  @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
   @Post(":id/tokenize")
   @ApiOperation({ summary: "Trigger (re-)tokenization for a text (admin only)" })
   @ApiParam({ name: "id", description: "Text UUID" })

@@ -63,6 +63,7 @@ export class OnlineDictionaryProcessor {
           cacheRows.push({
             normalized: word,
             translation: result.translation,
+            meanings: (result.meanings ?? []) as unknown as Prisma.InputJsonValue,
           });
 
           const tokenIds = tokenMap.get(word)!;

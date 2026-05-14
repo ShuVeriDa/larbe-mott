@@ -242,6 +242,27 @@ export class TextController {
     return this.textService.getTableOfContents(textId);
   }
 
+  @Get(":id/pages/:pageNumber/phrases")
+  @OptionalAuth()
+  @ApiOperation({
+    summary: "Get phrase translations for a text page",
+    description:
+      "Returns all phrase occurrences on the given page with their translations. Used by the reader to highlight multi-word phrases.",
+  })
+  @ApiParam({ name: "id", description: "Text ID (UUID)" })
+  @ApiParam({ name: "pageNumber", description: "Page number (1-based)" })
+  @ApiOkResponse({
+    description:
+      "Array of { id, startTokenPosition, endTokenPosition, phrase: { id, original, translation, notes } }",
+  })
+  @ApiNotFoundResponse({ description: "Text or page not found." })
+  async getPagePhrases(
+    @Param("id", ParseUUIDPipe) textId: string,
+    @Param("pageNumber", ParseIntPipe) pageNumber: number,
+  ) {
+    return this.textService.getPagePhrases(textId, pageNumber);
+  }
+
   @Get(":id/related")
   @OptionalAuth()
   @ApiOperation({

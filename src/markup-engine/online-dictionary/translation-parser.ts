@@ -11,36 +11,7 @@ export function stripHtml(raw: string): string {
     .trim();
 }
 
-/**
- * Splits a cleaned translation string into main translation and optional alt.
- *
- * Strategy:
- *  1. Split on the first "; " — everything before = main, after = alt
- *  2. If no ";", split on first "," only when the result before comma is short (<= 40 chars)
- *     (avoids splitting long single-meaning translations mid-sentence)
- *  3. Trim both parts; if alt is empty after trimming, return null
- *
- * Examples:
- *  "гореть; опасаться, бояться"  → { main: "гореть", alt: "опасаться, бояться" }
- *  "гореть; топорище"            → { main: "гореть", alt: "топорище" }
- *  "делать, действовать, строить"→ { main: "делать", alt: "действовать, строить" }
- *  "очень длинное значение без разделителей" → { main: "...", alt: null }
- */
 export function splitTranslation(cleaned: string): { main: string; alt: string | null } {
-  const semiIdx = cleaned.indexOf("; ");
-  if (semiIdx !== -1) {
-    const main = cleaned.slice(0, semiIdx).trim();
-    const alt = cleaned.slice(semiIdx + 2).trim() || null;
-    return { main, alt };
-  }
-
-  const commaIdx = cleaned.indexOf(", ");
-  if (commaIdx !== -1 && commaIdx <= 40) {
-    const main = cleaned.slice(0, commaIdx).trim();
-    const alt = cleaned.slice(commaIdx + 2).trim() || null;
-    return { main, alt };
-  }
-
   return { main: cleaned, alt: null };
 }
 

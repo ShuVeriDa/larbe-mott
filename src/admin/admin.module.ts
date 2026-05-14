@@ -44,6 +44,9 @@ import { AdminLogsService } from "./system-logs/admin-logs.service";
 import { AdminLegalController } from "./legal/admin-legal.controller";
 import { AdminLegalService } from "./legal/admin-legal.service";
 import { AdminUploadsController } from "./uploads/admin-uploads.controller";
+import { PagePhrasesCacheService } from "src/cache/page-phrases-cache.service";
+import { AdminTextPhraseController } from "./text-phrase/admin-text-phrase.controller";
+import { AdminTextPhraseService } from "./text-phrase/admin-text-phrase.service";
 
 @Module({
   imports: [
@@ -75,6 +78,7 @@ import { AdminUploadsController } from "./uploads/admin-uploads.controller";
     AdminLogsController,
     AdminLegalController,
     AdminUploadsController,
+    AdminTextPhraseController,
   ],
   providers: [
     AdminService,
@@ -95,6 +99,8 @@ import { AdminUploadsController } from "./uploads/admin-uploads.controller";
     TokenizationQueueService,
     AdminLogsService,
     AdminLegalService,
+    AdminTextPhraseService,
+    PagePhrasesCacheService,
     PrismaService,
   ],
 })

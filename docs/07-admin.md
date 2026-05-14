@@ -483,7 +483,157 @@
 
 ---
 
-### 17. Загрузки (`/api/admin/uploads`)
+### 17. Переводы фраз в текстах (`/api/admin/text-phrases`)
+
+**Файл:** [src/admin/text-phrase/](../src/admin/text-phrase/)
+
+**Требуемое разрешение:** `CAN_EDIT_TEXTS`
+
+#### Концепция
+
+Двухуровневая структура:
+
+- **`TextPhrase`** — глобальный справочник. Одна запись на уникальную фразу (`normalized` + `language`). Не привязана к конкретному тексту.
+- **`TextPhraseOccurrence`** — позиция фразы в конкретном тексте/странице. Позиция задаётся через индексы токенов (`startTokenPosition..endTokenPosition` включительно, `TextToken.position`).
+
+Типичный сценарий: администратор выделяет слово/словосочетание в редакторе → отправляет `POST /with-occurrence` или `POST /auto-occurrence` → сервер атомарно создаёт или переиспользует `TextPhrase` и добавляет `TextPhraseOccurrence`.
+
+#### Эндпоинты
+
+| Метод | URL | Описание |
+|-------|-----|----------|
+| GET | `/api/admin/text-phrases` | Список фраз с числом вхождений. Параметры: `language`, `page` (def. 1), `limit` (def. 50, max 100) |
+| GET | `/api/admin/text-phrases/:id` | Фраза + все вхождения с `id` и `title` текстов |
+| POST | `/api/admin/text-phrases` | Создать фразу без вхождения |
+| PATCH | `/api/admin/text-phrases/:id` | Обновить `translation` / `notes`. Изменение `original` автоматически пересчитывает `normalized` |
+| DELETE | `/api/admin/text-phrases/:id` | Удалить фразу и все её вхождения (cascade) |
+| POST | `/api/admin/text-phrases/with-occurrence` | **Основной (редактор):** создать/переиспользовать фразу + добавить вхождение. Позиции токенов задаются вручную |
+| POST | `/api/admin/text-phrases/auto-occurrence` | **Авто:** создать/переиспользовать фразу + найти позиции токенов автоматически по тексту фразы |
+| POST | `/api/admin/text-phrases/:id/occurrences` | Добавить вхождение к уже существующей фразе |
+| DELETE | `/api/admin/text-phrases/occurrences/:occurrenceId` | Удалить одно вхождение |
+| GET | `/api/admin/text-phrases/by-page/:textId/:pageNumber` | Все фразы страницы (для редактора). **Кэшируется в Redis 5 мин**, инвалидируется при любом изменении вхождений |
+
+#### GET /api/admin/text-phrases — пример ответа
+
+```json
+{
+  "items": [
+    {
+      "id": "uuid-фразы",
+      "original": "доттагIалла деш",
+      "normalized": "доттагiалла деш",
+      "translation": "в дружбе",
+      "language": "CHE",
+      "notes": "Устойчивое выражение",
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "updatedAt": "2026-01-01T00:00:00.000Z",
+      "_count": { "occurrences": 3 }
+    }
+  ],
+  "total": 42,
+  "page": 1,
+  "limit": 50
+}
+```
+
+#### POST /api/admin/text-phrases/with-occurrence — тело запроса
+
+```json
+{
+  "original": "доттагIалла деш",
+  "translation": "в дружбе",
+  "language": "CHE",
+  "notes": "Устойчивое выражение",
+  "textId": "uuid-текста",
+  "pageNumber": 1,
+  "startTokenPosition": 5,
+  "endTokenPosition": 6
+}
+```
+
+Ответ `201`:
+
+```json
+{
+  "phrase": {
+    "id": "uuid-фразы",
+    "original": "доттагIалла деш",
+    "normalized": "доттагiалла деш",
+    "translation": "в дружбе",
+    "language": "CHE",
+    "notes": "Устойчивое выражение",
+    "createdAt": "...",
+    "updatedAt": "..."
+  },
+  "occurrence": {
+    "id": "uuid-вхождения",
+    "phraseId": "uuid-фразы",
+    "textId": "uuid-текста",
+    "pageNumber": 1,
+    "startTokenPosition": 5,
+    "endTokenPosition": 6,
+    "createdAt": "..."
+  }
+}
+```
+
+> Если фраза с таким `normalized` + `language` уже существует — переиспользуется (поле `translation` при этом не обновляется). Если вхождение с такими координатами уже есть — также переиспользуется без ошибки. Операция атомарна (`$transaction`).
+
+#### POST /api/admin/text-phrases/auto-occurrence — тело запроса
+
+```json
+{
+  "original": "доттагIалла деш",
+  "translation": "в дружбе",
+  "language": "CHE",
+  "notes": null,
+  "textId": "uuid-текста",
+  "pageNumber": 1
+}
+```
+
+> Сервер сам находит `startTokenPosition` и `endTokenPosition`, сопоставляя слова фразы с токенами страницы (по `normalized` и `original`). Текст должен быть токенизирован. Если фраза не найдена в токенах — `404 Not Found`.
+
+#### GET /api/admin/text-phrases/by-page/:textId/:pageNumber — пример ответа
+
+```json
+[
+  {
+    "id": "uuid-вхождения",
+    "phraseId": "uuid-фразы",
+    "textId": "uuid-текста",
+    "pageNumber": 1,
+    "startTokenPosition": 5,
+    "endTokenPosition": 6,
+    "createdAt": "...",
+    "phrase": {
+      "id": "uuid-фразы",
+      "original": "доттагIалла деш",
+      "translation": "в дружбе",
+      "notes": "Устойчивое выражение"
+    }
+  }
+]
+```
+
+#### Правила дедупликации
+
+| Поле | Логика |
+|------|--------|
+| `TextPhrase` | Уникален по `(normalized, language)`. `normalized = original.trim().toLowerCase()` |
+| `TextPhraseOccurrence` | Уникален по `(phraseId, textId, pageNumber, startTokenPosition)` |
+
+#### Коды ошибок
+
+| Код | Причина |
+|-----|---------|
+| `404` | Текст, страница, версия токенизации или фраза не найдены |
+| `404` | `auto-occurrence`: слова фразы не найдены в токенах страницы |
+| `409` | `addOccurrence`: вхождение с такими координатами уже существует |
+
+---
+
+### 18. Загрузки (`/api/admin/uploads`)
 
 **Файл:** [src/admin/uploads/](../src/admin/uploads/)
 

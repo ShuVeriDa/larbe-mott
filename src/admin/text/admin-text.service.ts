@@ -545,6 +545,32 @@ export class AdminTextService {
     );
   }
 
+  async clearDictionaryCache(textId: string): Promise<{ deleted: number }> {
+    const text = await this.prisma.text.findUnique({ where: { id: textId } });
+    if (!text) throw new NotFoundException("Text not found");
+
+    const currentVersion = await this.prisma.textProcessingVersion.findFirst({
+      where: { textId, isCurrent: true },
+      select: { id: true },
+    });
+    if (!currentVersion) return { deleted: 0 };
+
+    const words = await this.prisma.textToken.findMany({
+      where: { versionId: currentVersion.id, normalized: { not: "" } },
+      select: { normalized: true },
+      distinct: ["normalized"],
+    });
+
+    if (!words.length) return { deleted: 0 };
+
+    const normalized = words.map((w) => w.normalized);
+    const result = await this.prisma.dictionaryCache.deleteMany({
+      where: { normalized: { in: normalized } },
+    });
+
+    return { deleted: result.count };
+  }
+
   /**
    * Retry a previous (typically ERROR) version: copies its useNormalization /
    * useMorphAnalysis settings into a new processing run.

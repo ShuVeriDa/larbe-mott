@@ -952,6 +952,52 @@
         ]
       }
     },
+    "/api/texts/{id}/pages/{pageNumber}/phrases": {
+      "get": {
+        "description": "Returns all phrase occurrences on the given page with their translations. Used by the reader to highlight multi-word phrases.",
+        "operationId": "TextController_getPagePhrases",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Text ID (UUID)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageNumber",
+            "required": true,
+            "in": "path",
+            "description": "Page number (1-based)",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of { id, startTokenPosition, endTokenPosition, phrase: { id, original, translation, notes } }"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "404": {
+            "description": "Text or page not found."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get phrase translations for a text page",
+        "tags": [
+          "texts"
+        ]
+      }
+    },
     "/api/texts/{id}/related": {
       "get": {
         "description": "Returns up to 6 published texts with the same language and matching level or tags. When authenticated includes progressPercent per text.",
@@ -3096,6 +3142,39 @@
           }
         ],
         "summary": "Unpublish a single text (admin only)",
+        "tags": [
+          "admin/texts"
+        ]
+      }
+    },
+    "/api/admin/texts/{id}/clear-cache": {
+      "post": {
+        "operationId": "AdminTextsController_clearDictionaryCache",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Text UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ deleted: number }"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Clear dictionary cache for words in this text (admin only)",
         "tags": [
           "admin/texts"
         ]
@@ -13977,6 +14056,433 @@
         ]
       }
     },
+    "/api/admin/text-phrases": {
+      "get": {
+        "operationId": "AdminTextPhraseController_listPhrases",
+        "parameters": [
+          {
+            "name": "language",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "CHE",
+                "RU",
+                "AR",
+                "EN"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated phrases with occurrence count."
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Forbidden. CAN_EDIT_TEXTS permission required."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List text phrases (global dictionary)",
+        "tags": [
+          "admin/text-phrases"
+        ]
+      },
+      "post": {
+        "operationId": "AdminTextPhraseController_createPhrase",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTextPhraseDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Phrase created."
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Forbidden. CAN_EDIT_TEXTS permission required."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a new phrase (without occurrence)",
+        "tags": [
+          "admin/text-phrases"
+        ]
+      }
+    },
+    "/api/admin/text-phrases/{id}": {
+      "get": {
+        "operationId": "AdminTextPhraseController_getPhraseById",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "TextPhrase UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Phrase with occurrences and text titles."
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Forbidden. CAN_EDIT_TEXTS permission required."
+          },
+          "404": {
+            "description": "Phrase not found."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get a single text phrase with all occurrences",
+        "tags": [
+          "admin/text-phrases"
+        ]
+      },
+      "patch": {
+        "operationId": "AdminTextPhraseController_updatePhrase",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "TextPhrase UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTextPhraseDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Phrase updated."
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Forbidden. CAN_EDIT_TEXTS permission required."
+          },
+          "404": {
+            "description": "Phrase not found."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update a phrase",
+        "tags": [
+          "admin/text-phrases"
+        ]
+      },
+      "delete": {
+        "operationId": "AdminTextPhraseController_deletePhrase",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "TextPhrase UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Phrase deleted."
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Forbidden. CAN_EDIT_TEXTS permission required."
+          },
+          "404": {
+            "description": "Phrase not found."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a phrase and all its occurrences",
+        "tags": [
+          "admin/text-phrases"
+        ]
+      }
+    },
+    "/api/admin/text-phrases/auto-occurrence": {
+      "post": {
+        "description": "Finds the phrase words in the tokenized page and creates an occurrence automatically. Returns { phrase, occurrence }.",
+        "operationId": "AdminTextPhraseController_createAutoOccurrence",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePhraseAutoOccurrenceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "{ phrase, occurrence }"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Forbidden. CAN_EDIT_TEXTS permission required."
+          },
+          "404": {
+            "description": "Text, page, version not found or phrase words not in tokens."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create (or reuse) a phrase and auto-detect token positions from page",
+        "tags": [
+          "admin/text-phrases"
+        ]
+      }
+    },
+    "/api/admin/text-phrases/with-occurrence": {
+      "post": {
+        "description": "Main endpoint for the text editor. If a phrase with the same normalized text and language already exists, it is reused; only a new occurrence is created. Returns { phrase, occurrence }.",
+        "operationId": "AdminTextPhraseController_createWithOccurrence",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePhraseWithOccurrenceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "{ phrase, occurrence }"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Forbidden. CAN_EDIT_TEXTS permission required."
+          },
+          "404": {
+            "description": "Text not found."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create (or reuse) a phrase and add its occurrence in a text",
+        "tags": [
+          "admin/text-phrases"
+        ]
+      }
+    },
+    "/api/admin/text-phrases/{id}/occurrences": {
+      "post": {
+        "operationId": "AdminTextPhraseController_addOccurrence",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "TextPhrase UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTextPhraseOccurrenceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Occurrence created."
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Forbidden. CAN_EDIT_TEXTS permission required."
+          },
+          "404": {
+            "description": "Phrase or text not found."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Add an occurrence of an existing phrase to a text page",
+        "tags": [
+          "admin/text-phrases"
+        ]
+      }
+    },
+    "/api/admin/text-phrases/occurrences/{occurrenceId}": {
+      "delete": {
+        "operationId": "AdminTextPhraseController_deleteOccurrence",
+        "parameters": [
+          {
+            "name": "occurrenceId",
+            "required": true,
+            "in": "path",
+            "description": "TextPhraseOccurrence UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Occurrence deleted."
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Forbidden. CAN_EDIT_TEXTS permission required."
+          },
+          "404": {
+            "description": "Occurrence not found."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a phrase occurrence",
+        "tags": [
+          "admin/text-phrases"
+        ]
+      }
+    },
+    "/api/admin/text-phrases/by-page/{textId}/{pageNumber}": {
+      "get": {
+        "operationId": "AdminTextPhraseController_getByPage",
+        "parameters": [
+          {
+            "name": "textId",
+            "required": true,
+            "in": "path",
+            "description": "Text UUID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageNumber",
+            "required": true,
+            "in": "path",
+            "description": "Page number (1-based)",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of occurrences with phrase data (original, translation, notes)."
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Forbidden. CAN_EDIT_TEXTS permission required."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get all phrase occurrences for a text page (admin)",
+        "tags": [
+          "admin/text-phrases"
+        ]
+      }
+    },
     "/api/plans": {
       "get": {
         "operationId": "SubscriptionController_getPlans",
@@ -19602,6 +20108,177 @@
             "example": "# Новый заголовок\n\nИсправленный текст..."
           }
         }
+      },
+      "CreateTextPhraseDto": {
+        "type": "object",
+        "properties": {
+          "original": {
+            "type": "string",
+            "example": "доттагIалла деш"
+          },
+          "translation": {
+            "type": "string",
+            "example": "в дружбе"
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "CHE",
+              "RU",
+              "AR",
+              "EN"
+            ]
+          },
+          "notes": {
+            "type": "string",
+            "example": "Контекстное пояснение"
+          }
+        },
+        "required": [
+          "original",
+          "translation",
+          "language"
+        ]
+      },
+      "UpdateTextPhraseDto": {
+        "type": "object",
+        "properties": {
+          "original": {
+            "type": "string"
+          },
+          "translation": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "CHE",
+              "RU",
+              "AR",
+              "EN"
+            ]
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      },
+      "CreatePhraseAutoOccurrenceDto": {
+        "type": "object",
+        "properties": {
+          "original": {
+            "type": "string",
+            "example": "ловзуш хилла"
+          },
+          "translation": {
+            "type": "string",
+            "example": "играли"
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "CHE",
+              "RU",
+              "AR",
+              "EN"
+            ]
+          },
+          "notes": {
+            "type": "string"
+          },
+          "textId": {
+            "type": "string",
+            "description": "ID текста"
+          },
+          "pageNumber": {
+            "type": "number",
+            "description": "Номер страницы (1-based)"
+          }
+        },
+        "required": [
+          "original",
+          "translation",
+          "language",
+          "textId",
+          "pageNumber"
+        ]
+      },
+      "CreatePhraseWithOccurrenceDto": {
+        "type": "object",
+        "properties": {
+          "original": {
+            "type": "string",
+            "example": "доттагIалла деш"
+          },
+          "translation": {
+            "type": "string",
+            "example": "в дружбе"
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "CHE",
+              "RU",
+              "AR",
+              "EN"
+            ]
+          },
+          "notes": {
+            "type": "string"
+          },
+          "textId": {
+            "type": "string",
+            "description": "ID текста"
+          },
+          "pageNumber": {
+            "type": "number",
+            "description": "Номер страницы (1-based)"
+          },
+          "startTokenPosition": {
+            "type": "number",
+            "description": "position первого токена фразы"
+          },
+          "endTokenPosition": {
+            "type": "number",
+            "description": "position последнего токена фразы (inclusive)"
+          }
+        },
+        "required": [
+          "original",
+          "translation",
+          "language",
+          "textId",
+          "pageNumber",
+          "startTokenPosition",
+          "endTokenPosition"
+        ]
+      },
+      "CreateTextPhraseOccurrenceDto": {
+        "type": "object",
+        "properties": {
+          "textId": {
+            "type": "string",
+            "description": "ID текста"
+          },
+          "pageNumber": {
+            "type": "number",
+            "description": "Номер страницы (1-based)"
+          },
+          "startTokenPosition": {
+            "type": "number",
+            "description": "position первого токена фразы (TextToken.position)"
+          },
+          "endTokenPosition": {
+            "type": "number",
+            "description": "position последнего токена фразы (TextToken.position, inclusive)"
+          }
+        },
+        "required": [
+          "textId",
+          "pageNumber",
+          "startTokenPosition",
+          "endTokenPosition"
+        ]
       },
       "StartTrialDto": {
         "type": "object",

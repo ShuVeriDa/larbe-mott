@@ -103,6 +103,7 @@ Tag (id, name, createdAt) — глобальный справочник тего
 | GET | `/api/texts/:id` | Optional | Полная карточка текста: метаданные, страницы, теги, прогресс |
 | GET | `/api/texts/:id/related` | Optional | До 6 похожих опубликованных текстов |
 | GET | `/api/texts/:id/pages/:pageNumber` | Optional | Одна страница + токены + прогресс |
+| GET | `/api/texts/:id/pages/:pageNumber/phrases` | Optional | Переводы фраз страницы (для reader) |
 | POST | `/api/texts/:id/bookmark` | Bearer | Toggle закладки |
 | DELETE | `/api/texts/:id/progress` | Bearer | Сбросить прогресс пользователя по тексту |
 | POST | `/api/texts/:id/report` | Bearer | Жалоба на текст (создаётся FeedbackThread) |
@@ -359,6 +360,40 @@ GET /api/texts?language=RU&level=B1&search=рассказ&orderBy=length&page=2&
 | `isFavorite` | Optional | Добавлен ли текст в закладки. Без токена: `false` |
 
 > `wordStats.total` — число уникальных лемм (а не токенов) в тексте.
+
+---
+
+### GET /api/texts/:id/pages/:pageNumber/phrases
+
+Возвращает все переводы фраз (словосочетаний) на данной странице. Используется ридером при загрузке страницы для построения карты фраз — frontend при наведении мышью между токенами проверяет по ней наличие перевода и отображает попап.
+
+**Auth:** Optional.
+
+**Path-параметры:**
+
+| Параметр | Тип | Описание |
+|----------|-----|---------|
+| `id` | UUID | ID текста |
+| `pageNumber` | int | Номер страницы (1-based) |
+
+**Ответ:**
+```json
+[
+  {
+    "id": "uuid-occurrence",
+    "startTokenPosition": 5,
+    "endTokenPosition": 7,
+    "phrase": {
+      "id": "uuid-phrase",
+      "original": "доттагIалла деш",
+      "translation": "в дружбе",
+      "notes": null
+    }
+  }
+]
+```
+
+> Отсортировано по `startTokenPosition` asc. Позиции совпадают с `TextToken.position` токенов, возвращаемых в `/api/texts/:id/pages/:pageNumber`.
 
 ---
 

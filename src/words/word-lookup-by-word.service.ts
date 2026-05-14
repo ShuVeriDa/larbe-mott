@@ -4,16 +4,48 @@ import { DictionaryCacheService } from "src/markup-engine/dictionary-cache/dicti
 import { DictionaryService } from "src/markup-engine/dictionary/dictionary.service";
 import { MorphologyService } from "src/markup-engine/morphology/morphology.service";
 import { OnlineDictionaryService } from "src/markup-engine/online-dictionary/online-dictionary.service";
-import { parseTranslation } from "src/markup-engine/online-dictionary/translation-parser";
 import { normalizeToken } from "src/markup-engine/tokenizer/tokenizer.utils";
 import { UnknownWordProcessor } from "src/markup-engine/unknown-word/unknown-word.processor";
 import { PrismaService } from "src/prisma.service";
 
+export interface WordLookupExample {
+  text: string;
+  translation: string | null;
+}
+
+export interface WordLookupMeaning {
+  translation: string;
+  note: string | null;
+  examples: WordLookupExample[];
+}
+
+export interface WordLookupGrammar {
+  genitive?: string | null;
+  dative?: string | null;
+  ergative?: string | null;
+  instrumental?: string | null;
+  plural?: string | null;
+  pluralClass?: string | null;
+  obliqueStem?: string | null;
+  verbPresent?: string | null;
+  verbPast?: string | null;
+  verbParticiple?: string | null;
+}
+
 export type WordLookupResult = {
   translation: string | null;
-  tranAlt: string | null;
   grammar: string | null;
+  grammarForms: WordLookupGrammar | null;
+  nounClass: string | null;
+  nounClassPlural: string | null;
   baseForm: string | null;
+  tags: string[];
+  wordLevel: string | null;
+  variants: string[];
+  sources: string[];
+  attested: boolean;
+  setPhrases: { nah: string; ru: string }[] | null;
+  meanings: WordLookupMeaning[];
 };
 
 type LookupContext = {
@@ -80,8 +112,7 @@ export class WordLookupByWordService {
 
     if (userId) {
       this.runInBackground(
-        this.prisma.userEvent
-        .create({
+        this.prisma.userEvent.create({
           data: {
             userId,
             type: UserEventType.FAIL_LOOKUP,
@@ -96,7 +127,21 @@ export class WordLookupByWordService {
       );
     }
 
-    return { translation: null, tranAlt: null, grammar: null, baseForm: null };
+    return {
+      translation: null,
+      grammar: null,
+      grammarForms: null,
+      nounClass: null,
+      nounClassPlural: null,
+      baseForm: null,
+      tags: [],
+      wordLevel: null,
+      variants: [],
+      sources: [],
+      attested: false,
+      setPhrases: null,
+      meanings: [],
+    };
   }
 
   private async resolveUserLanguage(userId?: string): Promise<Language> {
@@ -124,22 +169,34 @@ export class WordLookupByWordService {
     const map = await this.dictionaryCache.findMap([normalized]);
     const row = map.get(normalized);
     if (!row) return null;
-    const parsed = parseTranslation(row.translation);
-    const translation = parsed?.main ?? row.translation ?? null;
-    const tranAlt = parsed?.alt ?? null;
+    const translation = row.translation ?? null;
+    const meanings = (row.meanings as WordLookupMeaning[] | null) ?? [];
+    const cached = (row.examples as unknown[] | null);
+    const base: Omit<WordLookupResult, 'grammar' | 'baseForm' | 'tags'> = {
+      translation,
+      grammarForms: null,
+      nounClass: null,
+      nounClassPlural: null,
+      wordLevel: null,
+      variants: [],
+      sources: [],
+      attested: false,
+      setPhrases: null,
+      meanings: meanings.length > 0 ? meanings : (cached as WordLookupMeaning[] ?? []),
+    };
     if (row.lemmaId) {
       const lemma = await this.prisma.lemma.findUnique({
         where: { id: row.lemmaId },
         select: { baseForm: true, partOfSpeech: true },
       });
       return {
-        translation,
-        tranAlt,
+        ...base,
         grammar: lemma?.partOfSpeech ?? null,
         baseForm: lemma?.baseForm ?? null,
+        tags: lemma?.partOfSpeech ? [lemma.partOfSpeech] : [],
       };
     }
-    return { translation, tranAlt, grammar: null, baseForm: null };
+    return { ...base, grammar: null, baseForm: null, tags: [] };
   }
 
   private async fromOnline(
@@ -150,9 +207,18 @@ export class WordLookupByWordService {
     if (!result?.translation) return null;
     return {
       translation: result.translation,
-      tranAlt: result.tranAlt ?? null,
-      grammar: null,
-      baseForm: null,
+      grammar: result.grammar ?? null,
+      grammarForms: result.grammarForms ?? null,
+      nounClass: result.nounClass ?? null,
+      nounClassPlural: result.nounClassPlural ?? null,
+      baseForm: result.baseForm ?? null,
+      tags: result.tags ?? [],
+      wordLevel: result.wordLevel ?? null,
+      variants: result.variants ?? [],
+      sources: result.sources ?? [],
+      attested: result.attested ?? false,
+      setPhrases: result.setPhrases ?? null,
+      meanings: result.meanings ?? [],
     };
   }
 
@@ -182,22 +248,66 @@ export class WordLookupByWordService {
             entry: {
               select: {
                 rawTranslate: true,
-                senses: { select: { definition: true }, take: 1, orderBy: { order: "asc" } },
+                senses: {
+                  orderBy: { order: "asc" },
+                  select: {
+                    definition: true,
+                    examples: {
+                      select: { text: true, translation: true },
+                      take: 3,
+                    },
+                  },
+                },
               },
             },
           },
         },
       },
     });
-    if (!lemma) return { translation: null, tranAlt: null, grammar: null, baseForm: null };
+    const emptyResult: WordLookupResult = {
+      translation: null,
+      grammar: null,
+      grammarForms: null,
+      nounClass: null,
+      nounClassPlural: null,
+      baseForm: null,
+      tags: [],
+      wordLevel: null,
+      variants: [],
+      sources: [],
+      attested: false,
+      setPhrases: null,
+      meanings: [],
+    };
+    if (!lemma) return emptyResult;
+
     const rawTranslate = lemma.headwords[0]?.entry?.rawTranslate ?? null;
-    const parsed = parseTranslation(rawTranslate);
-    const senseDefinition = lemma.headwords[0]?.entry?.senses?.[0]?.definition ?? null;
+    const senses = lemma.headwords[0]?.entry?.senses ?? [];
+    const pos = lemma.partOfSpeech ?? null;
+
+    const meanings: WordLookupMeaning[] =
+      senses.length > 0
+        ? senses
+            .filter((s) => s.definition)
+            .map((s) => ({
+              translation: s.definition!,
+              note: null,
+              examples: s.examples.map((e) => ({
+                text: e.text,
+                translation: e.translation ?? null,
+              })),
+            }))
+        : rawTranslate
+          ? [{ translation: rawTranslate, note: null, examples: [] }]
+          : [];
+
     return {
-      translation: parsed?.main ?? rawTranslate,
-      tranAlt: parsed?.alt ?? senseDefinition,
-      grammar: lemma.partOfSpeech ?? null,
+      ...emptyResult,
+      translation: meanings[0]?.translation ?? rawTranslate,
+      grammar: pos,
       baseForm: lemma.baseForm ?? null,
+      tags: pos ? [pos] : [],
+      meanings,
     };
   }
 
@@ -209,19 +319,28 @@ export class WordLookupByWordService {
 
     const [translationsToday, subscription] = await Promise.all([
       this.prisma.userEvent.count({
-        where: { userId, type: UserEventType.CLICK_WORD, createdAt: { gte: todayStart } },
+        where: {
+          userId,
+          type: UserEventType.CLICK_WORD,
+          createdAt: { gte: todayStart },
+        },
       }),
       this.prisma.subscription.findFirst({
         where: {
           userId,
-          status: { in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING] },
+          status: {
+            in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING],
+          },
         },
         include: { plan: true },
         orderBy: { startDate: "desc" },
       }),
     ]);
 
-    const planLimits = subscription?.plan?.limits as Record<string, number> | null;
+    const planLimits = subscription?.plan?.limits as Record<
+      string,
+      number
+    > | null;
     const translationsPerDay = planLimits?.translationsPerDay ?? 50;
     if (translationsPerDay !== -1 && translationsToday >= translationsPerDay) {
       throw new ForbiddenException(

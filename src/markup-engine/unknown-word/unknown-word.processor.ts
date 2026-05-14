@@ -90,7 +90,7 @@ export class UnknownWordProcessor {
       );
       await this.prisma.$executeRaw`
         UPDATE unknown_word uw
-        SET "seenCount" = uw."seenCount" + v.count,
+        SET "seenCount" = uw."seenCount" + v.count::integer,
             "lastSeen" = now(),
             "lastTextId" = COALESCE(${textId}, uw."lastTextId")
         FROM (VALUES ${values}) AS v(normalized, count)

@@ -771,6 +771,8 @@ model DictionaryCache {
   normalized  String  @unique
   lemmaId     String?
   translation String?
+  meanings    Json?
+  examples    Json?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1066,6 +1068,8 @@ model Text {
   feedbackReactions FeedbackReaction[] @relation("TextFeedbackReactions")
 
   bookmarks UserTextBookmark[]
+
+  phraseOccurrences TextPhraseOccurrence[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1521,6 +1525,53 @@ model UserPhrasebookSave {
   @@unique([userId, phraseId])
   @@index([userId])
   @@map("user_phrasebook_save")
+}
+
+//////////////////////////////////////////////////////
+// TEXT PHRASES (переводы фраз/словосочетаний в текстах)
+//////////////////////////////////////////////////////
+
+// Глобальный справочник фраз. Одна фраза может встречаться в нескольких текстах.
+model TextPhrase {
+  id          String   @id @default(uuid())
+  original    String   // оригинал фразы на языке текста
+  normalized  String   // нижний регистр, trimmed — для дедупликации
+  translation String   // перевод
+  language    Language // язык оригинала
+
+  notes       String?  // необязательная заметка (контекст, пояснение)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  occurrences TextPhraseOccurrence[]
+
+  @@unique([normalized, language])
+  @@index([language])
+  @@map("text_phrase")
+}
+
+// Позиция конкретной фразы в конкретном тексте на конкретной странице.
+// Позиция задаётся через индексы токенов (startTokenPosition..endTokenPosition включительно).
+model TextPhraseOccurrence {
+  id         String @id @default(uuid())
+  phraseId   String
+  textId     String
+  pageNumber Int
+
+  // Индексы токенов в пределах страницы (TextToken.position), inclusive
+  startTokenPosition Int
+  endTokenPosition   Int
+
+  phrase TextPhrase @relation(fields: [phraseId], references: [id], onDelete: Cascade)
+  text   Text       @relation(fields: [textId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([phraseId, textId, pageNumber, startTokenPosition])
+  @@index([textId, pageNumber])
+  @@index([phraseId])
+  @@map("text_phrase_occurrence")
 }
 
 //////////////////////////////////////////////////////

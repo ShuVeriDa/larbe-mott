@@ -847,4 +847,30 @@ export class TextService {
 
     return thread;
   }
+
+  async getPagePhrases(textId: string, pageNumber: number) {
+    const page = await this.prisma.textPage.findFirst({
+      where: { textId, pageNumber },
+      select: { id: true },
+    });
+    if (!page) throw new NotFoundException("Text page not found");
+
+    return this.prisma.textPhraseOccurrence.findMany({
+      where: { textId, pageNumber },
+      select: {
+        id: true,
+        startTokenPosition: true,
+        endTokenPosition: true,
+        phrase: {
+          select: {
+            id: true,
+            original: true,
+            translation: true,
+            notes: true,
+          },
+        },
+      },
+      orderBy: { startTokenPosition: "asc" },
+    });
+  }
 }
