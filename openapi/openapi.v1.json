@@ -14753,6 +14753,68 @@
         ]
       }
     },
+    "/api/admin/morph-forms/sync": {
+      "post": {
+        "description": "Creates missing MorphForm entries for all (normalized, lemmaId) pairs that have ADMIN annotations but no MorphForm. Run once after data migration.",
+        "operationId": "AdminAnnotationController_syncMorphForms",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Requires CAN_EDIT_TEXTS permission"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Backfill MorphForm records from existing ADMIN TokenAnalysis",
+        "tags": [
+          "admin/annotation"
+        ]
+      }
+    },
+    "/api/admin/morph-forms/{id}/occurrences": {
+      "get": {
+        "operationId": "AdminAnnotationController_getMorphFormOccurrences",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Requires CAN_EDIT_TEXTS permission"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get all annotated token occurrences for a MorphForm with context snippets",
+        "tags": [
+          "admin/annotation"
+        ]
+      }
+    },
     "/api/admin/morph-forms/{id}": {
       "get": {
         "operationId": "AdminAnnotationController_getMorphForm",
@@ -14859,6 +14921,43 @@
           }
         ],
         "summary": "Delete MorphForm and demote related ADMIN TokenAnalysis records",
+        "tags": [
+          "admin/annotation"
+        ]
+      }
+    },
+    "/api/admin/tokens/unannotate": {
+      "post": {
+        "description": "Deletes ADMIN-source TokenAnalysis records for the given tokens without removing the MorphForm.",
+        "operationId": "AdminAnnotationController_unannotateTokens",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnannotateTokensDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Requires CAN_EDIT_TEXTS permission"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Remove ADMIN annotation from specific tokens",
         "tags": [
           "admin/annotation"
         ]
@@ -20701,6 +20800,10 @@
         "properties": {}
       },
       "PatchMorphFormDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "UnannotateTokensDto": {
         "type": "object",
         "properties": {}
       },

@@ -115,54 +115,58 @@ export class TokenService {
       throw new NotFoundException("Token not found");
     }
 
-    // 3️⃣ кэш по (versionId, normalized): то же слово на другой странице — без повторного разбора
-    const cachedByWord = await this.cache.getByVersionNormalized(
-      token.versionId,
-      token.normalized,
-    );
-    if (cachedByWord) {
-      const result = {
-        ...cachedByWord,
-        tokenId: token.id,
-        word: token.original,
-        textId: token.version.textId,
-        translation: cachedByWord.translation ?? null,
-        tranAlt: cachedByWord.tranAlt ?? null,
-        grammar: cachedByWord.grammar ?? null,
-        baseForm: cachedByWord.baseForm ?? null,
-        tags: cachedByWord.tags ?? [],
-      };
-      if (userId && result.lemmaId) {
-        this.runInBackground(
-          this.wordProgress.registerClick(userId, result.lemmaId),
-          "registerClick(cachedByWord)",
-        );
-        this.runInBackground(this.prisma.userEvent.create({
-          data: {
-            userId,
-            type: UserEventType.CLICK_WORD,
-            metadata: {
-              tokenId: token.id,
-              lemmaId: result.lemmaId,
-              textId: token.version.textId,
-              word: token.original,
-              normalized: token.normalized,
+    // 3️⃣ кэш по (versionId, normalized): то же слово на другой странице — без повторного разбора.
+    // Пропускаем если у этого токена есть ADMIN-аннотация — она может отличаться от других вхождений.
+    const hasAdminAnnotation = token.analyses.some((a) => a.source === "ADMIN");
+    if (!hasAdminAnnotation) {
+      const cachedByWord = await this.cache.getByVersionNormalized(
+        token.versionId,
+        token.normalized,
+      );
+      if (cachedByWord) {
+        const result = {
+          ...cachedByWord,
+          tokenId: token.id,
+          word: token.original,
+          textId: token.version.textId,
+          translation: cachedByWord.translation ?? null,
+          tranAlt: cachedByWord.tranAlt ?? null,
+          grammar: cachedByWord.grammar ?? null,
+          baseForm: cachedByWord.baseForm ?? null,
+          tags: cachedByWord.tags ?? [],
+        };
+        if (userId && result.lemmaId) {
+          this.runInBackground(
+            this.wordProgress.registerClick(userId, result.lemmaId),
+            "registerClick(cachedByWord)",
+          );
+          this.runInBackground(this.prisma.userEvent.create({
+            data: {
+              userId,
+              type: UserEventType.CLICK_WORD,
+              metadata: {
+                tokenId: token.id,
+                lemmaId: result.lemmaId,
+                textId: token.version.textId,
+                word: token.original,
+                normalized: token.normalized,
+              },
             },
-          },
-        }), "userEvent.create(cachedByWord)");
-        this.runInBackground(
-          this.wordProgress.saveContext(
-            userId,
-            result.lemmaId,
-            token.version.textId,
-            token.original,
-            token.id,
-          ),
-          "saveContext(cachedByWord)",
-        );
+          }), "userEvent.create(cachedByWord)");
+          this.runInBackground(
+            this.wordProgress.saveContext(
+              userId,
+              result.lemmaId,
+              token.version.textId,
+              token.original,
+              token.id,
+            ),
+            "saveContext(cachedByWord)",
+          );
+        }
+        await this.cache.set(token.id, token.versionId, token.normalized, result);
+        return result;
       }
-      await this.cache.set(token.id, token.versionId, token.normalized, result);
-      return result;
     }
 
     const primary =
@@ -202,11 +206,22 @@ export class TokenService {
     const headword = primary?.lemma?.headwords?.[0];
     const entry = headword?.entry as { rawTranslate?: string } | undefined;
 
-    // grammarTag and form-specific translation from the MorphForm matching this token
+    // grammarTag and form-specific translation from the MorphForm matching this token.
+    // MorphForm may not exist (token annotated via batchAnnotate without global MorphForm),
+    // so fall back to a direct DB lookup when not found in the preloaded relation.
     const matchingForm = primary?.lemma?.morphForms?.find(
       (f) => f.normalized === token.normalized,
     );
     const grammarTag = matchingForm?.grammarTag ?? null;
+
+    let formTranslation: string | null = matchingForm?.translation ?? null;
+    if (formTranslation === null && hasAdminAnnotation && primary?.lemmaId) {
+      const directMorphForm = await this.prisma.morphForm.findUnique({
+        where: { normalized_lemmaId: { normalized: token.normalized, lemmaId: primary.lemmaId } },
+        select: { translation: true },
+      });
+      formTranslation = directMorphForm?.translation ?? null;
+    }
 
     // Lemma translation: from headwords → DictionaryCache[lemma] → DictionaryCache[token]
     let rawLemmaTranslation = entry?.rawTranslate ?? token.vocabulary?.translation ?? null;
@@ -220,9 +235,6 @@ export class TokenService {
       const cacheMap = new Map(cacheRows.map((r) => [r.normalized, r.translation]));
       rawLemmaTranslation = cacheMap.get(lemmaNormalized) ?? cacheMap.get(token.normalized) ?? null;
     }
-
-    // Form-specific translation (set by admin for this exact word form)
-    const formTranslation = matchingForm?.translation ?? null;
 
     // Main translation shown to user: form-specific takes priority over lemma translation
     const rawTranslation = formTranslation ?? rawLemmaTranslation;
@@ -254,7 +266,13 @@ export class TokenService {
       tags,
     };
 
-    await this.cache.set(token.id, token.versionId, token.normalized, result);
+    // ADMIN-аннотированные токены кэшируем только по tokenId —
+    // их аннотация уникальна для этого вхождения и не должна распространяться на другие.
+    if (hasAdminAnnotation) {
+      await this.cache.setByTokenIdOnly(token.id, result);
+    } else {
+      await this.cache.set(token.id, token.versionId, token.normalized, result);
+    }
     return result;
   }
 

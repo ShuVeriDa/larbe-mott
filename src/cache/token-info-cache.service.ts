@@ -53,6 +53,11 @@ export class TokenInfoCacheService {
     ]);
   }
 
+  /** Cache only by tokenId — used for ADMIN-annotated tokens whose data must not propagate to other occurrences. */
+  async setByTokenIdOnly(tokenId: string, value: TokenInfoCacheValue): Promise<void> {
+    await this.redis.set(TOKEN_KEY(tokenId), JSON.stringify(value), "EX", TTL_SECONDS);
+  }
+
   /** Remove cache entry by token ID (e.g. after admin edits the token). */
   async deleteByTokenId(tokenId: string): Promise<void> {
     await this.redis.del(TOKEN_KEY(tokenId));

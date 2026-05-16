@@ -61,6 +61,12 @@ class PatchMorphFormDto {
   translation?: string;
 }
 
+class UnannotateTokensDto {
+  @IsArray()
+  @IsString({ each: true })
+  tokenIds: string[];
+}
+
 class SearchLemmasDto {
   @IsString()
   q: string;
@@ -165,6 +171,23 @@ export class AdminAnnotationController {
   }
 
   @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
+  @Post("morph-forms/sync")
+  @ApiOperation({
+    summary: "Backfill MorphForm records from existing ADMIN TokenAnalysis",
+    description: "Creates missing MorphForm entries for all (normalized, lemmaId) pairs that have ADMIN annotations but no MorphForm. Run once after data migration.",
+  })
+  syncMorphForms() {
+    return this.service.syncMorphForms();
+  }
+
+  @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
+  @Get("morph-forms/:id/occurrences")
+  @ApiOperation({ summary: "Get all annotated token occurrences for a MorphForm with context snippets" })
+  getMorphFormOccurrences(@Param("id") id: string) {
+    return this.service.getMorphFormOccurrences(id);
+  }
+
+  @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
   @Get("morph-forms/:id")
   @ApiOperation({ summary: "Get a single MorphForm with token count" })
   getMorphForm(@Param("id") id: string) {
@@ -183,6 +206,16 @@ export class AdminAnnotationController {
   @ApiOperation({ summary: "Delete MorphForm and demote related ADMIN TokenAnalysis records" })
   deleteMorphForm(@Param("id") id: string) {
     return this.service.deleteMorphForm(id);
+  }
+
+  @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
+  @Post("tokens/unannotate")
+  @ApiOperation({
+    summary: "Remove ADMIN annotation from specific tokens",
+    description: "Deletes ADMIN-source TokenAnalysis records for the given tokens without removing the MorphForm.",
+  })
+  unannotateTokens(@Body() dto: UnannotateTokensDto) {
+    return this.service.unannotateTokens(dto.tokenIds);
   }
 
   @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
