@@ -50,9 +50,15 @@ export class OnlineDictionaryService {
 
       if (!Array.isArray(entries) || entries.length === 0) return null;
 
-      // Берём первую запись как основную
-      const entry = entries[0];
-      const allMeanings = entries.flatMap((e) => e.meanings ?? []);
+      // Приоритизируем записи с точным совпадением word === word (не wordNormalized),
+      // чтобы "ка" не возвращало данные от "къа" (у которого wordNormalized тоже "ка").
+      const exactEntries = entries.filter((e) => e.word === word);
+      const orderedEntries = exactEntries.length > 0
+        ? [...exactEntries, ...entries.filter((e) => e.word !== word)]
+        : entries;
+
+      const entry = orderedEntries[0];
+      const allMeanings = orderedEntries.flatMap((e) => e.meanings ?? []);
       if (allMeanings.length === 0) return null;
 
       // Все значения с переводом и примерами

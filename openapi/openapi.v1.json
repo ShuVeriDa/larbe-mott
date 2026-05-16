@@ -14483,6 +14483,434 @@
         ]
       }
     },
+    "/api/admin/lemmas/search": {
+      "get": {
+        "description": "Full-text search on lemma baseForm and normalized. Returns up to 20 results with baseForm, partOfSpeech, and primary dictionary translation.",
+        "operationId": "AdminAnnotationController_searchLemmas",
+        "parameters": [
+          {
+            "name": "q",
+            "required": true,
+            "in": "query",
+            "description": "Search query (min 2 chars)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "language",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "CHE",
+                "RU",
+                "AR",
+                "EN"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Requires CAN_EDIT_TEXTS permission"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Search lemmas for word annotation",
+        "tags": [
+          "admin/annotation"
+        ]
+      }
+    },
+    "/api/admin/morph-forms": {
+      "post": {
+        "description": "Creates or updates a MorphForm record that globally maps a normalized word form to a lemma. Unlike token annotation, this does not require a specific tokenId — it applies to all texts.",
+        "operationId": "AdminAnnotationController_createMorphForm",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMorphFormDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Requires CAN_EDIT_TEXTS permission"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a global MorphForm mapping",
+        "tags": [
+          "admin/annotation"
+        ]
+      },
+      "get": {
+        "operationId": "AdminAnnotationController_listMorphForms",
+        "parameters": [
+          {
+            "name": "q",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Requires CAN_EDIT_TEXTS permission"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List MorphForms with pagination and optional search",
+        "tags": [
+          "admin/annotation"
+        ]
+      }
+    },
+    "/api/admin/token-occurrences": {
+      "get": {
+        "operationId": "AdminAnnotationController_getTokenOccurrences",
+        "parameters": [
+          {
+            "name": "normalized",
+            "required": true,
+            "in": "query",
+            "description": "Normalized word form",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "textId",
+            "required": true,
+            "in": "query",
+            "description": "Text ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Requires CAN_EDIT_TEXTS permission"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get all occurrences of a word form in a text with context snippets",
+        "tags": [
+          "admin/annotation"
+        ]
+      }
+    },
+    "/api/admin/tokens/batch-annotate": {
+      "post": {
+        "description": "Annotates specific tokens with a lemma and upserts a MorphForm for future tokenizations.",
+        "operationId": "AdminAnnotationController_batchAnnotateWithMorphForm",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchAnnotateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Requires CAN_EDIT_TEXTS permission"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Batch annotate selected tokens and create a global MorphForm",
+        "tags": [
+          "admin/annotation"
+        ]
+      }
+    },
+    "/api/admin/annotated-forms": {
+      "get": {
+        "operationId": "AdminAnnotationController_getAnnotatedFormsByPage",
+        "parameters": [
+          {
+            "name": "textId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageNumber",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Requires CAN_EDIT_TEXTS permission"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get annotated word forms for a specific page (for editor highlighting)",
+        "tags": [
+          "admin/annotation"
+        ]
+      }
+    },
+    "/api/admin/morph-forms/{id}": {
+      "get": {
+        "operationId": "AdminAnnotationController_getMorphForm",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Requires CAN_EDIT_TEXTS permission"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get a single MorphForm with token count",
+        "tags": [
+          "admin/annotation"
+        ]
+      },
+      "patch": {
+        "operationId": "AdminAnnotationController_updateMorphForm",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchMorphFormDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Requires CAN_EDIT_TEXTS permission"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update MorphForm translation",
+        "tags": [
+          "admin/annotation"
+        ]
+      },
+      "delete": {
+        "operationId": "AdminAnnotationController_deleteMorphForm",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Requires CAN_EDIT_TEXTS permission"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete MorphForm and demote related ADMIN TokenAnalysis records",
+        "tags": [
+          "admin/annotation"
+        ]
+      }
+    },
+    "/api/admin/tokens/{tokenId}/annotate": {
+      "post": {
+        "description": "Links a token to the correct lemma.\n- scope=local: sets isPrimary=true on TokenAnalysis for this specific token only (fixes context-specific mis-translation, e.g. homographs).\n- scope=global: also creates a MorphForm record so the word form is recognized globally across all texts.\nInvalidates token cache in both cases.",
+        "operationId": "AdminAnnotationController_annotateToken",
+        "parameters": [
+          {
+            "name": "tokenId",
+            "required": true,
+            "in": "path",
+            "description": "Token ID (cuid)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnnotateTokenDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Requires CAN_EDIT_TEXTS permission"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Annotate token with correct lemma",
+        "tags": [
+          "admin/annotation"
+        ]
+      }
+    },
     "/api/plans": {
       "get": {
         "operationId": "SubscriptionController_getPlans",
@@ -17816,19 +18244,7 @@
       },
       "CreateMorphFormDto": {
         "type": "object",
-        "properties": {
-          "form": {
-            "type": "string",
-            "description": "Surface form of the word"
-          },
-          "grammarTag": {
-            "type": "string",
-            "description": "Grammar tag (e.g. NOM.SG, GEN.PL)"
-          }
-        },
-        "required": [
-          "form"
-        ]
+        "properties": {}
       },
       "UpdateMorphFormDto": {
         "type": "object",
@@ -20279,6 +20695,18 @@
           "startTokenPosition",
           "endTokenPosition"
         ]
+      },
+      "BatchAnnotateDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "PatchMorphFormDto": {
+        "type": "object",
+        "properties": {}
+      },
+      "AnnotateTokenDto": {
+        "type": "object",
+        "properties": {}
       },
       "StartTrialDto": {
         "type": "object",

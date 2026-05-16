@@ -47,6 +47,9 @@ import { AdminUploadsController } from "./uploads/admin-uploads.controller";
 import { PagePhrasesCacheService } from "src/cache/page-phrases-cache.service";
 import { AdminTextPhraseController } from "./text-phrase/admin-text-phrase.controller";
 import { AdminTextPhraseService } from "./text-phrase/admin-text-phrase.service";
+import { AdminAnnotationController } from "./annotation/admin-annotation.controller";
+import { AdminAnnotationService } from "./annotation/admin-annotation.service";
+import { OnlineDictionaryModule } from "src/markup-engine/online-dictionary/online-dictionary.module";
 
 @Module({
   imports: [
@@ -58,6 +61,7 @@ import { AdminTextPhraseService } from "./text-phrase/admin-text-phrase.service"
     ProgressModule,
     DictionaryModule,
     MorphologyModule,
+    OnlineDictionaryModule,
   ],
   controllers: [
     AdminController,
@@ -79,6 +83,7 @@ import { AdminTextPhraseService } from "./text-phrase/admin-text-phrase.service"
     AdminLegalController,
     AdminUploadsController,
     AdminTextPhraseController,
+    AdminAnnotationController,
   ],
   providers: [
     AdminService,
@@ -100,6 +105,7 @@ import { AdminTextPhraseService } from "./text-phrase/admin-text-phrase.service"
     AdminLogsService,
     AdminLegalService,
     AdminTextPhraseService,
+    AdminAnnotationService,
     PagePhrasesCacheService,
     PrismaService,
   ],

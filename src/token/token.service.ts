@@ -103,7 +103,7 @@ export class TokenService {
                     entry: { select: { rawTranslate: true } },
                   },
                 },
-                morphForms: { select: { form: true, normalized: true, grammarTag: true } },
+                morphForms: { select: { form: true, normalized: true, grammarTag: true, translation: true } },
               },
             },
           },
@@ -201,14 +201,39 @@ export class TokenService {
 
     const headword = primary?.lemma?.headwords?.[0];
     const entry = headword?.entry as { rawTranslate?: string } | undefined;
-    const rawTranslation = entry?.rawTranslate ?? token.vocabulary?.translation ?? null;
-    const parsedTranslation = parseTranslation(rawTranslation);
 
-    // grammarTag from the MorphForm matching this token's normalized form
+    // grammarTag and form-specific translation from the MorphForm matching this token
     const matchingForm = primary?.lemma?.morphForms?.find(
       (f) => f.normalized === token.normalized,
     );
     const grammarTag = matchingForm?.grammarTag ?? null;
+
+    // Lemma translation: from headwords → DictionaryCache[lemma] → DictionaryCache[token]
+    let rawLemmaTranslation = entry?.rawTranslate ?? token.vocabulary?.translation ?? null;
+    if (!rawLemmaTranslation && primary?.lemma) {
+      const lemmaNormalized = primary.lemma.normalized;
+      const lookupKeys = [...new Set([lemmaNormalized, token.normalized].filter(Boolean))];
+      const cacheRows = await this.prisma.dictionaryCache.findMany({
+        where: { normalized: { in: lookupKeys } },
+        select: { normalized: true, translation: true },
+      });
+      const cacheMap = new Map(cacheRows.map((r) => [r.normalized, r.translation]));
+      rawLemmaTranslation = cacheMap.get(lemmaNormalized) ?? cacheMap.get(token.normalized) ?? null;
+    }
+
+    // Form-specific translation (set by admin for this exact word form)
+    const formTranslation = matchingForm?.translation ?? null;
+
+    // Main translation shown to user: form-specific takes priority over lemma translation
+    const rawTranslation = formTranslation ?? rawLemmaTranslation;
+    const parsedTranslation = parseTranslation(rawTranslation);
+
+    // lemmaTranslation is always the lemma's own translation (shown as secondary in popup)
+    const parsedLemmaTranslation = parseTranslation(rawLemmaTranslation);
+    const lemmaTranslation = formTranslation
+      ? (parsedLemmaTranslation?.main ?? rawLemmaTranslation)
+      : null;
+
     const partOfSpeech = primary?.lemma?.partOfSpeech ?? null;
     const tags: string[] = [partOfSpeech, grammarTag].filter((t): t is string => t !== null);
 
@@ -223,6 +248,7 @@ export class TokenService {
       source: primary?.source ?? null,
       translation: parsedTranslation?.main ?? rawTranslation,
       tranAlt: parsedTranslation?.alt ?? null,
+      lemmaTranslation,
       grammar: partOfSpeech,
       baseForm: primary?.lemma?.baseForm ?? headword?.text ?? null,
       tags,
