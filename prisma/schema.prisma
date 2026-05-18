@@ -1790,7 +1790,7 @@ model UserTextHighlight {
   userId     String
   textId     String
   pageNumber Int
-  color      String // yellow | green | blue | pink
+  color      String // yellow | green | blue | pink | orange | purple | teal | red | any hex
 
   // Позиция в тексте (символьные смещения внутри contentRaw страницы)
   startOffset   Int

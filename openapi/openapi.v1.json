@@ -21004,8 +21004,13 @@
               "yellow",
               "green",
               "blue",
-              "pink"
-            ]
+              "pink",
+              "orange",
+              "purple",
+              "teal",
+              "red"
+            ],
+            "description": "Named color key or any hex string"
           },
           "startOffset": {
             "type": "number"
@@ -21035,8 +21040,13 @@
               "yellow",
               "green",
               "blue",
-              "pink"
-            ]
+              "pink",
+              "orange",
+              "purple",
+              "teal",
+              "red"
+            ],
+            "description": "Named color key or any hex string"
           }
         }
       },

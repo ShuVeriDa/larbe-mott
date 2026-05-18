@@ -1,5 +1,5 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsIn, IsInt, IsString, Min } from "class-validator";
+import { ApiProperty } from "@nestjs/swagger";
+import { IsInt, IsString, Min } from "class-validator";
 
 export class CreateHighlightDto {
   @ApiProperty()
@@ -11,8 +11,8 @@ export class CreateHighlightDto {
   @Min(1)
   pageNumber: number;
 
-  @ApiProperty({ enum: ["yellow", "green", "blue", "pink"] })
-  @IsIn(["yellow", "green", "blue", "pink"])
+  @ApiProperty({ enum: ["yellow", "green", "blue", "pink", "orange", "purple", "teal", "red"], description: "Named color key or any hex string" })
+  @IsString()
   color: string;
 
   @ApiProperty()

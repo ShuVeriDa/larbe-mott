@@ -1,9 +1,9 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
-import { IsIn, IsOptional } from "class-validator";
+import { IsOptional, IsString } from "class-validator";
 
 export class UpdateHighlightDto {
-  @ApiPropertyOptional({ enum: ["yellow", "green", "blue", "pink"] })
+  @ApiPropertyOptional({ enum: ["yellow", "green", "blue", "pink", "orange", "purple", "teal", "red"], description: "Named color key or any hex string" })
   @IsOptional()
-  @IsIn(["yellow", "green", "blue", "pink"])
+  @IsString()
   color?: string;
 }
