@@ -2660,6 +2660,139 @@
         ]
       }
     },
+    "/api/admin/texts/export": {
+      "get": {
+        "operationId": "AdminTextsController_exportTexts",
+        "parameters": [
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "description": "Search by title (case-insensitive)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "level",
+            "required": false,
+            "in": "query",
+            "description": "Filter by CEFR level",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "A",
+                "B",
+                "C"
+              ]
+            }
+          },
+          {
+            "name": "tagId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by tag UUID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "all",
+              "type": "string",
+              "enum": [
+                "all",
+                "published",
+                "draft",
+                "archived",
+                "processing",
+                "error"
+              ]
+            }
+          },
+          {
+            "name": "sortBy",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "createdAt",
+              "type": "string",
+              "enum": [
+                "createdAt",
+                "title",
+                "level",
+                "readCount"
+              ]
+            }
+          },
+          {
+            "name": "sortOrder",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "desc",
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "format",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Texts export in JSON array or CSV string."
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Forbidden. Admin role required."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Export all texts (with filters) as JSON or CSV (admin only)",
+        "tags": [
+          "admin/texts"
+        ]
+      }
+    },
     "/api/admin/texts/bulk-import": {
       "post": {
         "description": "Each item is validated against CreateTextDto and created sequentially. Partial success is supported: failures are reported per-item and do not block the rest. Tokenization is queued in background per item if autoTokenize is not set to false.",
@@ -2939,6 +3072,53 @@
           }
         ],
         "summary": "Download version data as JSON (admin only)",
+        "tags": [
+          "admin/texts"
+        ]
+      }
+    },
+    "/api/admin/texts/{id}/export": {
+      "get": {
+        "operationId": "AdminTextsController_exportTextById",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Text UUID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "format",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Text export with metadata and pages."
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Forbidden. Admin role required."
+          },
+          "404": {
+            "description": "Text not found."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Export a single text as JSON or CSV (admin only)",
         "tags": [
           "admin/texts"
         ]

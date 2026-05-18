@@ -144,6 +144,33 @@ export class AdminTextsController {
   }
 
   @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
+  @Get("export")
+  @ApiOperation({ summary: "Export all texts (with filters) as JSON or CSV (admin only)" })
+  @ApiOkResponse({ description: "Texts export in JSON array or CSV string." })
+  @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
+  async exportTexts(
+    @Query() query: AdminListTextsQueryDto,
+    @Query("format") format: "json" | "csv" = "json",
+    @Query("ids") rawIds: string | undefined,
+    @Res() res: Response,
+  ) {
+    const ids = rawIds ? rawIds.split(",").filter(Boolean) : undefined;
+    const payload = await this.adminTextService.exportTexts(query, format === "csv" ? "csv" : "json", ids);
+    const ts = new Date().toISOString().slice(0, 10);
+    if (format === "csv") {
+      const filename = `texts-export-${ts}.csv`;
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.send(payload);
+    } else {
+      const filename = `texts-export-${ts}.json`;
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.send(JSON.stringify(payload, null, 2));
+    }
+  }
+
+  @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
   @Post("bulk-import")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
@@ -260,6 +287,33 @@ export class AdminTextsController {
   // ──────────────────────────────────────────────────────────────
   // SINGLE TEXT ACTIONS
   // ──────────────────────────────────────────────────────────────
+
+  @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
+  @Get(":id/export")
+  @ApiOperation({ summary: "Export a single text as JSON or CSV (admin only)" })
+  @ApiParam({ name: "id", description: "Text UUID" })
+  @ApiOkResponse({ description: "Text export with metadata and pages." })
+  @ApiNotFoundResponse({ description: "Text not found." })
+  @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
+  async exportTextById(
+    @Param("id") textId: string,
+    @Query("format") format: "json" | "csv" = "json",
+    @Res() res: Response,
+  ) {
+    const payload = await this.adminTextService.exportTextById(textId, format === "csv" ? "csv" : "json");
+    const ts = new Date().toISOString().slice(0, 10);
+    if (format === "csv") {
+      const filename = `text-${textId}-${ts}.csv`;
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.send(payload);
+    } else {
+      const filename = `text-${textId}-${ts}.json`;
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.send(JSON.stringify(payload, null, 2));
+    }
+  }
 
   @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
   @Get(":id/unknown-words")

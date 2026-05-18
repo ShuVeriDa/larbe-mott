@@ -43,7 +43,7 @@ export class OnlineDictionaryService {
 
   private async fetchWord(word: string): Promise<LookupResult> {
     try {
-      const url = `${this.baseUrl}/dictionary/lookup/${encodeURIComponent(word)}`;
+      const url = `${this.baseUrl}/dictionary/lookup/${encodeURIComponent(word)}?strict=true`;
       const response = await axios.get<DoshamEntry[]>(url, { timeout: 5000 });
       const entries = response.data;
       console.log({ entries });
@@ -58,7 +58,8 @@ export class OnlineDictionaryService {
         : entries;
 
       const entry = orderedEntries[0];
-      const allMeanings = orderedEntries.flatMap((e) => e.meanings ?? []);
+      const meaningEntries = exactEntries.length > 0 ? exactEntries : [entry];
+      const allMeanings = meaningEntries.flatMap((e) => e.meanings ?? []);
       if (allMeanings.length === 0) return null;
 
       // Все значения с переводом и примерами

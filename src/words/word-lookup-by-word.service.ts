@@ -94,7 +94,7 @@ export class WordLookupByWordService {
     }
 
     // 3️⃣ Онлайн словарь
-    const fromOnline = await this.fromOnline(normalized, language);
+    const fromOnline = await this.fromOnline(normalizedOrRaw, language);
     if (fromOnline) {
       this.recordTranslationUsage(userId, normalized, context, "online");
       return fromOnline;

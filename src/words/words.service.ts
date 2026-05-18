@@ -40,7 +40,7 @@ export class WordsService {
       baseForm = info.baseForm ?? null;
       tags = info.tags ?? [];
     } else {
-      const byWord = await this.wordLookupByWordService.lookup(info.normalized, userId, {
+      const byWord = await this.wordLookupByWordService.lookup(info.word ?? info.normalized, userId, {
         tokenId: info.tokenId,
         textId: info.textId,
       });

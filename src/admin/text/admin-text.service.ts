@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma, ProcessingStatus, ProcessingTrigger } from "@prisma/client";
+import { BulkImportResultItem } from "src/admin/text/dto/bulk-import.dto";
 import { CreateTextDto } from "src/admin/text/dto/create.dto";
 import {
   AdminListTextsQueryDto,
@@ -13,9 +14,11 @@ import {
 } from "src/admin/text/dto/list-query.dto";
 import { ProcessTextDto } from "src/admin/text/dto/process.dto";
 import { PatchTextDto, TextStatusUpdate } from "src/admin/text/dto/update.dto";
-import { BulkImportResultItem } from "src/admin/text/dto/bulk-import.dto";
 import { extractTextFromTiptap } from "src/common/utils/extractTextFromTiptap";
-import { ProcessTextOpts, TokenizerProcessor } from "src/markup-engine/tokenizer/tokenizer.processor";
+import {
+  ProcessTextOpts,
+  TokenizerProcessor,
+} from "src/markup-engine/tokenizer/tokenizer.processor";
 import { PrismaService } from "src/prisma.service";
 import { TextProgressService } from "src/progress/text-progress/text-progress.service";
 import { WordProgressService } from "src/progress/word-progress/word-progress.service";
@@ -37,17 +40,23 @@ export class AdminTextService {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    const [total, published, archived, processingCount, errorCount, createdThisMonth] =
-      await Promise.all([
-        this.prisma.text.count(),
-        this.prisma.text.count({
-          where: { publishedAt: { not: null }, archivedAt: null },
-        }),
-        this.prisma.text.count({ where: { archivedAt: { not: null } } }),
-        this.prisma.text.count({ where: { processingStatus: "RUNNING" } }),
-        this.prisma.text.count({ where: { processingStatus: "ERROR" } }),
-        this.prisma.text.count({ where: { createdAt: { gte: startOfMonth } } }),
-      ]);
+    const [
+      total,
+      published,
+      archived,
+      processingCount,
+      errorCount,
+      createdThisMonth,
+    ] = await Promise.all([
+      this.prisma.text.count(),
+      this.prisma.text.count({
+        where: { publishedAt: { not: null }, archivedAt: null },
+      }),
+      this.prisma.text.count({ where: { archivedAt: { not: null } } }),
+      this.prisma.text.count({ where: { processingStatus: "RUNNING" } }),
+      this.prisma.text.count({ where: { processingStatus: "ERROR" } }),
+      this.prisma.text.count({ where: { createdAt: { gte: startOfMonth } } }),
+    ]);
 
     const draftCount = total - published - archived;
     const publishedPercent =
@@ -194,6 +203,237 @@ export class AdminTextService {
     });
 
     return { data, total, page, limit };
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // EXPORT LIST
+  // ────────────────────────────────────────────────────────────────────────────
+
+  async exportTexts(
+    query: AdminListTextsQueryDto,
+    format: "json" | "csv",
+    ids?: string[],
+  ) {
+    const where: Prisma.TextWhereInput = {};
+
+    if (ids?.length) {
+      where.id = { in: ids };
+    } else {
+      if (query.search?.trim()) {
+        where.title = { contains: query.search.trim(), mode: "insensitive" };
+      }
+      if (query.level) {
+        where.level = query.level;
+      }
+      if (query.tagId) {
+        where.tags = { some: { tagId: query.tagId } };
+      }
+      if (query.status && query.status !== TextStatusFilter.ALL) {
+        switch (query.status) {
+          case TextStatusFilter.PUBLISHED:
+            where.publishedAt = { not: null };
+            where.archivedAt = null;
+            break;
+          case TextStatusFilter.DRAFT:
+            where.publishedAt = null;
+            where.archivedAt = null;
+            where.processingStatus = { notIn: ["RUNNING", "ERROR"] };
+            break;
+          case TextStatusFilter.ARCHIVED:
+            where.archivedAt = { not: null };
+            break;
+          case TextStatusFilter.PROCESSING:
+            where.processingStatus = "RUNNING";
+            break;
+          case TextStatusFilter.ERROR:
+            where.processingStatus = "ERROR";
+            break;
+        }
+      }
+    }
+
+    const dir: "asc" | "desc" =
+      query.sortOrder === SortOrder.ASC ? "asc" : "desc";
+    let orderBy: Prisma.TextOrderByWithRelationInput = { createdAt: "desc" };
+    switch (query.sortBy) {
+      case TextSortBy.TITLE:
+        orderBy = { title: dir };
+        break;
+      case TextSortBy.LEVEL:
+        orderBy = { level: dir };
+        break;
+      case TextSortBy.READ_COUNT:
+        orderBy = { progress: { _count: dir } };
+        break;
+      default:
+        orderBy = { createdAt: dir };
+    }
+
+    const texts = await this.prisma.text.findMany({ where, orderBy });
+
+    if (!texts.length) {
+      return format === "csv" ? "" : [];
+    }
+
+    const textIds = texts.map((t) => t.id);
+
+    const versions = await this.prisma.textProcessingVersion.findMany({
+      where: { textId: { in: textIds } },
+      orderBy: { version: "desc" },
+      select: { id: true, textId: true },
+    });
+    const latestVersionIdByTextId = new Map<string, string>();
+    for (const v of versions) {
+      if (!latestVersionIdByTextId.has(v.textId))
+        latestVersionIdByTextId.set(v.textId, v.id);
+    }
+    const versionIds = [...latestVersionIdByTextId.values()];
+
+    const tokenCounts = await this.prisma.textToken.groupBy({
+      by: ["versionId"],
+      where: { versionId: { in: versionIds } },
+      _count: { id: true },
+    });
+    const countByVersionId = new Map(
+      tokenCounts.map((c) => [c.versionId, c._count.id]),
+    );
+
+    const tagRows = await this.prisma.textTag.findMany({
+      where: { textId: { in: textIds } },
+      include: { tag: { select: { id: true, name: true } } },
+    });
+    const tagsByTextId = new Map<string, { id: string; name: string }[]>();
+    for (const row of tagRows) {
+      if (!tagsByTextId.has(row.textId)) tagsByTextId.set(row.textId, []);
+      tagsByTextId.get(row.textId)!.push(row.tag);
+    }
+
+    const readCounts = await this.prisma.userTextProgress.groupBy({
+      by: ["textId"],
+      where: { textId: { in: textIds } },
+      _count: { userId: true },
+    });
+    const readCountByTextId = new Map(
+      readCounts.map((r) => [r.textId, r._count.userId]),
+    );
+
+    const data = texts.map((t) => {
+      const versionId = latestVersionIdByTextId.get(t.id);
+      const tokenCount = versionId ? (countByVersionId.get(versionId) ?? 0) : 0;
+      return {
+        id: t.id,
+        title: t.title,
+        language: t.language,
+        level: t.level,
+        status: t.archivedAt
+          ? "archived"
+          : t.publishedAt
+            ? "published"
+            : "draft",
+        author: t.author,
+        source: t.source,
+        processingStatus: t.processingStatus,
+        tokenCount,
+        readCount: readCountByTextId.get(t.id) ?? 0,
+        tags: (tagsByTextId.get(t.id) ?? []).map((tag) => tag.name).join(", "),
+        publishedAt: t.publishedAt?.toISOString() ?? null,
+        archivedAt: t.archivedAt?.toISOString() ?? null,
+        createdAt: t.createdAt.toISOString(),
+      };
+    });
+
+    if (format === "json") return data;
+
+    const columns = [
+      "id",
+      "title",
+      "language",
+      "level",
+      "status",
+      "author",
+      "source",
+      "processingStatus",
+      "tokenCount",
+      "readCount",
+      "tags",
+      "publishedAt",
+      "archivedAt",
+      "createdAt",
+    ] as const;
+
+    const escape = (v: unknown): string => {
+      if (v == null) return "";
+      const s = String(v);
+      if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+        return `"${s.replace(/"/g, '""')}"`;
+      }
+      return s;
+    };
+
+    const header = columns.join(",");
+    const rows = data.map((row) =>
+      columns.map((col) => escape(row[col])).join(","),
+    );
+    return [header, ...rows].join("\n");
+  }
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // EXPORT SINGLE TEXT
+  // ────────────────────────────────────────────────────────────────────────────
+
+  async exportTextById(textId: string, format: "json" | "csv") {
+    const text = await this.prisma.text.findUnique({
+      where: { id: textId },
+      include: {
+        pages: { orderBy: { pageNumber: "asc" } },
+        tags: { include: { tag: { select: { id: true, name: true } } } },
+      },
+    });
+    if (!text) throw new NotFoundException("Text not found");
+
+    if (format === "json") {
+      return {
+        id: text.id,
+        title: text.title,
+        language: text.language,
+        level: text.level,
+        status: text.archivedAt
+          ? "archived"
+          : text.publishedAt
+            ? "published"
+            : "draft",
+        author: text.author,
+        source: text.source,
+        description: text.description,
+        imageUrl: text.imageUrl,
+        tags: text.tags.map((t) => t.tag.name),
+        publishedAt: text.publishedAt?.toISOString() ?? null,
+        archivedAt: text.archivedAt?.toISOString() ?? null,
+        createdAt: text.createdAt.toISOString(),
+        updatedAt: text.updatedAt.toISOString(),
+        pages: text.pages.map((p) => ({
+          pageNumber: p.pageNumber,
+          title: p.title,
+          contentRaw: p.contentRaw,
+          contentRich: p.contentRich,
+        })),
+      };
+    }
+
+    const escape = (v: unknown): string => {
+      if (v == null) return "";
+      const s = String(v);
+      if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+        return `"${s.replace(/"/g, '""')}"`;
+      }
+      return s;
+    };
+
+    const header = "pageNumber,pageTitle,content";
+    const rows = text.pages.map((p) =>
+      [escape(p.pageNumber), escape(p.title), escape(p.contentRaw)].join(","),
+    );
+    return [header, ...rows].join("\n");
   }
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -372,9 +612,12 @@ export class AdminTextService {
       if (dto.imageUrl !== undefined) {
         textData.imageUrl = dto.imageUrl === null ? null : dto.imageUrl;
       }
-      if (dto.autoTokenizeOnSave !== undefined) textData.autoTokenizeOnSave = dto.autoTokenizeOnSave;
-      if (dto.useNormalization !== undefined) textData.useNormalization = dto.useNormalization;
-      if (dto.useMorphAnalysis !== undefined) textData.useMorphAnalysis = dto.useMorphAnalysis;
+      if (dto.autoTokenizeOnSave !== undefined)
+        textData.autoTokenizeOnSave = dto.autoTokenizeOnSave;
+      if (dto.useNormalization !== undefined)
+        textData.useNormalization = dto.useNormalization;
+      if (dto.useMorphAnalysis !== undefined)
+        textData.useMorphAnalysis = dto.useMorphAnalysis;
 
       if (dto.status !== undefined) {
         if (dto.status === TextStatusUpdate.PUBLISHED) {
@@ -497,7 +740,11 @@ export class AdminTextService {
   // PROCESS (start new processing run)
   // ────────────────────────────────────────────────────────────────────────────
 
-  async startProcessing(textId: string, dto: ProcessTextDto, initiatorId: string) {
+  async startProcessing(
+    textId: string,
+    dto: ProcessTextDto,
+    initiatorId: string,
+  ) {
     const text = await this.prisma.text.findUnique({ where: { id: textId } });
     if (!text) throw new NotFoundException("Text not found");
 
@@ -509,7 +756,9 @@ export class AdminTextService {
       label: "токенизация",
     };
 
-    void this.tokenizerProcessor.processText(textId, opts).catch(() => undefined);
+    void this.tokenizerProcessor
+      .processText(textId, opts)
+      .catch(() => undefined);
 
     return { textId, started: true };
   }
@@ -609,7 +858,8 @@ export class AdminTextService {
     const totalAll = counters.reduce((s, c) => s + c._count._all, 0);
     const successCountAll =
       counters.find((c) => c.status === "COMPLETED")?._count._all ?? 0;
-    const errorCountAll = counters.find((c) => c.status === "ERROR")?._count._all ?? 0;
+    const errorCountAll =
+      counters.find((c) => c.status === "ERROR")?._count._all ?? 0;
 
     const versions = await this.prisma.textProcessingVersion.findMany({
       where: { textId, ...(statusFilter ? { status: statusFilter } : {}) },
@@ -649,12 +899,19 @@ export class AdminTextService {
       }),
     ]);
 
-    const countByVersionId = new Map(tokenCounts.map((c) => [c.versionId, c._count.id]));
-    const unknownByVersionId = new Map(unknownCounts.map((c) => [c.versionId, c._count.id]));
+    const countByVersionId = new Map(
+      tokenCounts.map((c) => [c.versionId, c._count.id]),
+    );
+    const unknownByVersionId = new Map(
+      unknownCounts.map((c) => [c.versionId, c._count.id]),
+    );
     const pageCountByVersionId = new Map<string, number>();
     for (const row of pageCounts) {
       if (!row.versionId) continue;
-      pageCountByVersionId.set(row.versionId, (pageCountByVersionId.get(row.versionId) ?? 0) + 1);
+      pageCountByVersionId.set(
+        row.versionId,
+        (pageCountByVersionId.get(row.versionId) ?? 0) + 1,
+      );
     }
 
     return {
@@ -671,7 +928,10 @@ export class AdminTextService {
         isCurrent: v.isCurrent,
         trigger: v.trigger,
         initiator: v.initiator
-          ? { id: v.initiator.id, name: `${v.initiator.name} ${v.initiator.surname}`.trim() }
+          ? {
+              id: v.initiator.id,
+              name: `${v.initiator.name} ${v.initiator.surname}`.trim(),
+            }
           : null,
         tokenCount: countByVersionId.get(v.id) ?? 0,
         unknownCount: unknownByVersionId.get(v.id) ?? 0,
@@ -721,8 +981,12 @@ export class AdminTextService {
       }),
     ]);
 
-    const tokenCountByPageId = new Map(tokensByPage.map((r) => [r.pageId!, r._count.id]));
-    const wordCountByPageId = new Map(wordsByPage.map((r) => [r.pageId!, r._count.id]));
+    const tokenCountByPageId = new Map(
+      tokensByPage.map((r) => [r.pageId!, r._count.id]),
+    );
+    const wordCountByPageId = new Map(
+      wordsByPage.map((r) => [r.pageId!, r._count.id]),
+    );
 
     const pageStats = pages.map((p) => {
       const tokenCount = tokenCountByPageId.get(p.id) ?? 0;
@@ -756,7 +1020,10 @@ export class AdminTextService {
       isCurrent: version.isCurrent,
       trigger: version.trigger,
       initiator: version.initiator
-        ? { id: version.initiator.id, name: `${version.initiator.name} ${version.initiator.surname}`.trim() }
+        ? {
+            id: version.initiator.id,
+            name: `${version.initiator.name} ${version.initiator.surname}`.trim(),
+          }
         : null,
       durationMs: version.durationMs,
       errorMessage: version.errorMessage,
@@ -1038,7 +1305,9 @@ export class AdminTextService {
       await tx.tokenAnalysis.deleteMany({
         where: { token: { versionId: { in: versionIds } } },
       });
-      await tx.textToken.deleteMany({ where: { versionId: { in: versionIds } } });
+      await tx.textToken.deleteMany({
+        where: { versionId: { in: versionIds } },
+      });
       await tx.textProcessingVersion.deleteMany({ where: { textId } });
       await tx.textPage.deleteMany({ where: { textId } });
       await tx.userTextProgress.deleteMany({ where: { textId } });
