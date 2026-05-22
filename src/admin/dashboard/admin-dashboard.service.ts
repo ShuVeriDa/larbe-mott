@@ -607,13 +607,16 @@ export class AdminDashboardService {
 
   private async getAiCacheSummary() {
     const { AiCacheStatus } = await import("@prisma/client");
-    const [pending, approvedThisWeek, topWords] = await Promise.all([
+    const [pending, approvedThisWeek, approvedNotExported, topWords] = await Promise.all([
       this.prisma.aiTranslationCache.count({ where: { status: AiCacheStatus.PENDING } }),
       this.prisma.aiTranslationCache.count({
         where: {
           status: AiCacheStatus.APPROVED,
           updatedAt: { gte: new Date(Date.now() - 7 * 24 * 3600 * 1000) },
         },
+      }),
+      this.prisma.aiTranslationCache.count({
+        where: { status: AiCacheStatus.APPROVED, exportedAt: null },
       }),
       this.prisma.aiTranslationCache.findMany({
         where: { status: { in: [AiCacheStatus.PENDING, AiCacheStatus.APPROVED] } },
@@ -622,7 +625,7 @@ export class AdminDashboardService {
         select: { lemma: true, requestCount: true, translation: true },
       }),
     ]);
-    return { pending, approvedThisWeek, topWords };
+    return { pending, approvedThisWeek, approvedNotExported, topWords };
   }
 
   // ─── Feature flags ─────────────────────────────────────────────────────────

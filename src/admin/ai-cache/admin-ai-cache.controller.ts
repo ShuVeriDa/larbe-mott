@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  ParseIntPipe,
   ParseUUIDPipe,
   Post,
   Query,
@@ -22,6 +23,7 @@ import { AiCacheStatus } from "@prisma/client";
 import { PermissionCode } from "@prisma/client";
 import { AdminPermission } from "src/auth/decorators/admin-permission.decorator";
 import { User } from "src/user/decorators/user.decorator";
+import { DictionaryExportService } from "src/dictionary-export/dictionary-export.service";
 import { AdminAiCacheService } from "./admin-ai-cache.service";
 
 @ApiTags("admin/ai-cache")
@@ -30,7 +32,10 @@ import { AdminAiCacheService } from "./admin-ai-cache.service";
 @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
 @Controller("admin/ai-cache")
 export class AdminAiCacheController {
-  constructor(private readonly adminAiCacheService: AdminAiCacheService) {}
+  constructor(
+    private readonly adminAiCacheService: AdminAiCacheService,
+    private readonly dictionaryExportService: DictionaryExportService,
+  ) {}
 
   @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
   @Get("stats")
@@ -91,5 +96,21 @@ export class AdminAiCacheController {
   @ApiParam({ name: "id", description: "Lemma string to translate" })
   getAiHint(@Param("id") lemma: string, @User("id") userId: string) {
     return this.adminAiCacheService.getAiHint(userId, lemma);
+  }
+
+  @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
+  @Post("export-to-dictionary")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Manually export all approved AI cache entries to Dictionary" })
+  @ApiOkResponse({ description: "{ created, skipped, total, errors }" })
+  exportToDictionary() {
+    return this.dictionaryExportService.exportApproved("manual");
+  }
+
+  @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
+  @Get("export-runs")
+  @ApiOperation({ summary: "List last dictionary export runs" })
+  getExportRuns(@Query("limit", new ParseIntPipe({ optional: true })) limit?: number) {
+    return this.dictionaryExportService.getExportRuns(limit);
   }
 }

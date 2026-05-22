@@ -35,6 +35,7 @@ import { TextModule } from "./text/text.module";
 import { TokenModule } from "./token/token.module";
 import { UserModule } from "./user/user.module";
 import { WordsModule } from "./words/words.module";
+import { DictionaryExportModule } from "./dictionary-export/dictionary-export.module";
 import { envValidationSchema } from "./config/env.validation";
 
 @Module({
@@ -87,6 +88,7 @@ import { envValidationSchema } from "./config/env.validation";
     LegalModule,
     PageBookmarkModule,
     AiTranslationModule,
+    DictionaryExportModule,
   ],
   controllers: [],
   providers: [

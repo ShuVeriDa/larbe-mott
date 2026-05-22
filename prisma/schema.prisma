@@ -1884,6 +1884,8 @@ model AiTranslationCache {
   thumbsUp         Int          @default(0)
   thumbsDown       Int          @default(0)
 
+  exportedAt DateTime? // null = not yet exported to dictionary
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1891,7 +1893,25 @@ model AiTranslationCache {
   @@index([status])
   @@index([requestCount])
   @@index([lemma])
+  @@index([exportedAt])
+  @@index([status, exportedAt])
   @@map("ai_translation_cache")
+}
+
+model DictionaryExportRun {
+  id          String   @id @default(uuid())
+  triggeredBy String   @default("cron") // "cron" | "manual"
+  startedAt   DateTime @default(now())
+  finishedAt  DateTime?
+  created     Int      @default(0)
+  skipped     Int      @default(0)
+  errors      Int      @default(0)
+  total       Int      @default(0)
+  status      String   @default("running") // "running" | "ok" | "error"
+  errorMessage String?
+
+  @@index([startedAt])
+  @@map("dictionary_export_run")
 }
 
 //////////////////////////////////////////////////////

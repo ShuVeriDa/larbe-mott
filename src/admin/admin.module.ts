@@ -52,6 +52,7 @@ import { AdminAnnotationService } from "./annotation/admin-annotation.service";
 import { OnlineDictionaryModule } from "src/markup-engine/online-dictionary/online-dictionary.module";
 import { AdminAiCacheController } from "./ai-cache/admin-ai-cache.controller";
 import { AdminAiCacheService } from "./ai-cache/admin-ai-cache.service";
+import { DictionaryExportService } from "src/dictionary-export/dictionary-export.service";
 
 @Module({
   imports: [
@@ -110,6 +111,7 @@ import { AdminAiCacheService } from "./ai-cache/admin-ai-cache.service";
     AdminTextPhraseService,
     AdminAnnotationService,
     AdminAiCacheService,
+    DictionaryExportService,
     PagePhrasesCacheService,
     PrismaService,
   ],

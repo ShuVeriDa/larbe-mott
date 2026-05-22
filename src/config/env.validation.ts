@@ -27,6 +27,9 @@ export const envValidationSchema = Joi.object({
 
   DOSHAM_API_URL: Joi.string().uri().default("http://localhost:9666/api"),
 
+  DICTIONARY_API_URL: Joi.string().uri().default("http://localhost:9666/api"),
+  DICTIONARY_API_KEY: Joi.string().allow("", null).optional(),
+
   // Mail / password reset
   // MAIL_PROVIDER=log оставит письмо только в логах (для dev). resend — реальная отправка через Resend API.
   MAIL_PROVIDER: Joi.string().valid("log", "resend").default("log"),

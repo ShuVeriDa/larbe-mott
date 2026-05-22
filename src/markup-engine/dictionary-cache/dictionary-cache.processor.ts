@@ -1,10 +1,12 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { AnalysisSource, Prisma } from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
 import { DictionaryCacheService } from "./dictionary-cache.service";
 
 @Injectable()
 export class DictionaryCacheProcessor {
+  private readonly logger = new Logger(DictionaryCacheProcessor.name);
+
   constructor(
     private prisma: PrismaService,
     private cacheService: DictionaryCacheService,
@@ -25,6 +27,8 @@ export class DictionaryCacheProcessor {
     const words = [...new Set(tokens.map((t) => t.normalized))];
 
     const cacheMap = await this.cacheService.findMap(words);
+    this.logger.log(`DictionaryCache: ${words.length} unique words, ${cacheMap.size} found in cache. Sample: ${words.slice(0,10).join(', ')}`);
+    this.logger.log(`DictionaryCache hits: ${[...cacheMap.keys()].join(', ')}`);
 
     const analyses: Prisma.TokenAnalysisCreateManyInput[] = [];
 

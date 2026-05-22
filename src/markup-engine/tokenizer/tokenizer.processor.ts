@@ -41,6 +41,7 @@ export class TokenizerProcessor {
     } = opts;
 
     const startMs = Date.now();
+    console.log(`[TOKENIZER] processText started: textId=${textId}, useMorphAnalysis=${useMorphAnalysis}`);
     const logBuffer: { level: LogLevel; message: string; timestamp: Date }[] = [];
     const log = (level: LogLevel, message: string) =>
       logBuffer.push({ level, message, timestamp: new Date() });
@@ -132,12 +133,21 @@ export class TokenizerProcessor {
         log("INFO", "Запуск морфологического анализа");
 
         await this.dictionaryProcessor.analyzeVersion(version.id);
+        const afterDict = await this.prisma.textToken.count({ where: { versionId: version.id, analyses: { none: {} } } });
+        log("INFO", `После DictionaryProcessor: без анализа ${afterDict} токенов`);
+        console.log(`[TOKENIZER] После DictionaryProcessor: без анализа ${afterDict} токенов`);
         await this._updateProgress(textId, version.id, 55);
 
         await this.dictionaryCacheProcessor.analyzeVersion(version.id);
+        const afterCache = await this.prisma.textToken.count({ where: { versionId: version.id, analyses: { none: {} } } });
+        log("INFO", `После DictionaryCacheProcessor: без анализа ${afterCache} токенов`);
+        console.log(`[TOKENIZER] После DictionaryCacheProcessor: без анализа ${afterCache} токенов`);
         await this._updateProgress(textId, version.id, 70);
 
         await this.onlineDictionaryProcessor.analyzeVersion(version.id);
+        const afterOnline = await this.prisma.textToken.count({ where: { versionId: version.id, analyses: { none: {} } } });
+        log("INFO", `После OnlineDictionaryProcessor: без анализа ${afterOnline} токенов`);
+        console.log(`[TOKENIZER] После OnlineDictionaryProcessor: без анализа ${afterOnline} токенов`);
         await this._updateProgress(textId, version.id, 80);
 
         await this.unknownWordProcessor.analyzeVersion(version.id);

@@ -17,10 +17,14 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
+import { Throttle } from "@nestjs/throttler";
 import { Auth } from "src/auth/decorators/auth.decorator";
 import { User } from "src/user/decorators/user.decorator";
 import { AiTranslationService } from "./ai-translation.service";
+import { BatchTranslateDto } from "./dto/batch-translate.dto";
+import { RefinePhraseDto } from "./dto/refine-phrase.dto";
 import { SaveGeminiKeyDto } from "./dto/save-gemini-key.dto";
+import { SaveRefinementDto } from "./dto/save-refinement.dto";
 import { TranslatePhraseDto } from "./dto/translate-phrase.dto";
 import { TranslateWordDto } from "./dto/translate-word.dto";
 import { VoteCacheDto } from "./dto/vote-cache.dto";
@@ -60,6 +64,7 @@ export class AiTranslationController {
     return this.aiTranslationService.saveGeminiKey(userId, null);
   }
 
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
   @Post("key/verify")
   @Auth()
   @HttpCode(HttpStatus.OK)
@@ -71,6 +76,7 @@ export class AiTranslationController {
 
   // ─── Translation ─────────────────────────────────────────────────────────────
 
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @Post("translate/word")
   @Auth()
   @HttpCode(HttpStatus.OK)
@@ -79,6 +85,7 @@ export class AiTranslationController {
     return this.aiTranslationService.translateWord(userId, dto);
   }
 
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Post("translate/phrase")
   @Auth()
   @HttpCode(HttpStatus.OK)
@@ -87,8 +94,36 @@ export class AiTranslationController {
     return this.aiTranslationService.translatePhrase(userId, dto);
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post("translate/batch")
+  @Auth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Batch-translate multiple Chechen words via Gemini (one request)" })
+  batchTranslate(@User("id") userId: string, @Body() dto: BatchTranslateDto) {
+    return this.aiTranslationService.batchTranslate(userId, dto);
+  }
+
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @Post("translate/phrase/refine")
+  @Auth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Refine a phrase translation with a user hint" })
+  refinePhrase(@User("id") userId: string, @Body() dto: RefinePhraseDto) {
+    return this.aiTranslationService.refinePhrase(userId, dto);
+  }
+
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @Post("cache/save-refinement")
+  @Auth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Save a refined word translation to AI cache (PENDING)" })
+  saveRefinement(@Body() dto: SaveRefinementDto) {
+    return this.aiTranslationService.saveRefinement(dto);
+  }
+
   // ─── Voting ──────────────────────────────────────────────────────────────────
 
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @Post("cache/:id/vote")
   @Auth()
   @HttpCode(HttpStatus.OK)

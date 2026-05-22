@@ -1,4 +1,4 @@
-const PUNCT_REGEX = /[«»"().,!?;:—]/g;
+const PUNCT_REGEX = /[«»"().,!?;:—ʰᴴʼ]/g;
 
 export function normalizeToken(word: string): string {
   if (!word) return "";
@@ -10,10 +10,6 @@ export function normalizeToken(word: string): string {
 
   // remove punctuation
   normalized = normalized.replace(PUNCT_REGEX, "");
-
-  // normalize diacritics
-  normalized = normalized.normalize("NFD");
-  normalized = normalized.replace(/[\u0300-\u036f]/g, "");
 
   // collapse spaces
   normalized = normalized.replace(/\s+/g, " ");

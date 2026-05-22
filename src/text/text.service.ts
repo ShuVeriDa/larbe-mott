@@ -408,6 +408,7 @@ export class TextService {
       where: { tokenId: { in: tokens.map((t) => t.id) }, isPrimary: true },
       select: { tokenId: true, lemmaId: true },
     });
+    const analyzedTokenIds = new Set(tokenAnalyses.map((a) => a.tokenId));
     const lemmaIdByTokenId = new Map(
       tokenAnalyses
         .filter((a): a is typeof a & { lemmaId: string } => a.lemmaId !== null)
@@ -450,7 +451,8 @@ export class TextService {
     const tokensWithStatus = tokens.map((t) => {
       const lemmaId = lemmaIdByTokenId.get(t.id) ?? null;
       const userStatus = lemmaId ? (userStatusByLemmaId.get(lemmaId) ?? null) : null;
-      return { ...t, lemmaId, userStatus };
+      const isKnown = lemmaId !== null || analyzedTokenIds.has(t.id);
+      return { ...t, lemmaId, userStatus, isKnown };
     });
 
     return {

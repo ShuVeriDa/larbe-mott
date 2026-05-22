@@ -15419,6 +15419,67 @@
         ]
       }
     },
+    "/api/admin/ai-cache/export-to-dictionary": {
+      "post": {
+        "operationId": "AdminAiCacheController_exportToDictionary",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "{ created, skipped, total, errors }"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Forbidden. Admin role required."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Manually export all approved AI cache entries to Dictionary",
+        "tags": [
+          "admin/ai-cache"
+        ]
+      }
+    },
+    "/api/admin/ai-cache/export-runs": {
+      "get": {
+        "operationId": "AdminAiCacheController_getExportRuns",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Forbidden. Admin role required."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List last dictionary export runs",
+        "tags": [
+          "admin/ai-cache"
+        ]
+      }
+    },
     "/api/plans": {
       "get": {
         "operationId": "SubscriptionController_getPlans",
@@ -17458,6 +17519,105 @@
           }
         ],
         "summary": "Translate a Chechen phrase via Gemini (not cached)",
+        "tags": [
+          "ai-translation"
+        ]
+      }
+    },
+    "/api/ai-translation/translate/batch": {
+      "post": {
+        "operationId": "AiTranslationController_batchTranslate",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchTranslateDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Batch-translate multiple Chechen words via Gemini (one request)",
+        "tags": [
+          "ai-translation"
+        ]
+      }
+    },
+    "/api/ai-translation/translate/phrase/refine": {
+      "post": {
+        "operationId": "AiTranslationController_refinePhrase",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefinePhraseDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Refine a phrase translation with a user hint",
+        "tags": [
+          "ai-translation"
+        ]
+      }
+    },
+    "/api/ai-translation/cache/save-refinement": {
+      "post": {
+        "operationId": "AiTranslationController_saveRefinement",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveRefinementDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Save a refined word translation to AI cache (PENDING)",
         "tags": [
           "ai-translation"
         ]
@@ -22003,11 +22163,56 @@
           "phrase": {
             "type": "string",
             "description": "The Chechen phrase to translate"
+          },
+          "contextSentence": {
+            "type": "string",
+            "description": "Surrounding sentence for context"
           }
         },
         "required": [
           "phrase"
         ]
+      },
+      "BatchTranslateDto": {
+        "type": "object",
+        "properties": {
+          "words": {
+            "description": "Unique Chechen words to translate",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "words"
+        ]
+      },
+      "RefinePhraseDto": {
+        "type": "object",
+        "properties": {
+          "phrase": {
+            "type": "string",
+            "description": "The original Chechen phrase"
+          },
+          "previousTranslation": {
+            "type": "string",
+            "description": "The first translation to refine"
+          },
+          "hint": {
+            "type": "string",
+            "description": "User hint about the correct meaning"
+          }
+        },
+        "required": [
+          "phrase",
+          "previousTranslation",
+          "hint"
+        ]
+      },
+      "SaveRefinementDto": {
+        "type": "object",
+        "properties": {}
       },
       "VoteCacheDto": {
         "type": "object",

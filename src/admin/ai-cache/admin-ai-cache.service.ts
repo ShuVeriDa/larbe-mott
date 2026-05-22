@@ -14,34 +14,44 @@ export class AdminAiCacheService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getStats() {
-    const [pending, approved, rejected, topWords] = await Promise.all([
-      this.prisma.aiTranslationCache.count({
-        where: { status: AiCacheStatus.PENDING },
-      }),
-      this.prisma.aiTranslationCache.count({
-        where: {
-          status: AiCacheStatus.APPROVED,
-          updatedAt: { gte: new Date(Date.now() - 7 * 24 * 3600 * 1000) },
-        },
-      }),
-      this.prisma.aiTranslationCache.count({
-        where: { status: AiCacheStatus.REJECTED },
-      }),
-      this.prisma.aiTranslationCache.findMany({
-        where: {
-          status: { in: [AiCacheStatus.PENDING, AiCacheStatus.APPROVED] },
-        },
-        orderBy: { requestCount: "desc" },
-        take: 10,
-        select: {
-          lemma: true,
-          requestCount: true,
-          translation: true,
-          status: true,
-        },
-      }),
-    ]);
-    return { pending, approvedThisWeek: approved, rejected, topWords };
+    const [pending, approved, rejected, approvedNotExported, topWords] =
+      await Promise.all([
+        this.prisma.aiTranslationCache.count({
+          where: { status: AiCacheStatus.PENDING },
+        }),
+        this.prisma.aiTranslationCache.count({
+          where: {
+            status: AiCacheStatus.APPROVED,
+            updatedAt: { gte: new Date(Date.now() - 7 * 24 * 3600 * 1000) },
+          },
+        }),
+        this.prisma.aiTranslationCache.count({
+          where: { status: AiCacheStatus.REJECTED },
+        }),
+        this.prisma.aiTranslationCache.count({
+          where: { status: AiCacheStatus.APPROVED, exportedAt: null },
+        }),
+        this.prisma.aiTranslationCache.findMany({
+          where: {
+            status: { in: [AiCacheStatus.PENDING, AiCacheStatus.APPROVED] },
+          },
+          orderBy: { requestCount: "desc" },
+          take: 10,
+          select: {
+            lemma: true,
+            requestCount: true,
+            translation: true,
+            status: true,
+          },
+        }),
+      ]);
+    return {
+      pending,
+      approvedThisWeek: approved,
+      rejected,
+      approvedNotExported,
+      topWords,
+    };
   }
 
   async list(query: FetchAiCacheQuery) {
@@ -62,6 +72,22 @@ export class AdminAiCacheService {
         orderBy: { requestCount: "desc" },
         skip,
         take: limit,
+        select: {
+          id: true,
+          lemma: true,
+          cacheType: true,
+          translation: true,
+          transliteration: true,
+          partOfSpeech: true,
+          example: true,
+          status: true,
+          requestCount: true,
+          thumbsUp: true,
+          thumbsDown: true,
+          exportedAt: true,
+          createdAt: true,
+          updatedAt: true,
+        },
       }),
       this.prisma.aiTranslationCache.count({ where }),
     ]);
@@ -118,6 +144,8 @@ export class AdminAiCacheService {
 
     const { decryptApiKey } =
       await import("../../ai-translation/encryption.util.js");
+    const { geminiUrl } =
+      await import("../../ai-translation/gemini.util.js");
     const apiKey = decryptApiKey(user.geminiApiKeyEncrypted);
 
     const prompt = `You are a Chechen-Russian language assistant. Translate the Chechen word "${lemma}" into Russian. Return JSON:
@@ -127,7 +155,7 @@ export class AdminAiCacheService {
 - "example": string (short usage example: "Chechen — Russian")
 Return only valid JSON.`;
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${apiKey}`;
+    const url = geminiUrl(apiKey);
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
