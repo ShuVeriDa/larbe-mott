@@ -15190,6 +15190,235 @@
         ]
       }
     },
+    "/api/admin/ai-cache/stats": {
+      "get": {
+        "operationId": "AdminAiCacheController_getStats",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "{ pending, approvedThisWeek, rejected, topWords }"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Forbidden. Admin role required."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "AI translation cache stats",
+        "tags": [
+          "admin/ai-cache"
+        ]
+      }
+    },
+    "/api/admin/ai-cache": {
+      "get": {
+        "operationId": "AdminAiCacheController_list",
+        "parameters": [
+          {
+            "name": "status",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Forbidden. Admin role required."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List AI cache entries",
+        "tags": [
+          "admin/ai-cache"
+        ]
+      }
+    },
+    "/api/admin/ai-cache/{id}/approve": {
+      "post": {
+        "operationId": "AdminAiCacheController_approve",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "AI cache entry UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Forbidden. Admin role required."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Approve an AI cache entry",
+        "tags": [
+          "admin/ai-cache"
+        ]
+      }
+    },
+    "/api/admin/ai-cache/{id}/reject": {
+      "post": {
+        "operationId": "AdminAiCacheController_reject",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "AI cache entry UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Forbidden. Admin role required."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Reject an AI cache entry",
+        "tags": [
+          "admin/ai-cache"
+        ]
+      }
+    },
+    "/api/admin/ai-cache/{id}": {
+      "delete": {
+        "operationId": "AdminAiCacheController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "AI cache entry UUID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Forbidden. Admin role required."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete an AI cache entry",
+        "tags": [
+          "admin/ai-cache"
+        ]
+      }
+    },
+    "/api/admin/ai-cache/{id}/ai-hint": {
+      "post": {
+        "operationId": "AdminAiCacheController_getAiHint",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Lemma string to translate",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Forbidden. Admin role required."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get AI translation hint for an entry using admin Gemini key",
+        "tags": [
+          "admin/ai-cache"
+        ]
+      }
+    },
     "/api/plans": {
       "get": {
         "operationId": "SubscriptionController_getPlans",
@@ -17065,6 +17294,214 @@
         ],
         "tags": [
           "page-bookmarks"
+        ]
+      }
+    },
+    "/api/ai-translation/key/status": {
+      "get": {
+        "operationId": "AiTranslationController_getKeyStatus",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "{ hasKey: boolean }"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Check if user has a Gemini API key saved",
+        "tags": [
+          "ai-translation"
+        ]
+      }
+    },
+    "/api/ai-translation/key": {
+      "patch": {
+        "operationId": "AiTranslationController_saveKey",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveGeminiKeyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "{ hasKey: boolean }"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Save or delete Gemini API key",
+        "tags": [
+          "ai-translation"
+        ]
+      },
+      "delete": {
+        "operationId": "AiTranslationController_deleteKey",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "{ hasKey: false }"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete saved Gemini API key",
+        "tags": [
+          "ai-translation"
+        ]
+      }
+    },
+    "/api/ai-translation/key/verify": {
+      "post": {
+        "operationId": "AiTranslationController_verifyKey",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "{ valid: boolean, error?: string }"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Verify the saved Gemini API key with a test request",
+        "tags": [
+          "ai-translation"
+        ]
+      }
+    },
+    "/api/ai-translation/translate/word": {
+      "post": {
+        "operationId": "AiTranslationController_translateWord",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TranslateWordDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Translate a Chechen word via Gemini (with cache)",
+        "tags": [
+          "ai-translation"
+        ]
+      }
+    },
+    "/api/ai-translation/translate/phrase": {
+      "post": {
+        "operationId": "AiTranslationController_translatePhrase",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TranslatePhraseDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Translate a Chechen phrase via Gemini (not cached)",
+        "tags": [
+          "ai-translation"
+        ]
+      }
+    },
+    "/api/ai-translation/cache/{id}/vote": {
+      "post": {
+        "operationId": "AiTranslationController_vote",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoteCacheDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Vote on a cached AI translation (thumbs up/down)",
+        "tags": [
+          "ai-translation"
         ]
       }
     }
@@ -21534,6 +21971,58 @@
       "CreatePageBookmarkDto": {
         "type": "object",
         "properties": {}
+      },
+      "SaveGeminiKeyDto": {
+        "type": "object",
+        "properties": {
+          "apiKey": {
+            "type": "object",
+            "description": "Gemini API key. Send empty string or null to delete."
+          }
+        }
+      },
+      "TranslateWordDto": {
+        "type": "object",
+        "properties": {
+          "word": {
+            "type": "string",
+            "description": "The Chechen word (lemma/surface form) to translate"
+          },
+          "contextSentence": {
+            "type": "string",
+            "description": "Context sentence containing the word"
+          }
+        },
+        "required": [
+          "word"
+        ]
+      },
+      "TranslatePhraseDto": {
+        "type": "object",
+        "properties": {
+          "phrase": {
+            "type": "string",
+            "description": "The Chechen phrase to translate"
+          }
+        },
+        "required": [
+          "phrase"
+        ]
+      },
+      "VoteCacheDto": {
+        "type": "object",
+        "properties": {
+          "vote": {
+            "type": "string",
+            "enum": [
+              "up",
+              "down"
+            ]
+          }
+        },
+        "required": [
+          "vote"
+        ]
       }
     }
   }

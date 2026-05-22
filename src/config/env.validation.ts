@@ -38,4 +38,6 @@ export const envValidationSchema = Joi.object({
     otherwise: Joi.optional().allow("", null),
   }),
   PASSWORD_RESET_TOKEN_TTL_HOURS: Joi.number().integer().min(1).max(168).default(24),
+
+  GEMINI_KEY_ENCRYPTION_SECRET: Joi.string().min(16).default("change-me-in-production-32-chars"),
 });

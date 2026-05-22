@@ -27,7 +27,7 @@ export class AdminDashboardService {
   async getDashboard(query: DashboardQueryDto) {
     const bounds = this.resolvePeriod(query);
 
-    const [kpi, chart, content, recentUsers, activityFeed, support, billing, unknownWords, featureFlags] =
+    const [kpi, chart, content, recentUsers, activityFeed, support, billing, unknownWords, featureFlags, aiCache] =
       await Promise.all([
         this.getKpi(bounds),
         this.getRegistrationsChart(bounds),
@@ -38,9 +38,10 @@ export class AdminDashboardService {
         this.getBillingSummary(),
         this.getUnknownWordsSummary(),
         this.getFeatureFlags(),
+        this.getAiCacheSummary(),
       ]);
 
-    return { kpi, chart, content, recentUsers, activityFeed, support, billing, unknownWords, featureFlags };
+    return { kpi, chart, content, recentUsers, activityFeed, support, billing, unknownWords, featureFlags, aiCache };
   }
 
   // ─── Export ────────────────────────────────────────────────────────────────
@@ -600,6 +601,28 @@ export class AdminDashboardService {
   private async getUnknownWordsSummary() {
     const total = await this.prisma.unknownWord.count();
     return { total };
+  }
+
+  // ─── AI Cache summary ──────────────────────────────────────────────────────
+
+  private async getAiCacheSummary() {
+    const { AiCacheStatus } = await import("@prisma/client");
+    const [pending, approvedThisWeek, topWords] = await Promise.all([
+      this.prisma.aiTranslationCache.count({ where: { status: AiCacheStatus.PENDING } }),
+      this.prisma.aiTranslationCache.count({
+        where: {
+          status: AiCacheStatus.APPROVED,
+          updatedAt: { gte: new Date(Date.now() - 7 * 24 * 3600 * 1000) },
+        },
+      }),
+      this.prisma.aiTranslationCache.findMany({
+        where: { status: { in: [AiCacheStatus.PENDING, AiCacheStatus.APPROVED] } },
+        orderBy: { requestCount: "desc" },
+        take: 10,
+        select: { lemma: true, requestCount: true, translation: true },
+      }),
+    ]);
+    return { pending, approvedThisWeek, topWords };
   }
 
   // ─── Feature flags ─────────────────────────────────────────────────────────

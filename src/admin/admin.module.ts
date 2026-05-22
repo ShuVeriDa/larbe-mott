@@ -50,6 +50,8 @@ import { AdminTextPhraseService } from "./text-phrase/admin-text-phrase.service"
 import { AdminAnnotationController } from "./annotation/admin-annotation.controller";
 import { AdminAnnotationService } from "./annotation/admin-annotation.service";
 import { OnlineDictionaryModule } from "src/markup-engine/online-dictionary/online-dictionary.module";
+import { AdminAiCacheController } from "./ai-cache/admin-ai-cache.controller";
+import { AdminAiCacheService } from "./ai-cache/admin-ai-cache.service";
 
 @Module({
   imports: [
@@ -84,6 +86,7 @@ import { OnlineDictionaryModule } from "src/markup-engine/online-dictionary/onli
     AdminUploadsController,
     AdminTextPhraseController,
     AdminAnnotationController,
+    AdminAiCacheController,
   ],
   providers: [
     AdminService,
@@ -106,6 +109,7 @@ import { OnlineDictionaryModule } from "src/markup-engine/online-dictionary/onli
     AdminLegalService,
     AdminTextPhraseService,
     AdminAnnotationService,
+    AdminAiCacheService,
     PagePhrasesCacheService,
     PrismaService,
   ],

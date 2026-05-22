@@ -14,7 +14,7 @@ export const createTallarUser = async () => {
   const user = {
     email: "tallarho@nakhcho.vu",
     username: "tallarho",
-    password: "123456Bb.",
+    password: "123456",
     phone: "+79635940530",
     name: "Tallarho",
     surname: "Vu So",
@@ -31,13 +31,13 @@ export const createTallarUser = async () => {
     },
   });
 
-  const adminRole = await prisma.role.findUnique({
+  const superAdminRole = await prisma.role.findUnique({
     where: { name: RoleName.SUPERADMIN },
     select: { id: true },
   });
-  if (adminRole) {
+  if (superAdminRole) {
     await prisma.userRoleAssignment.create({
-      data: { userId: created.id, roleId: adminRole.id, assignedBy: null },
+      data: { userId: created.id, roleId: superAdminRole.id, assignedBy: null },
     });
   }
 };

@@ -6,6 +6,7 @@ import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { ThrottlerStorageRedisService } from "@nest-lab/throttler-storage-redis";
 import { WinstonModule } from "nest-winston";
 import { AdminModule } from "./admin/admin.module";
+import { AiTranslationModule } from "./ai-translation/ai-translation.module";
 import { TokenizationEventsModule } from "./admin/tokenization/tokenization-events.module";
 import { AnalyticsModule } from "./analytics/analytics.module";
 import { DashboardModule } from "./dashboard/dashboard.module";
@@ -85,6 +86,7 @@ import { envValidationSchema } from "./config/env.validation";
     HealthModule,
     LegalModule,
     PageBookmarkModule,
+    AiTranslationModule,
   ],
   controllers: [],
   providers: [

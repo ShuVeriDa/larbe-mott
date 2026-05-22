@@ -170,6 +170,17 @@ enum UnknownWordStatus {
   DELETED
 }
 
+enum AiCacheStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AiCacheType {
+  WORD_ONLY
+  WORD_IN_CONTEXT
+}
+
 enum DeckType {
   NEW
   OLD
@@ -272,8 +283,9 @@ model User {
   username           String
   name               String
   surname            String
-  hashedRefreshToken String? @db.Text
-  phone              String?
+  hashedRefreshToken     String? @db.Text
+  phone                  String?
+  geminiApiKeyEncrypted  String? @db.Text
   // URL аватара. Файлы аплоадятся вне backend'а (S3/R2/CDN); сюда сохраняется уже готовый URL.
   // null = фронт показывает инициалы из name+surname.
   avatar             String?
@@ -1852,6 +1864,39 @@ model UserNotificationPreferences {
 
   @@map("user_notification_preferences")
 }
+
+//////////////////////////////////////////////////////
+// AI TRANSLATION CACHE
+//////////////////////////////////////////////////////
+
+model AiTranslationCache {
+  id               String       @id @default(uuid())
+  lemma            String
+  contextSentence  String?
+  cacheType        AiCacheType  @default(WORD_ONLY)
+  translation      String
+  transliteration  String?
+  partOfSpeech     String?
+  example          String?
+  source           String       @default("gemini")
+  status           AiCacheStatus @default(PENDING)
+  requestCount     Int          @default(1)
+  thumbsUp         Int          @default(0)
+  thumbsDown       Int          @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([lemma, cacheType])
+  @@index([status])
+  @@index([requestCount])
+  @@index([lemma])
+  @@map("ai_translation_cache")
+}
+
+//////////////////////////////////////////////////////
+// UNKNOWN WORDS
+//////////////////////////////////////////////////////
 
 /// Юридические/информационные страницы (Privacy, Terms, Contact и т.п.).
 /// Хранятся per-language: один документ — одна пара (slug, lang).
