@@ -1,5 +1,5 @@
 import { Injectable, Optional } from "@nestjs/common";
-import { LogLevel, Prisma, ProcessingTrigger } from "@prisma/client";
+import { AnalysisSource, LogLevel, Prisma, ProcessingTrigger } from "@prisma/client";
 import { TokenizationEventsService } from "src/admin/tokenization/tokenization-events.service";
 import { PrismaService } from "src/prisma.service";
 import { DictionaryCacheProcessor } from "../dictionary-cache/dictionary-cache.processor";
@@ -159,6 +159,12 @@ export class TokenizerProcessor {
         await this._updateProgress(textId, version.id, 90);
       }
 
+      // ── Apply admin MorphForm overrides ────────────────────────────────────
+      const morphOverrideCount = await this.applyMorphFormOverrides(version.id);
+      if (morphOverrideCount > 0) {
+        log("OK", `Применено связок MorphForm (ADMIN): ${morphOverrideCount} токенов`);
+      }
+
       // ── Vocabulary index ───────────────────────────────────────────────────
       await this.buildVocabularyIndex(version.id);
       log("OK", "Индекс словаря построен");
@@ -309,5 +315,67 @@ export class TokenizerProcessor {
         data: { lemmaId: data.lemmaId, translation: data.translation },
       });
     }
+  }
+
+  // Restore admin word links (MorphForm) for all tokens in this version.
+  // When pages are deleted and re-tokenized, TokenAnalysis records are lost,
+  // but MorphForm persists. This step re-applies those links so manually set
+  // word associations survive tokenization.
+  private async applyMorphFormOverrides(versionId: string): Promise<number> {
+    const tokens = await this.prisma.textToken.findMany({
+      where: { versionId },
+      select: { id: true, normalized: true },
+    });
+
+    if (!tokens.length) return 0;
+
+    const uniqueNormalized = [...new Set(tokens.map((t) => t.normalized))];
+
+    const morphForms = await this.prisma.morphForm.findMany({
+      where: { normalized: { in: uniqueNormalized } },
+      select: { normalized: true, lemmaId: true },
+    });
+
+    if (!morphForms.length) return 0;
+
+    const morphMap = new Map<string, string>();
+    for (const mf of morphForms) {
+      morphMap.set(mf.normalized, mf.lemmaId);
+    }
+
+    const tokensToOverride = tokens.filter((t) => morphMap.has(t.normalized));
+    if (!tokensToOverride.length) return 0;
+
+    const tokenIds = tokensToOverride.map((t) => t.id);
+
+    await this.prisma.$transaction([
+      this.prisma.tokenAnalysis.updateMany({
+        where: { tokenId: { in: tokenIds }, isPrimary: true },
+        data: { isPrimary: false },
+      }),
+      this.prisma.tokenAnalysis.createMany({
+        data: tokensToOverride.map((t) => ({
+          tokenId: t.id,
+          lemmaId: morphMap.get(t.normalized)!,
+          source: AnalysisSource.ADMIN,
+          isPrimary: true,
+          probability: 1.0,
+        })),
+        skipDuplicates: true,
+      }),
+    ]);
+
+    // Promote any that were skipped by createMany (already existed with isPrimary=false)
+    await this.prisma.tokenAnalysis.updateMany({
+      where: {
+        tokenId: { in: tokenIds },
+        source: AnalysisSource.ADMIN,
+        isPrimary: false,
+        lemmaId: { in: [...new Set(morphForms.map((mf) => mf.lemmaId))] },
+      },
+      data: { isPrimary: true },
+    });
+
+    return tokensToOverride.length;
   }
 }
