@@ -15,7 +15,7 @@ export class AddToDictionaryDto {
   )
   language: Language;
 
-  @ApiProperty({ description: "Translation text", example: "книга" })
+  @ApiProperty({ description: "Translation text", example: "book" })
   @IsString()
   translation: string;
 
@@ -60,7 +60,7 @@ export class AddToDictionaryDto {
 
   @ApiPropertyOptional({
     description: "Domain / topic (free-form)",
-    example: "повседневная речь",
+    example: "everyday speech",
   })
   @IsOptional()
   @IsString()

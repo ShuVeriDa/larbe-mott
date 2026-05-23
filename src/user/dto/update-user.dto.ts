@@ -57,7 +57,7 @@ export class UpdateUserDto {
 
   @ApiPropertyOptional({
     description:
-      "URL аватара пользователя. Передайте пустую строку, чтобы сбросить аватар (показ инициалов).",
+      "User avatar URL. Pass an empty string to reset the avatar (initials will be shown instead).",
     example: "https://cdn.example.com/avatars/u123.png",
   })
   @IsOptional()
@@ -66,12 +66,12 @@ export class UpdateUserDto {
   @MaxLength(2048)
   avatar?: string | null;
 
-  @ApiPropertyOptional({ enum: Language, description: "Язык, который изучает пользователь" })
+  @ApiPropertyOptional({ enum: Language, description: "Language the user is learning" })
   @IsOptional()
   @IsEnum(Language)
   language?: Language;
 
-  @ApiPropertyOptional({ enum: Level, description: "Уровень владения языком (CEFR)" })
+  @ApiPropertyOptional({ enum: Level, description: "Language proficiency level (CEFR)" })
   @IsOptional()
   @IsEnum(Level)
   level?: Level;

@@ -26,8 +26,8 @@ export class StatisticsController {
   @ApiOperation({
     summary: "Compact stats for /profile page (Free + Premium)",
     description:
-      "Минимальный набор для карточки «Статистика» и 70-дневного heatmap на странице /profile. " +
-      "Доступен ВСЕМ авторизованным юзерам (без Premium-gate). Полный /statistics/me остаётся под Premium.",
+      "Minimal set for the 'Statistics' card and 70-day heatmap on the /profile page. " +
+      "Available to ALL authenticated users (no Premium gate). The full /statistics/me endpoint remains Premium-only.",
   })
   @ApiOkResponse({
     description:

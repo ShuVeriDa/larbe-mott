@@ -149,11 +149,11 @@ export class AuthController {
   @ApiUnauthorizedResponse({ description: "Missing or invalid bearer token" })
   @ApiOperation({
     summary:
-      "Revoke all sessions for current user except the current one (matches the design 'Завершить все')",
+      "Revoke all sessions for current user except the current one (matches the design 'End all')",
   })
   @ApiOkResponse({
     description:
-      "Returns { success: true, revoked: <count> }. Текущая сессия сохраняется.",
+      "Returns { success: true, revoked: <count> }. The current session is preserved.",
   })
   async revokeAllSessions(
     @User("id") userId: string,
@@ -179,16 +179,16 @@ export class AuthController {
   }
 
   /* ──────────────────────────────────────────────────────────────
-     PASSWORD RESET — публичные эндпоинты
+     PASSWORD RESET — public endpoints
      ────────────────────────────────────────────────────────────── */
 
   @Throttle({ default: { limit: 3, ttl: 60_000 } })
   @HttpCode(200)
   @Post("password-reset/request")
   @ApiOperation({
-    summary: "Запросить ссылку для сброса пароля (всегда возвращает ok=true)",
+    summary: "Request a password reset link (always returns ok=true)",
   })
-  @ApiOkResponse({ description: "{ ok: true } — независимо от существования email" })
+  @ApiOkResponse({ description: "{ ok: true } — regardless of whether the email exists" })
   async requestPasswordReset(
     @Body() dto: ForgotPasswordDto,
     @Req() req: express.Request,
@@ -204,7 +204,7 @@ export class AuthController {
   @Get("password-reset/validate")
   @ApiOperation({
     summary:
-      "Проверить валидность reset-токена (для бейджа на странице /reset-password)",
+      "Validate a password reset token (for the badge on the /reset-password page)",
   })
   @ApiQuery({ name: "token", required: true })
   @ApiOkResponse({
@@ -220,9 +220,9 @@ export class AuthController {
   @Post("password-reset/confirm")
   @ApiOperation({
     summary:
-      "Установить новый пароль по токену + revoke all sessions + email-уведомление",
+      "Set a new password via token + revoke all sessions + email notification",
   })
-  @ApiOkResponse({ description: "{ ok: true } — пароль успешно сохранён" })
+  @ApiOkResponse({ description: "{ ok: true } — password saved successfully" })
   @ApiBadRequestResponse({
     description: "weak_password | token_expired | account_unavailable",
   })
@@ -245,7 +245,7 @@ export class AuthController {
   }
 
   /* ──────────────────────────────────────────────────────────────
-     PASSWORD CHANGE — авторизованный flow (текущий → новый)
+     PASSWORD CHANGE — authenticated flow (current → new)
      ────────────────────────────────────────────────────────────── */
 
   @Auth()
@@ -261,9 +261,9 @@ export class AuthController {
   })
   @ApiOperation({
     summary:
-      "Сменить пароль авторизованным юзером. Требует текущий + новый. Завершает все сессии и шлёт уведомительное письмо.",
+      "Change password for an authenticated user. Requires current + new password. Terminates all sessions and sends a notification email.",
   })
-  @ApiOkResponse({ description: "{ ok: true } — пароль успешно сменён" })
+  @ApiOkResponse({ description: "{ ok: true } — password changed successfully" })
   async changePassword(
     @User("id") userId: string,
     @Body() dto: ChangePasswordDto,
@@ -279,7 +279,7 @@ export class AuthController {
   }
 
   /* ──────────────────────────────────────────────────────────────
-     EMAIL CHANGE — два шага: request (на новый email) + confirm
+     EMAIL CHANGE — two steps: request (to new email) + confirm
      ────────────────────────────────────────────────────────────── */
 
   @Auth()
@@ -291,12 +291,12 @@ export class AuthController {
     description: "Missing/invalid bearer token OR invalid_current_password",
   })
   @ApiBadRequestResponse({ description: "same_email" })
-  @ApiConflictResponse({ description: "email_taken — указанный email уже занят" })
+  @ApiConflictResponse({ description: "email_taken — the specified email is already taken" })
   @ApiOperation({
     summary:
-      "Запросить смену email. Письмо со ссылкой подтверждения отправляется на НОВЫЙ адрес.",
+      "Request an email change. A confirmation link is sent to the NEW address.",
   })
-  @ApiOkResponse({ description: "{ ok: true } — письмо отправлено на новый email" })
+  @ApiOkResponse({ description: "{ ok: true } — confirmation email sent to the new address" })
   async requestEmailChange(
     @User("id") userId: string,
     @Body() dto: RequestEmailChangeDto,
@@ -316,9 +316,9 @@ export class AuthController {
   @Post("email-change/confirm")
   @ApiOperation({
     summary:
-      "Подтвердить новый email по токену. Завершает все сессии, шлёт уведомление на старый адрес.",
+      "Confirm the new email via token. Terminates all sessions, sends a notification to the old address.",
   })
-  @ApiOkResponse({ description: "{ ok: true, email } — email успешно изменён" })
+  @ApiOkResponse({ description: "{ ok: true, email } — email changed successfully" })
   @ApiBadRequestResponse({ description: "token_expired | account_unavailable" })
   @ApiNotFoundResponse({ description: "token_invalid" })
   @ApiConflictResponse({ description: "token_used | email_taken" })

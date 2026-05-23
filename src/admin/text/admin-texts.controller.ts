@@ -40,6 +40,7 @@ import { CreateTextDto } from "src/admin/text/dto/create.dto";
 import { BulkTextIdsDto } from "src/admin/text/dto/bulk.dto";
 import { BulkImportTextsDto } from "src/admin/text/dto/bulk-import.dto";
 import { AdminListTextsQueryDto } from "src/admin/text/dto/list-query.dto";
+import { AdminExportTextsQueryDto } from "src/admin/text/dto/export-query.dto";
 import { ProcessTextDto } from "src/admin/text/dto/process.dto";
 import { PatchTextDto } from "src/admin/text/dto/update.dto";
 import { VersionsQueryDto } from "src/admin/text/dto/versions-query.dto";
@@ -149,13 +150,12 @@ export class AdminTextsController {
   @ApiOkResponse({ description: "Texts export in JSON array or CSV string." })
   @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
   async exportTexts(
-    @Query() query: AdminListTextsQueryDto,
-    @Query("format") format: "json" | "csv" = "json",
-    @Query("ids") rawIds: string | undefined,
+    @Query() query: AdminExportTextsQueryDto,
     @Res() res: Response,
   ) {
+    const { format = "json", ids: rawIds, ...listQuery } = query;
     const ids = rawIds ? rawIds.split(",").filter(Boolean) : undefined;
-    const payload = await this.adminTextService.exportTexts(query, format === "csv" ? "csv" : "json", ids);
+    const payload = await this.adminTextService.exportTexts(listQuery, format === "csv" ? "csv" : "json", ids);
     const ts = new Date().toISOString().slice(0, 10);
     if (format === "csv") {
       const filename = `texts-export-${ts}.csv`;

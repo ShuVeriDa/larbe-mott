@@ -46,7 +46,7 @@ export class AdminLegalController {
   @ApiOperation({
     summary: "List legal documents (drafts + published)",
     description:
-      "Опционально фильтр по slug / lang / isPublished. Сортировка: slug asc, lang asc.",
+      "Optional filter by slug / lang / isPublished. Sort: slug asc, lang asc.",
   })
   @ApiOkResponse({ description: "Array of legal documents" })
   async list(@Query() filter: FetchLegalDocumentsDto) {
@@ -80,7 +80,7 @@ export class AdminLegalController {
   @ApiOperation({
     summary: "Update title and/or content",
     description:
-      "Изменение content инкрементит version (для аудита версий ToS). Изменение только title — нет.",
+      "Changing content increments the version (for ToS version auditing). Changing only the title does not.",
   })
   @ApiParam({ name: "id", description: "Document UUID" })
   @ApiOkResponse({ description: "Updated document" })

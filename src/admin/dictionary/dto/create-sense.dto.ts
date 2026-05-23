@@ -3,7 +3,7 @@ import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 
 export class CreateSenseDto {
-  @ApiProperty({ description: "Translation / definition", example: "язык (орган)" })
+  @ApiProperty({ description: "Translation / definition", example: "language (organ)" })
   @IsString()
   @MaxLength(2000)
   definition: string;

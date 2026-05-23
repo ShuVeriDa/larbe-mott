@@ -46,9 +46,9 @@ export class WordsController {
   @Post("lookup")
   @OptionalAuth()
   @ApiOperation({
-    summary: "Получить перевод слова по tokenId (основной API для клика)",
+    summary: "Get word translation by tokenId (primary API for tap/click)",
     description:
-      "По клику в тексте: фронт передаёт tokenId. Возвращает translation, grammar, baseForm из кэша/БД.",
+      "On tap in the reader: the client passes tokenId. Returns translation, grammar, baseForm from cache/DB.",
   })
   @ApiBody({ type: WordLookupDto })
   @ApiOkResponse({
@@ -65,12 +65,12 @@ export class WordsController {
   @Auth()
   @Get(":lemmaId/examples")
   @ApiOperation({
-    summary: "Корпусные примеры употребления слова",
+    summary: "Corpus usage examples for a word",
     description:
-      "Возвращает до 10 сниппетов из разных текстов базы, где встречается данная лемма. Не зависит от истории пользователя.",
+      "Returns up to 10 snippets from different texts in the database where this lemma appears. Independent of user history.",
   })
   @ApiParam({ name: "lemmaId", description: "Lemma ID" })
-  @ApiOkResponse({ description: "Список сниппетов с указанием источника." })
+  @ApiOkResponse({ description: "List of snippets with source information." })
   async getExamples(@Param("lemmaId", ParseUUIDPipe) lemmaId: string) {
     return this.wordExamplesService.getExamples(lemmaId);
   }
@@ -78,9 +78,9 @@ export class WordsController {
   @Auth()
   @Get(":lemmaId/related")
   @ApiOperation({
-    summary: "Связанные слова (синонимы / антонимы / однокоренные)",
+    summary: "Related words (synonyms / antonyms / cognates)",
     description:
-      "Возвращает все WordRelation для данной леммы (в обе стороны), сгруппированные по типу. Используется в карточке слова в разделе «Родственные слова».",
+      "Returns all WordRelations for the given lemma (in both directions), grouped by type. Used in the word card under 'Related words'.",
   })
   @ApiParam({ name: "lemmaId", description: "Lemma ID" })
   @ApiOkResponse({
@@ -94,9 +94,9 @@ export class WordsController {
   @Post("lookup-by-word")
   @Auth()
   @ApiOperation({
-    summary: "Получить перевод по строке слова (цепочка на запросе)",
+    summary: "Get translation by word string (lookup chain)",
     description:
-      "Для введённого пользователем слова. Цепочка: админ → кэш → онлайн → морфология.",
+      "For a word entered by the user. Chain: admin override -> cache -> online -> morphology.",
   })
   @ApiBody({ type: WordLookupByWordDto })
   @ApiOkResponse({
@@ -114,10 +114,10 @@ export class WordsController {
   @Version(VERSION_NEUTRAL)
   @OptionalAuth()
   @ApiOperation({
-    summary: "Определить части речи (Къамелан дакъош) в тексте",
+    summary: "Identify parts of speech (Chechen: Khamelam daqosh) in text",
     description:
-      "Возвращает для каждого токена основную часть речи и альтернативные кандидаты. " +
-      "Использует словарь лемм/форм и эвристики по чеченской грамматике.",
+      "Returns the primary part of speech and alternative candidates for each token. " +
+      "Uses a lemma/form dictionary and Chechen grammar heuristics.",
   })
   @ApiBody({ type: AnalyzePosDto })
   @ApiOkResponse({

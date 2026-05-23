@@ -13,7 +13,7 @@ const toBool = ({ value }: { value: unknown }): boolean | unknown => {
 
 export class FetchPlansDto {
   @ApiPropertyOptional({
-    description: "Вернуть только активные планы (isActive=true).",
+    description: "Return only active plans (isActive=true).",
     example: true,
   })
   @IsOptional()

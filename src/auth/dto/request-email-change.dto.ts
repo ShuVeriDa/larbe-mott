@@ -3,7 +3,7 @@ import { IsEmail, IsIn, IsOptional, IsString, MaxLength } from "class-validator"
 
 export class RequestEmailChangeDto {
   @ApiProperty({
-    description: "Новый email-адрес. Письмо со ссылкой будет отправлено на него.",
+    description: "New email address. A confirmation link will be sent to it.",
     example: "new@example.com",
   })
   @IsEmail()
@@ -12,14 +12,14 @@ export class RequestEmailChangeDto {
 
   @ApiProperty({
     description:
-      "Текущий пароль (доказательство владения аккаунтом — на случай угона активной сессии).",
+      "Current password (proof of account ownership — to prevent hijacking of an active session).",
   })
   @IsString()
   @MaxLength(128)
   currentPassword: string;
 
   @ApiPropertyOptional({
-    description: "UI-язык, на котором отправлять письма подтверждения и уведомления",
+    description: "UI language in which to send confirmation and notification emails",
     enum: ["ru", "che", "en", "ar"],
     default: "ru",
   })

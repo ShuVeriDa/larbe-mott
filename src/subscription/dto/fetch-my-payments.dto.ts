@@ -17,7 +17,7 @@ export class FetchMyPaymentsDto {
   limit?: number;
 
   @ApiPropertyOptional({
-    description: "Cursor — id последнего платежа предыдущей страницы.",
+    description: "Cursor — id of the last payment from the previous page.",
   })
   @IsOptional()
   @IsString()

@@ -72,7 +72,7 @@ export class CreateEntryDto {
   forms?: string[];
 
   @ApiProperty({
-    description: "Domain / topic (free-form): e.g. 'повседневная речь'",
+    description: "Domain / topic (free-form): e.g. 'everyday speech'",
     required: false,
   })
   @IsOptional()

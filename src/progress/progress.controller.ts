@@ -98,7 +98,7 @@ export class ProgressController {
     return { dueCount, learningCount, streak: streakDetails.current };
   }
 
-  // ─── review — статичный маршрут ВЫШЕ параметрического ────────────────────────
+  // ─── review — static route ABOVE the parameterized one ────────────────────────
 
   @Auth()
   @Get("review/due")

@@ -2,22 +2,22 @@ import { ApiPropertyOptional } from "@nestjs/swagger";
 import { IsBoolean, IsOptional } from "class-validator";
 
 export class UpdateTokenizationSettingsDto {
-  @ApiPropertyOptional({ description: "Авто-токенизация при сохранении текста" })
+  @ApiPropertyOptional({ description: "Auto-tokenize on text save" })
   @IsBoolean()
   @IsOptional()
   autoTokenize?: boolean;
 
-  @ApiPropertyOptional({ description: "Нормализация к базовой форме" })
+  @ApiPropertyOptional({ description: "Normalize words to base form" })
   @IsBoolean()
   @IsOptional()
   normalization?: boolean;
 
-  @ApiPropertyOptional({ description: "Морфоанализ по правилам" })
+  @ApiPropertyOptional({ description: "Morphological analysis by rules" })
   @IsBoolean()
   @IsOptional()
   morphAnalysis?: boolean;
 
-  @ApiPropertyOptional({ description: "Запросы к внешнему Online API" })
+  @ApiPropertyOptional({ description: "Queries to external online API" })
   @IsBoolean()
   @IsOptional()
   onlineDictionaries?: boolean;

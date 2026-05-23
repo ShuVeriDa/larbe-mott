@@ -42,7 +42,7 @@ export class UserController {
   @ApiOperation({
     summary: "Get current user profile",
     description:
-      "Возвращает профиль авторизованного пользователя без необходимости знать его id. Используется приветствием на главной, шапкой и т.д.",
+      "Returns the authenticated user's profile without needing to know their ID. Used by the homepage greeting, header, etc.",
   })
   @ApiOkResponse({ type: UserResponseDto })
   async getMe(@User("id") userId: string) {
@@ -87,9 +87,9 @@ export class UserController {
     summary:
       "Schedule current account for deletion (soft-delete with 30-day grace period)",
     description:
-      "Требует подтверждения через ввод email текущего аккаунта в теле запроса. " +
-      "Аккаунт помечается status=DELETED, deletedAt=now(), все активные сессии отзываются. " +
-      "Через 30 дней данные удаляются безвозвратно фоновым job'ом.",
+      "Requires confirmation by entering the current account's email in the request body. " +
+      "The account is marked status=DELETED, deletedAt=now(), and all active sessions are revoked. " +
+      "After 30 days the data is permanently deleted by a background job.",
   })
   @ApiNotFoundResponse({ description: "The user not found" })
   @ApiOkResponse({

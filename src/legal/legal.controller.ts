@@ -16,20 +16,20 @@ export class LegalController {
 
   @Get(":slug")
   @ApiOperation({
-    summary: "Получить опубликованный юридический/информационный документ",
+    summary: "Get a published legal/informational document",
     description:
-      "Публичный эндпоинт. Возвращает документ по slug в запрошенном языке. " +
-      "Если в этом языке документа нет — фолбэчит на 'ru'. Черновики (isPublished=false) не возвращаются.",
+      "Public endpoint. Returns the document by slug in the requested language. " +
+      "Falls back to 'ru' if the document is not available in the requested language. Drafts (isPublished=false) are not returned.",
   })
   @ApiParam({
     name: "slug",
-    description: "Идентификатор документа",
+    description: "Document identifier",
     example: "privacy",
   })
   @ApiQuery({
     name: "lang",
     required: false,
-    description: "Язык: ru | che | en | ar (по умолчанию ru)",
+    description: "Language: ru | che | en | ar (default: ru)",
     example: "ru",
   })
   @ApiOkResponse({
@@ -37,7 +37,7 @@ export class LegalController {
       "{ slug, lang, title, content (Markdown), version, publishedAt, updatedAt }",
   })
   @ApiNotFoundResponse({
-    description: "Документ с таким slug не опубликован ни в одном языке",
+    description: "No document with this slug is published in any language",
   })
   async getOne(@Param("slug") slug: string, @Query("lang") lang?: string) {
     return this.legalService.getPublishedBySlug(slug, lang ?? "");

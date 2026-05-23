@@ -14,7 +14,7 @@ export class CreateLegalDocumentDto {
   @ApiProperty({
     example: "privacy",
     description:
-      "URL-friendly идентификатор: lowercase, цифры, дефис. Уникален в паре с lang.",
+      "URL-friendly identifier: lowercase letters, digits, hyphen. Unique together with lang.",
   })
   @IsString()
   @Matches(/^[a-z0-9-]+$/, {
@@ -29,22 +29,22 @@ export class CreateLegalDocumentDto {
   @IsIn(SUPPORTED_LANGS as readonly string[])
   lang: string;
 
-  @ApiProperty({ example: "Политика конфиденциальности" })
+  @ApiProperty({ example: "Privacy Policy" })
   @IsString()
   @MinLength(1)
   @MaxLength(200)
   title: string;
 
   @ApiProperty({
-    example: "# Заголовок\n\nТекст в Markdown...",
-    description: "Markdown-контент документа",
+    example: "# Heading\n\nText in Markdown...",
+    description: "Markdown content of the document",
   })
   @IsString()
   @MinLength(1)
   content: string;
 
   @ApiPropertyOptional({
-    description: "Сразу опубликовать (по умолчанию false — черновик)",
+    description: "Publish immediately (default false — draft)",
     example: false,
   })
   @IsOptional()

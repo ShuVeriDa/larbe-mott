@@ -2,19 +2,19 @@ import { ApiPropertyOptional } from "@nestjs/swagger";
 import { IsOptional, IsString, MaxLength, MinLength } from "class-validator";
 
 /**
- * Обновление контента/заголовка существующего документа.
- * slug и lang не меняются (идентифицируют документ).
- * isPublished меняется отдельными эндпоинтами publish/unpublish.
+ * Update content/title of an existing document.
+ * slug and lang are immutable (they identify the document).
+ * isPublished is changed via separate publish/unpublish endpoints.
  */
 export class UpdateLegalDocumentDto {
-  @ApiPropertyOptional({ example: "Политика конфиденциальности (ред.)" })
+  @ApiPropertyOptional({ example: "Privacy Policy (rev.)" })
   @IsOptional()
   @IsString()
   @MinLength(1)
   @MaxLength(200)
   title?: string;
 
-  @ApiPropertyOptional({ example: "# Новый заголовок\n\nИсправленный текст..." })
+  @ApiPropertyOptional({ example: "# New heading\n\nRevised text..." })
   @IsOptional()
   @IsString()
   @MinLength(1)

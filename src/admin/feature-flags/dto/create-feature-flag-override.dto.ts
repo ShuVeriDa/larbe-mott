@@ -19,7 +19,7 @@ export class CreateFeatureFlagOverrideDto {
 
   @ApiPropertyOptional({
     description: "Reason for override",
-    example: "Внутренний тест для support-команды",
+    example: "Internal test for the support team",
   })
   @IsOptional()
   @IsString()

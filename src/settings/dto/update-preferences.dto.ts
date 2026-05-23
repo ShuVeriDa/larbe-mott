@@ -69,7 +69,7 @@ export class UpdatePreferencesDto {
 
   @ApiPropertyOptional({
     description:
-      "In-app напоминание о повторении на главной странице (число слов на повторение).",
+      "In-app review reminder on the home page (shows the number of words due for review).",
   })
   @IsOptional()
   @IsBoolean()
@@ -77,7 +77,7 @@ export class UpdatePreferencesDto {
 
   @ApiPropertyOptional({
     description:
-      "Premium-фича: включить авторские деки заучивания (NEW / OLD / RETIRED). При установке в true требуется активная Premium-подписка.",
+      "Premium feature: enable curated learning decks (NEW / OLD / RETIRED). Setting to true requires an active Premium subscription.",
   })
   @IsOptional()
   @IsBoolean()

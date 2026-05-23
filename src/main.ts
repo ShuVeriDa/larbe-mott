@@ -73,6 +73,11 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
       stopAtFirstError: true,
       transform: true,
+      exceptionFactory: (errors) => {
+        console.error("[ValidationPipe] errors:", JSON.stringify(errors, null, 2));
+        const { BadRequestException } = require("@nestjs/common");
+        return new BadRequestException(errors);
+      },
     }),
   );
 

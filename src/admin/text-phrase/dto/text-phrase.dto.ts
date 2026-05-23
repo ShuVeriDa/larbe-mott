@@ -14,7 +14,7 @@ export class CreateTextPhraseDto {
   @IsString()
   original: string;
 
-  @ApiProperty({ example: "в дружбе" })
+  @ApiProperty({ example: "in friendship" })
   @IsString()
   translation: string;
 
@@ -22,7 +22,7 @@ export class CreateTextPhraseDto {
   @IsEnum(Language)
   language: Language;
 
-  @ApiPropertyOptional({ example: "Контекстное пояснение" })
+  @ApiPropertyOptional({ example: "Contextual note" })
   @IsOptional()
   @IsString()
   notes?: string;
@@ -51,33 +51,33 @@ export class UpdateTextPhraseDto {
 }
 
 export class CreateTextPhraseOccurrenceDto {
-  @ApiProperty({ description: "ID текста" })
+  @ApiProperty({ description: "Text ID" })
   @IsUUID()
   textId: string;
 
-  @ApiProperty({ description: "Номер страницы (1-based)" })
+  @ApiProperty({ description: "Page number (1-based)" })
   @IsInt()
   @Min(1)
   pageNumber: number;
 
-  @ApiProperty({ description: "position первого токена фразы (TextToken.position)" })
+  @ApiProperty({ description: "Position of the first phrase token (TextToken.position)" })
   @IsInt()
   @Min(0)
   startTokenPosition: number;
 
-  @ApiProperty({ description: "position последнего токена фразы (TextToken.position, inclusive)" })
+  @ApiProperty({ description: "Position of the last phrase token (TextToken.position, inclusive)" })
   @IsInt()
   @Min(0)
   endTokenPosition: number;
 }
 
-// Создать фразу и автоматически найти позиции токенов по тексту фразы
+// Create a phrase and automatically find token positions by phrase text
 export class CreatePhraseAutoOccurrenceDto {
   @ApiProperty({ example: "ловзуш хилла" })
   @IsString()
   original: string;
 
-  @ApiProperty({ example: "играли" })
+  @ApiProperty({ example: "they were playing" })
   @IsString()
   translation: string;
 
@@ -90,23 +90,23 @@ export class CreatePhraseAutoOccurrenceDto {
   @IsString()
   notes?: string;
 
-  @ApiProperty({ description: "ID текста" })
+  @ApiProperty({ description: "Text ID" })
   @IsUUID()
   textId: string;
 
-  @ApiProperty({ description: "Номер страницы (1-based)" })
+  @ApiProperty({ description: "Page number (1-based)" })
   @IsInt()
   @Min(1)
   pageNumber: number;
 }
 
-// Создать фразу и сразу привязать её к позиции в тексте (основной сценарий из редактора)
+// Create a phrase and immediately bind it to a position in the text (main editor scenario)
 export class CreatePhraseWithOccurrenceDto {
   @ApiProperty({ example: "доттагIалла деш" })
   @IsString()
   original: string;
 
-  @ApiProperty({ example: "в дружбе" })
+  @ApiProperty({ example: "in friendship" })
   @IsString()
   translation: string;
 
@@ -119,21 +119,21 @@ export class CreatePhraseWithOccurrenceDto {
   @IsString()
   notes?: string;
 
-  @ApiProperty({ description: "ID текста" })
+  @ApiProperty({ description: "Text ID" })
   @IsUUID()
   textId: string;
 
-  @ApiProperty({ description: "Номер страницы (1-based)" })
+  @ApiProperty({ description: "Page number (1-based)" })
   @IsInt()
   @Min(1)
   pageNumber: number;
 
-  @ApiProperty({ description: "position первого токена фразы" })
+  @ApiProperty({ description: "Position of the first phrase token" })
   @IsInt()
   @Min(0)
   startTokenPosition: number;
 
-  @ApiProperty({ description: "position последнего токена фразы (inclusive)" })
+  @ApiProperty({ description: "Position of the last phrase token (inclusive)" })
   @IsInt()
   @Min(0)
   endTokenPosition: number;

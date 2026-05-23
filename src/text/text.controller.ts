@@ -208,18 +208,18 @@ export class TextController {
   @ApiOperation({
     summary: "Report a text",
     description:
-      "Создаёт жалобу на текст в виде FeedbackThread (type=COMPLAINT, contextType=TEXT). " +
-      "Возвращает 409, если у пользователя уже есть незакрытая жалоба на этот текст — в теле ошибки threadId/ticketNumber. " +
-      "Категория жалобы попадает в FeedbackThread.contextAction; пользовательский комментарий — в первое сообщение.",
+      "Creates a complaint for the text as a FeedbackThread (type=COMPLAINT, contextType=TEXT). " +
+      "Returns 409 if the user already has an open complaint for this text — the error body contains threadId/ticketNumber. " +
+      "The complaint category goes into FeedbackThread.contextAction; the user's comment goes into the first message.",
   })
   @ApiParam({ name: "id", description: "Text ID (UUID)" })
   @ApiBody({ type: ReportTextDto })
   @ApiCreatedResponse({
-    description: "{ id, ticketNumber, status, createdAt } созданного thread'а.",
+    description: "{ id, ticketNumber, status, createdAt } of the created thread.",
   })
   @ApiNotFoundResponse({ description: "Text with the given ID was not found." })
   @ApiConflictResponse({
-    description: "У пользователя уже есть открытая жалоба на этот текст.",
+    description: "The user already has an open complaint for this text.",
   })
   async reportText(
     @Param("id", ParseUUIDPipe) textId: string,

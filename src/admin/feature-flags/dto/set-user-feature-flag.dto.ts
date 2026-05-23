@@ -13,7 +13,7 @@ export class SetUserFeatureFlagDto {
   @ApiProperty({
     description: "Reason for override",
     required: false,
-    example: "QA доступ к новой функции",
+    example: "QA access to the new feature",
   })
   @IsOptional()
   @IsString()

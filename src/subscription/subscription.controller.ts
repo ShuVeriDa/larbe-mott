@@ -48,7 +48,7 @@ export class SubscriptionController {
   @ApiOperation({ summary: "Get payment history for current user (cursor-paginated)" })
   @ApiOkResponse({
     description:
-      "{ items[], nextCursor, hasMore }. Передавайте nextCursor в параметре `cursor` для следующей страницы.",
+      "{ items[], nextCursor, hasMore }. Pass nextCursor as the `cursor` parameter to fetch the next page.",
   })
   async getMyPayments(
     @User("id") userId: string,
@@ -64,7 +64,7 @@ export class SubscriptionController {
   @ApiOperation({ summary: "Get today usage and plan limits for current user" })
   @ApiOkResponse({
     description:
-      "translationsToday, wordsInDictionary, limits (полный PlanLimits JSON; -1 = безлимит).",
+      "translationsToday, wordsInDictionary, limits (full PlanLimits JSON; -1 = unlimited).",
   })
   async getUsage(@User("id") userId: string) {
     return this.subscriptionService.getUsage(userId);
@@ -135,7 +135,7 @@ export class SubscriptionController {
   @ApiOperation({ summary: "Redeem a promo code" })
   @ApiOkResponse({
     description:
-      "Купон сохранён. Скидка БУДЕТ ПРИМЕНЕНА только при следующем POST /subscription/subscribe — мгновенного списания/изменения текущей подписки не происходит. Поле status='saved_for_next_subscription' позволяет фронту показать корректный toast («Промокод сохранён»).",
+      "Coupon saved. The discount WILL BE APPLIED only on the next POST /subscription/subscribe — no immediate charge or change to the current subscription occurs. The status='saved_for_next_subscription' field lets the frontend display the correct toast ('Promo code saved').",
   })
   async redeemPromo(@User("id") userId: string, @Body() dto: RedeemPromoDto) {
     return this.subscriptionService.redeemCoupon(userId, dto.code);

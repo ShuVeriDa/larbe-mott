@@ -143,7 +143,7 @@ export class CreateTextDto {
     description:
       "Array of tag NAMES to assign to the text. Tags not yet present in the database will be created (find-or-create). Merged with tagIds.",
     required: false,
-    example: ["История", "Грамматика"],
+    example: ["History", "Grammar"],
   })
   @IsOptional()
   @IsArray()

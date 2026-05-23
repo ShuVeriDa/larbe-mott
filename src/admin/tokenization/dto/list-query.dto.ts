@@ -19,13 +19,13 @@ export class AdminTokenizationListQueryDto {
   @ApiPropertyOptional({
     enum: TokenizationTab,
     default: TokenizationTab.ALL,
-    description: "all — все тексты; issues — с ошибками; notfound — с NOT_FOUND токенами; pending — без обработки",
+    description: "all — all texts; issues — with errors; notfound — with NOT_FOUND tokens; pending — not yet processed",
   })
   @IsEnum(TokenizationTab)
   @IsOptional()
   tab?: TokenizationTab;
 
-  @ApiPropertyOptional({ description: "Поиск по названию текста" })
+  @ApiPropertyOptional({ description: "Search by text title" })
   @IsString()
   @IsOptional()
   search?: string;
@@ -37,7 +37,7 @@ export class AdminTokenizationListQueryDto {
 
   @ApiPropertyOptional({
     enum: ["ANALYZED", "AMBIGUOUS", "NOT_FOUND"],
-    description: "Фильтр по преобладающему статусу токенов",
+    description: "Filter by predominant token status",
   })
   @IsEnum(["ANALYZED", "AMBIGUOUS", "NOT_FOUND"])
   @IsOptional()

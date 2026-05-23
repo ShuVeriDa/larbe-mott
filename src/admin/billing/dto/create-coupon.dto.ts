@@ -17,7 +17,7 @@ export class CreateCouponDto {
   @IsString()
   code: string;
 
-  @ApiPropertyOptional({ description: "Human-readable label", example: "Запуск платформы" })
+  @ApiPropertyOptional({ description: "Human-readable label", example: "Platform launch" })
   @IsOptional()
   @IsString()
   name?: string;

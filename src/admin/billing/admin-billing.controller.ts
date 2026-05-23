@@ -57,9 +57,9 @@ export class AdminBillingController {
   @ApiOperation({
     summary: "Billing KPI stats",
     description:
-      "Returns payingCount, totalUsers, MRR, ARR, conversionRate, churnRate за последние 30 дней, " +
-      "а также дельты к предыдущему 30-дневному периоду: payingDeltaLast30 (шт), mrrGrowthPct (%), " +
-      "conversionDeltaPp (пп), churnDeltaPp (пп). mrrGrowthPct = null, если MRR 30 дней назад был 0.",
+      "Returns payingCount, totalUsers, MRR, ARR, conversionRate, churnRate for the last 30 days, " +
+      "as well as deltas compared to the previous 30-day period: payingDeltaLast30 (count), mrrGrowthPct (%), " +
+      "conversionDeltaPp (pp), churnDeltaPp (pp). mrrGrowthPct = null if MRR 30 days ago was 0.",
   })
   @ApiOkResponse({
     description:
@@ -96,7 +96,7 @@ export class AdminBillingController {
   @ApiOperation({
     summary: "List plans",
     description:
-      "Returns plans with subscriberCount. Filters: onlyActive (true → только isActive), type, groupCode.",
+      "Returns plans with subscriberCount. Filters: onlyActive (true → only isActive), type, groupCode.",
   })
   @ApiOkResponse({ description: "Array of plans with subscriberCount." })
   getPlans(@Query() dto: FetchPlansDto) {
@@ -119,7 +119,7 @@ export class AdminBillingController {
   @ApiOperation({
     summary: "Update plan",
     description:
-      "Updates plan fields (name, prices, description, isActive, limits, groupCode, displayColor, iconKey, highlightFeatures). Pass limits to replace the full JSON limits object — для частичного апдейта используйте PATCH /admin/plans/:id/limits.",
+      "Updates plan fields (name, prices, description, isActive, limits, groupCode, displayColor, iconKey, highlightFeatures). Pass limits to replace the full JSON limits object — for a partial update use PATCH /admin/plans/:id/limits.",
   })
   @ApiOkResponse({ description: "Updated plan." })
   updatePlan(@Param("id") id: string, @Body() dto: UpdatePlanDto) {
@@ -131,8 +131,8 @@ export class AdminBillingController {
   @ApiOperation({
     summary: "Update plan limits (partial merge)",
     description:
-      "Частично обновляет JSON-объект лимитов плана: переданная дельта мерджится с текущим plan.limits, " +
-      "поэтому фронт может слать только изменённые поля. Передайте replace=true чтобы заменить лимиты целиком.",
+      "Partially updates the plan limits JSON object: the supplied delta is merged into the current plan.limits, " +
+      "so the client can send only changed fields. Pass replace=true to replace the limits object entirely.",
   })
   @ApiOkResponse({ description: "Updated plan." })
   updatePlanLimits(
@@ -147,7 +147,7 @@ export class AdminBillingController {
   @ApiOperation({
     summary: "Deactivate plan",
     description:
-      "Sets isActive=false. Безопасная альтернатива удалению — у плана могут быть активные подписки.",
+      "Sets isActive=false. A safe alternative to deletion — the plan may have active subscriptions.",
   })
   @ApiOkResponse({ description: "Updated plan with isActive=false." })
   deactivatePlan(@Param("id") id: string) {
@@ -160,7 +160,7 @@ export class AdminBillingController {
   @ApiOperation({
     summary: "Delete plan",
     description:
-      "Permanently deletes a plan. Returns 409 если у плана есть подписки (любой статус) — в этом случае используйте deactivate.",
+      "Permanently deletes a plan. Returns 409 if the plan has any subscriptions (any status) — in that case use deactivate.",
   })
   @ApiNoContentResponse({ description: "Plan deleted." })
   deletePlan(@Param("id") id: string) {

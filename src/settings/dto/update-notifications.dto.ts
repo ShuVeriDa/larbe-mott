@@ -41,7 +41,7 @@ export class UpdateNotificationsDto {
   @ApiPropertyOptional({
     example: "Europe/Moscow",
     description:
-      "Часовой пояс в формате IANA (Area/City). Используется крон-планировщиком email-напоминаний.",
+      "Timezone in IANA format (Area/City). Used by the cron scheduler for email reminders.",
   })
   @IsOptional()
   @IsString()

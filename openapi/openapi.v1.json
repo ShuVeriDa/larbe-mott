@@ -3,7 +3,7 @@
   "paths": {
     "/api/users/me": {
       "get": {
-        "description": "Возвращает профиль авторизованного пользователя без необходимости знать его id. Используется приветствием на главной, шапкой и т.д.",
+        "description": "Returns the authenticated user's profile without needing to know their ID. Used by the homepage greeting, header, etc.",
         "operationId": "UserController_getMe",
         "parameters": [],
         "responses": {
@@ -101,7 +101,7 @@
         ]
       },
       "delete": {
-        "description": "Требует подтверждения через ввод email текущего аккаунта в теле запроса. Аккаунт помечается status=DELETED, deletedAt=now(), все активные сессии отзываются. Через 30 дней данные удаляются безвозвратно фоновым job'ом.",
+        "description": "Requires confirmation by entering the current account's email in the request body. The account is marked status=DELETED, deletedAt=now(), and all active sessions are revoked. After 30 days the data is permanently deleted by a background job.",
         "operationId": "UserController_deleteUser",
         "parameters": [],
         "requestBody": {
@@ -237,7 +237,7 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": "Returns { success: true, revoked: <count> }. Текущая сессия сохраняется."
+            "description": "Returns { success: true, revoked: <count> }. The current session is preserved."
           },
           "401": {
             "description": "Missing or invalid bearer token"
@@ -248,7 +248,7 @@
             "bearer": []
           }
         ],
-        "summary": "Revoke all sessions for current user except the current one (matches the design 'Завершить все')",
+        "summary": "Revoke all sessions for current user except the current one (matches the design 'End all')",
         "tags": [
           "auth"
         ]
@@ -308,10 +308,10 @@
         },
         "responses": {
           "200": {
-            "description": "{ ok: true } — независимо от существования email"
+            "description": "{ ok: true } — regardless of whether the email exists"
           }
         },
-        "summary": "Запросить ссылку для сброса пароля (всегда возвращает ok=true)",
+        "summary": "Request a password reset link (always returns ok=true)",
         "tags": [
           "auth"
         ]
@@ -335,7 +335,7 @@
             "description": "{ valid: true, expiresAt, email: 'u***@example.com' } | { valid: false, reason }"
           }
         },
-        "summary": "Проверить валидность reset-токена (для бейджа на странице /reset-password)",
+        "summary": "Validate a password reset token (for the badge on the /reset-password page)",
         "tags": [
           "auth"
         ]
@@ -357,7 +357,7 @@
         },
         "responses": {
           "200": {
-            "description": "{ ok: true } — пароль успешно сохранён"
+            "description": "{ ok: true } — password saved successfully"
           },
           "400": {
             "description": "weak_password | token_expired | account_unavailable"
@@ -369,7 +369,7 @@
             "description": "token_used"
           }
         },
-        "summary": "Установить новый пароль по токену + revoke all sessions + email-уведомление",
+        "summary": "Set a new password via token + revoke all sessions + email notification",
         "tags": [
           "auth"
         ]
@@ -391,7 +391,7 @@
         },
         "responses": {
           "200": {
-            "description": "{ ok: true } — пароль успешно сменён"
+            "description": "{ ok: true } — password changed successfully"
           },
           "400": {
             "description": "weak_password | same_password"
@@ -405,7 +405,7 @@
             "bearer": []
           }
         ],
-        "summary": "Сменить пароль авторизованным юзером. Требует текущий + новый. Завершает все сессии и шлёт уведомительное письмо.",
+        "summary": "Change password for an authenticated user. Requires current + new password. Terminates all sessions and sends a notification email.",
         "tags": [
           "auth"
         ]
@@ -427,7 +427,7 @@
         },
         "responses": {
           "200": {
-            "description": "{ ok: true } — письмо отправлено на новый email"
+            "description": "{ ok: true } — confirmation email sent to the new address"
           },
           "400": {
             "description": "same_email"
@@ -436,7 +436,7 @@
             "description": "Missing/invalid bearer token OR invalid_current_password"
           },
           "409": {
-            "description": "email_taken — указанный email уже занят"
+            "description": "email_taken — the specified email is already taken"
           }
         },
         "security": [
@@ -444,7 +444,7 @@
             "bearer": []
           }
         ],
-        "summary": "Запросить смену email. Письмо со ссылкой подтверждения отправляется на НОВЫЙ адрес.",
+        "summary": "Request an email change. A confirmation link is sent to the NEW address.",
         "tags": [
           "auth"
         ]
@@ -466,7 +466,7 @@
         },
         "responses": {
           "200": {
-            "description": "{ ok: true, email } — email успешно изменён"
+            "description": "{ ok: true, email } — email changed successfully"
           },
           "400": {
             "description": "token_expired | account_unavailable"
@@ -478,7 +478,7 @@
             "description": "token_used | email_taken"
           }
         },
-        "summary": "Подтвердить новый email по токену. Завершает все сессии, шлёт уведомление на старый адрес.",
+        "summary": "Confirm the new email via token. Terminates all sessions, sends a notification to the old address.",
         "tags": [
           "auth"
         ]
@@ -867,7 +867,7 @@
     },
     "/api/texts/{id}/report": {
       "post": {
-        "description": "Создаёт жалобу на текст в виде FeedbackThread (type=COMPLAINT, contextType=TEXT). Возвращает 409, если у пользователя уже есть незакрытая жалоба на этот текст — в теле ошибки threadId/ticketNumber. Категория жалобы попадает в FeedbackThread.contextAction; пользовательский комментарий — в первое сообщение.",
+        "description": "Creates a complaint for the text as a FeedbackThread (type=COMPLAINT, contextType=TEXT). Returns 409 if the user already has an open complaint for this text — the error body contains threadId/ticketNumber. The complaint category goes into FeedbackThread.contextAction; the user's comment goes into the first message.",
         "operationId": "TextController_reportText",
         "parameters": [
           {
@@ -892,7 +892,7 @@
         },
         "responses": {
           "201": {
-            "description": "{ id, ticketNumber, status, createdAt } созданного thread'а."
+            "description": "{ id, ticketNumber, status, createdAt } of the created thread."
           },
           "401": {
             "description": "Missing or invalid bearer token"
@@ -901,7 +901,7 @@
             "description": "Text with the given ID was not found."
           },
           "409": {
-            "description": "У пользователя уже есть открытая жалоба на этот текст."
+            "description": "The user already has an open complaint for this text."
           }
         },
         "security": [
@@ -1440,7 +1440,7 @@
     },
     "/api/words/lookup": {
       "post": {
-        "description": "По клику в тексте: фронт передаёт tokenId. Возвращает translation, grammar, baseForm из кэша/БД.",
+        "description": "On tap in the reader: the client passes tokenId. Returns translation, grammar, baseForm from cache/DB.",
         "operationId": "WordsController_lookup",
         "parameters": [],
         "requestBody": {
@@ -1466,7 +1466,7 @@
             "bearer": []
           }
         ],
-        "summary": "Получить перевод слова по tokenId (основной API для клика)",
+        "summary": "Get word translation by tokenId (primary API for tap/click)",
         "tags": [
           "words"
         ]
@@ -1474,7 +1474,7 @@
     },
     "/api/words/{lemmaId}/examples": {
       "get": {
-        "description": "Возвращает до 10 сниппетов из разных текстов базы, где встречается данная лемма. Не зависит от истории пользователя.",
+        "description": "Returns up to 10 snippets from different texts in the database where this lemma appears. Independent of user history.",
         "operationId": "WordsController_getExamples",
         "parameters": [
           {
@@ -1489,7 +1489,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Список сниппетов с указанием источника."
+            "description": "List of snippets with source information."
           },
           "401": {
             "description": "Missing or invalid bearer token"
@@ -1500,7 +1500,7 @@
             "bearer": []
           }
         ],
-        "summary": "Корпусные примеры употребления слова",
+        "summary": "Corpus usage examples for a word",
         "tags": [
           "words"
         ]
@@ -1508,7 +1508,7 @@
     },
     "/api/words/{lemmaId}/related": {
       "get": {
-        "description": "Возвращает все WordRelation для данной леммы (в обе стороны), сгруппированные по типу. Используется в карточке слова в разделе «Родственные слова».",
+        "description": "Returns all WordRelations for the given lemma (in both directions), grouped by type. Used in the word card under 'Related words'.",
         "operationId": "WordsController_getRelated",
         "parameters": [
           {
@@ -1534,7 +1534,7 @@
             "bearer": []
           }
         ],
-        "summary": "Связанные слова (синонимы / антонимы / однокоренные)",
+        "summary": "Related words (synonyms / antonyms / cognates)",
         "tags": [
           "words"
         ]
@@ -1542,7 +1542,7 @@
     },
     "/api/words/lookup-by-word": {
       "post": {
-        "description": "Для введённого пользователем слова. Цепочка: админ → кэш → онлайн → морфология.",
+        "description": "For a word entered by the user. Chain: admin override -> cache -> online -> morphology.",
         "operationId": "WordsController_lookupByWord",
         "parameters": [],
         "requestBody": {
@@ -1568,7 +1568,7 @@
             "bearer": []
           }
         ],
-        "summary": "Получить перевод по строке слова (цепочка на запросе)",
+        "summary": "Get translation by word string (lookup chain)",
         "tags": [
           "words"
         ]
@@ -1576,7 +1576,7 @@
     },
     "/api/words/parts-of-speech/analyze": {
       "post": {
-        "description": "Возвращает для каждого токена основную часть речи и альтернативные кандидаты. Использует словарь лемм/форм и эвристики по чеченской грамматике.",
+        "description": "Returns the primary part of speech and alternative candidates for each token. Uses a lemma/form dictionary and Chechen grammar heuristics.",
         "operationId": "WordsController_analyzePartsOfSpeech",
         "parameters": [],
         "requestBody": {
@@ -1602,7 +1602,7 @@
             "bearer": []
           }
         ],
-        "summary": "Определить части речи (Къамелан дакъош) в тексте",
+        "summary": "Identify parts of speech (Chechen: Khamelam daqosh) in text",
         "tags": [
           "words"
         ]
@@ -2293,7 +2293,7 @@
     },
     "/api/dictionary/entries/bulk-assign": {
       "patch": {
-        "description": "Assign or remove folderId for multiple dictionary entries in one transaction. Powers the 'Распределить все' action on the folders page. Requires Premium.",
+        "description": "Assign or remove folderId for multiple dictionary entries in one transaction. Powers the 'Distribute all' action on the folders page. Requires Premium.",
         "operationId": "DictionaryController_bulkAssignDictionaryEntries",
         "parameters": [],
         "requestBody": {
@@ -2764,8 +2764,22 @@
           },
           {
             "name": "format",
-            "required": true,
+            "required": false,
             "in": "query",
+            "schema": {
+              "default": "json",
+              "type": "string",
+              "enum": [
+                "json",
+                "csv"
+              ]
+            }
+          },
+          {
+            "name": "ids",
+            "required": false,
+            "in": "query",
+            "description": "Comma-separated list of text UUIDs to export",
             "schema": {
               "type": "string"
             }
@@ -3734,14 +3748,14 @@
     },
     "/api/admin/dictionary/lookup": {
       "get": {
-        "description": "Используется для deep-link из детали токена: если слово уже есть — вернёт lemmaId, иначе found: false.",
+        "description": "Used for deep-linking from a token detail view: if the word already exists it returns the lemmaId, otherwise found: false.",
         "operationId": "AdminDictionaryController_lookup",
         "parameters": [
           {
             "name": "normalized",
             "required": true,
             "in": "query",
-            "description": "Нормализованная форма слова",
+            "description": "Normalized word form",
             "schema": {
               "type": "string"
             }
@@ -3763,7 +3777,7 @@
             "bearer": []
           }
         ],
-        "summary": "Найти запись по нормализованной форме (admin only)",
+        "summary": "Look up an entry by normalized form (admin only)",
         "tags": [
           "admin/dictionary"
         ]
@@ -5141,7 +5155,7 @@
             "name": "tab",
             "required": false,
             "in": "query",
-            "description": "Tab filter: all — все, frequent — seenCount ≥ 5, rare — seenCount < 5",
+            "description": "Tab filter: all — all words, frequent — seenCount ≥ 5, rare — seenCount < 5",
             "schema": {
               "default": "all",
               "type": "string",
@@ -6914,7 +6928,7 @@
     },
     "/api/admin/billing/stats": {
       "get": {
-        "description": "Returns payingCount, totalUsers, MRR, ARR, conversionRate, churnRate за последние 30 дней, а также дельты к предыдущему 30-дневному периоду: payingDeltaLast30 (шт), mrrGrowthPct (%), conversionDeltaPp (пп), churnDeltaPp (пп). mrrGrowthPct = null, если MRR 30 дней назад был 0.",
+        "description": "Returns payingCount, totalUsers, MRR, ARR, conversionRate, churnRate for the last 30 days, as well as deltas compared to the previous 30-day period: payingDeltaLast30 (count), mrrGrowthPct (%), conversionDeltaPp (pp), churnDeltaPp (pp). mrrGrowthPct = null if MRR 30 days ago was 0.",
         "operationId": "AdminBillingController_getBillingStats",
         "parameters": [],
         "responses": {
@@ -6962,14 +6976,14 @@
     },
     "/api/admin/plans": {
       "get": {
-        "description": "Returns plans with subscriberCount. Filters: onlyActive (true → только isActive), type, groupCode.",
+        "description": "Returns plans with subscriberCount. Filters: onlyActive (true → only isActive), type, groupCode.",
         "operationId": "AdminBillingController_getPlans",
         "parameters": [
           {
             "name": "onlyActive",
             "required": false,
             "in": "query",
-            "description": "Вернуть только активные планы (isActive=true).",
+            "description": "Return only active plans (isActive=true).",
             "schema": {
               "example": true,
               "type": "boolean"
@@ -7055,7 +7069,7 @@
     },
     "/api/admin/plans/{id}": {
       "patch": {
-        "description": "Updates plan fields (name, prices, description, isActive, limits, groupCode, displayColor, iconKey, highlightFeatures). Pass limits to replace the full JSON limits object — для частичного апдейта используйте PATCH /admin/plans/:id/limits.",
+        "description": "Updates plan fields (name, prices, description, isActive, limits, groupCode, displayColor, iconKey, highlightFeatures). Pass limits to replace the full JSON limits object — for a partial update use PATCH /admin/plans/:id/limits.",
         "operationId": "AdminBillingController_updatePlan",
         "parameters": [
           {
@@ -7096,7 +7110,7 @@
         ]
       },
       "delete": {
-        "description": "Permanently deletes a plan. Returns 409 если у плана есть подписки (любой статус) — в этом случае используйте deactivate.",
+        "description": "Permanently deletes a plan. Returns 409 if the plan has any subscriptions (any status) — in that case use deactivate.",
         "operationId": "AdminBillingController_deletePlan",
         "parameters": [
           {
@@ -7129,7 +7143,7 @@
     },
     "/api/admin/plans/{id}/limits": {
       "patch": {
-        "description": "Частично обновляет JSON-объект лимитов плана: переданная дельта мерджится с текущим plan.limits, поэтому фронт может слать только изменённые поля. Передайте replace=true чтобы заменить лимиты целиком.",
+        "description": "Partially updates the plan limits JSON object: the supplied delta is merged into the current plan.limits, so the client can send only changed fields. Pass replace=true to replace the limits object entirely.",
         "operationId": "AdminBillingController_updatePlanLimits",
         "parameters": [
           {
@@ -7172,7 +7186,7 @@
     },
     "/api/admin/plans/{id}/deactivate": {
       "post": {
-        "description": "Sets isActive=false. Безопасная альтернатива удалению — у плана могут быть активные подписки.",
+        "description": "Sets isActive=false. A safe alternative to deletion — the plan may have active subscriptions.",
         "operationId": "AdminBillingController_deactivatePlan",
         "parameters": [
           {
@@ -12330,7 +12344,7 @@
     },
     "/api/admin/tokenization/events": {
       "get": {
-        "description": "Отправляет события: progress {textId, progress}, status_change {textId, status}, queue_changed {queue}",
+        "description": "Emits events: progress {textId, progress}, status_change {textId, status}, queue_changed {queue}",
         "operationId": "AdminTokenizationController_sseEvents",
         "parameters": [],
         "responses": {
@@ -12346,7 +12360,7 @@
             "bearer": []
           }
         ],
-        "summary": "SSE-поток событий токенизации (admin only)",
+        "summary": "SSE stream of tokenization events (admin only)",
         "tags": [
           "admin/tokenization"
         ]
@@ -12359,7 +12373,7 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": "Агрегированная статистика по всем текущим версиям"
+            "description": "Aggregated statistics across all current versions"
           },
           "401": {
             "description": "Missing or invalid bearer token"
@@ -12373,7 +12387,7 @@
             "bearer": []
           }
         ],
-        "summary": "Сводная статистика токенизации (admin only)",
+        "summary": "Tokenization summary statistics (admin only)",
         "tags": [
           "admin/tokenization"
         ]
@@ -12381,12 +12395,12 @@
     },
     "/api/admin/tokenization/distribution": {
       "get": {
-        "description": "Данные для donut-графика: total, analyzed/ambiguous/notFound + sources (admin/cache/morphology/online)",
+        "description": "Data for the donut chart: total, analyzed/ambiguous/notFound + sources (admin/cache/morphology/online)",
         "operationId": "AdminTokenizationController_getDistribution",
         "parameters": [],
         "responses": {
           "200": {
-            "description": "Распределение для правой панели"
+            "description": "Distribution data for the right-hand panel"
           },
           "401": {
             "description": "Missing or invalid bearer token"
@@ -12400,7 +12414,7 @@
             "bearer": []
           }
         ],
-        "summary": "Распределение токенов + источники анализа (admin only)",
+        "summary": "Token distribution and analysis sources (admin only)",
         "tags": [
           "admin/tokenization"
         ]
@@ -12408,14 +12422,14 @@
     },
     "/api/admin/tokenization/texts": {
       "get": {
-        "description": "Фильтры: tab (all|issues|notfound|pending), search, level, status. Сортировка: errors|date|name. Пагинация.",
+        "description": "Filters: tab (all|issues|notfound|pending), search, level, status. Sort: errors|date|name. Pagination.",
         "operationId": "AdminTokenizationController_getTexts",
         "parameters": [
           {
             "name": "tab",
             "required": false,
             "in": "query",
-            "description": "all — все тексты; issues — с ошибками; notfound — с NOT_FOUND токенами; pending — без обработки",
+            "description": "all — all texts; issues — with errors; notfound — with NOT_FOUND tokens; pending — not yet processed",
             "schema": {
               "default": "all",
               "type": "string",
@@ -12431,7 +12445,7 @@
             "name": "search",
             "required": false,
             "in": "query",
-            "description": "Поиск по названию текста",
+            "description": "Search by text title",
             "schema": {
               "type": "string"
             }
@@ -12456,7 +12470,7 @@
             "name": "status",
             "required": false,
             "in": "query",
-            "description": "Фильтр по преобладающему статусу токенов",
+            "description": "Filter by predominant token status",
             "schema": {
               "type": "string",
               "enum": [
@@ -12518,7 +12532,7 @@
             "bearer": []
           }
         ],
-        "summary": "Список текстов с данными токенизации (admin only)",
+        "summary": "List texts with tokenization data (admin only)",
         "tags": [
           "admin/tokenization"
         ]
@@ -12526,7 +12540,7 @@
     },
     "/api/admin/tokenization/queue": {
       "get": {
-        "description": "Тексты со статусом RUNNING и их прогресс",
+        "description": "Texts with RUNNING status and their progress",
         "operationId": "AdminTokenizationController_getQueue",
         "parameters": [],
         "responses": {
@@ -12545,7 +12559,7 @@
             "bearer": []
           }
         ],
-        "summary": "Очередь обработки (admin only)",
+        "summary": "Processing queue (admin only)",
         "tags": [
           "admin/tokenization"
         ]
@@ -12572,13 +12586,13 @@
             "bearer": []
           }
         ],
-        "summary": "Глобальные настройки токенизации (admin only)",
+        "summary": "Global tokenization settings (admin only)",
         "tags": [
           "admin/tokenization"
         ]
       },
       "patch": {
-        "description": "Частичное обновление: autoTokenize, normalization, morphAnalysis, onlineDictionaries",
+        "description": "Partial update: autoTokenize, normalization, morphAnalysis, onlineDictionaries",
         "operationId": "AdminTokenizationController_updateSettings",
         "parameters": [],
         "requestBody": {
@@ -12593,7 +12607,7 @@
         },
         "responses": {
           "200": {
-            "description": "Обновлённые настройки"
+            "description": "Updated settings"
           },
           "401": {
             "description": "Missing or invalid bearer token"
@@ -12607,7 +12621,7 @@
             "bearer": []
           }
         ],
-        "summary": "Обновить настройки токенизации (admin only)",
+        "summary": "Update tokenization settings (admin only)",
         "tags": [
           "admin/tokenization"
         ]
@@ -12615,7 +12629,7 @@
     },
     "/api/admin/tokenization/run": {
       "post": {
-        "description": "scope: pending — только необработанные; errors — тексты с ошибками; all — полная переобработка",
+        "description": "scope: pending — unprocessed texts only; errors — texts with errors; all — full reprocessing",
         "operationId": "AdminTokenizationController_runProcessing",
         "parameters": [],
         "requestBody": {
@@ -12644,7 +12658,7 @@
             "bearer": []
           }
         ],
-        "summary": "Запустить пакетную обработку (admin only)",
+        "summary": "Start batch processing (admin only)",
         "tags": [
           "admin/tokenization"
         ]
@@ -12680,7 +12694,7 @@
             "bearer": []
           }
         ],
-        "summary": "Запустить обработку для выбранных текстов (admin only)",
+        "summary": "Start processing for selected texts (admin only)",
         "tags": [
           "admin/tokenization"
         ]
@@ -12716,7 +12730,7 @@
             "bearer": []
           }
         ],
-        "summary": "Сбросить токены для выбранных текстов (admin only)",
+        "summary": "Reset tokens for selected texts (admin only)",
         "tags": [
           "admin/tokenization"
         ]
@@ -12724,7 +12738,7 @@
     },
     "/api/admin/tokenization/texts/{textId}": {
       "get": {
-        "description": "Версия, stats (total/analyzed/ambiguous/notFound + проценты), sources",
+        "description": "Version, stats (total/analyzed/ambiguous/notFound + percentages), sources",
         "operationId": "AdminTokenizationController_getTextDetail",
         "parameters": [
           {
@@ -12756,7 +12770,7 @@
             "bearer": []
           }
         ],
-        "summary": "Детализация токенизации текста (admin only)",
+        "summary": "Text tokenization detail (admin only)",
         "tags": [
           "admin/tokenization"
         ]
@@ -12764,7 +12778,7 @@
     },
     "/api/admin/tokenization/texts/{textId}/tokens": {
       "get": {
-        "description": "NOT_FOUND и AMBIGUOUS токены текущей версии. Фильтр по status, пагинация.",
+        "description": "NOT_FOUND and AMBIGUOUS tokens of the current version. Filter by status, paginated.",
         "operationId": "AdminTokenizationController_getProblematicTokens",
         "parameters": [
           {
@@ -12780,7 +12794,7 @@
             "name": "status",
             "required": false,
             "in": "query",
-            "description": "Фильтр по статусу токена. Без фильтра — оба статуса",
+            "description": "Filter by token status. Without filter — both statuses",
             "schema": {
               "type": "string",
               "enum": [
@@ -12793,7 +12807,7 @@
             "name": "source",
             "required": false,
             "in": "query",
-            "description": "Фильтр по источнику анализа (primary analysis source)",
+            "description": "Filter by analysis source (primary analysis source)",
             "schema": {
               "type": "string",
               "enum": [
@@ -12845,13 +12859,13 @@
             "bearer": []
           }
         ],
-        "summary": "Проблемные токены текста (admin only)",
+        "summary": "Problematic tokens for a text (admin only)",
         "tags": [
           "admin/tokenization"
         ]
       },
       "delete": {
-        "description": "Удаляет все TextProcessingVersion текста (и токены каскадно). Статус → IDLE.",
+        "description": "Deletes all TextProcessingVersion records for the text (and tokens via cascade). Status → IDLE.",
         "operationId": "AdminTokenizationController_resetTokens",
         "parameters": [
           {
@@ -12883,7 +12897,7 @@
             "bearer": []
           }
         ],
-        "summary": "Сбросить все токены текста (admin only)",
+        "summary": "Reset all tokens for a text (admin only)",
         "tags": [
           "admin/tokenization"
         ]
@@ -12891,7 +12905,7 @@
     },
     "/api/admin/tokenization/texts/{textId}/run": {
       "post": {
-        "description": "Запускает токенизацию в фоне. Возвращает сразу.",
+        "description": "Starts tokenization in the background. Returns immediately.",
         "operationId": "AdminTokenizationController_runForText",
         "parameters": [
           {
@@ -12923,13 +12937,13 @@
             "bearer": []
           }
         ],
-        "summary": "Запустить (пере-)обработку одного текста (admin only)",
+        "summary": "Start (re-)processing of a single text (admin only)",
         "tags": [
           "admin/tokenization"
         ]
       },
       "delete": {
-        "description": "Устанавливает статус IDLE. Фактический стоп зависит от реализации процессора.",
+        "description": "Sets status to IDLE. Actual stop depends on the processor implementation.",
         "operationId": "AdminTokenizationController_cancelProcessing",
         "parameters": [
           {
@@ -12961,7 +12975,7 @@
             "bearer": []
           }
         ],
-        "summary": "Отменить обработку текста (admin only)",
+        "summary": "Cancel text processing (admin only)",
         "tags": [
           "admin/tokenization"
         ]
@@ -13890,14 +13904,14 @@
     },
     "/api/admin/legal": {
       "get": {
-        "description": "Опционально фильтр по slug / lang / isPublished. Сортировка: slug asc, lang asc.",
+        "description": "Optional filter by slug / lang / isPublished. Sort: slug asc, lang asc.",
         "operationId": "AdminLegalController_list",
         "parameters": [
           {
             "name": "slug",
             "required": false,
             "in": "query",
-            "description": "Фильтр по slug",
+            "description": "Filter by slug",
             "schema": {
               "example": "privacy",
               "type": "string"
@@ -13922,7 +13936,7 @@
             "name": "isPublished",
             "required": false,
             "in": "query",
-            "description": "true — только опубликованные, false — только черновики, не указан — все",
+            "description": "true — published only, false — drafts only, omitted — all",
             "schema": {
               "example": false,
               "type": "boolean"
@@ -14027,7 +14041,7 @@
         ]
       },
       "patch": {
-        "description": "Изменение content инкрементит version (для аудита версий ToS). Изменение только title — нет.",
+        "description": "Changing content increments the version (for ToS version auditing). Changing only the title does not.",
         "operationId": "AdminLegalController_update",
         "parameters": [
           {
@@ -15538,7 +15552,7 @@
             "name": "cursor",
             "required": false,
             "in": "query",
-            "description": "Cursor — id последнего платежа предыдущей страницы.",
+            "description": "Cursor — id of the last payment from the previous page.",
             "schema": {
               "type": "string"
             }
@@ -15546,7 +15560,7 @@
         ],
         "responses": {
           "200": {
-            "description": "{ items[], nextCursor, hasMore }. Передавайте nextCursor в параметре `cursor` для следующей страницы."
+            "description": "{ items[], nextCursor, hasMore }. Pass nextCursor as the `cursor` parameter to fetch the next page."
           },
           "401": {
             "description": "Missing or invalid bearer token"
@@ -15569,7 +15583,7 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": "translationsToday, wordsInDictionary, limits (полный PlanLimits JSON; -1 = безлимит)."
+            "description": "translationsToday, wordsInDictionary, limits (full PlanLimits JSON; -1 = unlimited)."
           },
           "401": {
             "description": "Missing or invalid bearer token"
@@ -15706,7 +15720,7 @@
         },
         "responses": {
           "200": {
-            "description": "Купон сохранён. Скидка БУДЕТ ПРИМЕНЕНА только при следующем POST /subscription/subscribe — мгновенного списания/изменения текущей подписки не происходит. Поле status='saved_for_next_subscription' позволяет фронту показать корректный toast («Промокод сохранён»)."
+            "description": "Coupon saved. The discount WILL BE APPLIED only on the next POST /subscription/subscribe — no immediate charge or change to the current subscription occurs. The status='saved_for_next_subscription' field lets the frontend display the correct toast ('Promo code saved')."
           },
           "400": {
             "description": "Promo code expired or limit reached"
@@ -17030,7 +17044,7 @@
     },
     "/api/statistics/me/profile-summary": {
       "get": {
-        "description": "Минимальный набор для карточки «Статистика» и 70-дневного heatmap на странице /profile. Доступен ВСЕМ авторизованным юзерам (без Premium-gate). Полный /statistics/me остаётся под Premium.",
+        "description": "Minimal set for the 'Statistics' card and 70-day heatmap on the /profile page. Available to ALL authenticated users (no Premium gate). The full /statistics/me endpoint remains Premium-only.",
         "operationId": "StatisticsController_getProfileSummary",
         "parameters": [],
         "responses": {
@@ -17235,14 +17249,14 @@
     },
     "/api/legal/{slug}": {
       "get": {
-        "description": "Публичный эндпоинт. Возвращает документ по slug в запрошенном языке. Если в этом языке документа нет — фолбэчит на 'ru'. Черновики (isPublished=false) не возвращаются.",
+        "description": "Public endpoint. Returns the document by slug in the requested language. Falls back to 'ru' if the document is not available in the requested language. Drafts (isPublished=false) are not returned.",
         "operationId": "LegalController_getOne",
         "parameters": [
           {
             "name": "slug",
             "required": true,
             "in": "path",
-            "description": "Идентификатор документа",
+            "description": "Document identifier",
             "schema": {
               "example": "privacy",
               "type": "string"
@@ -17252,7 +17266,7 @@
             "name": "lang",
             "required": false,
             "in": "query",
-            "description": "Язык: ru | che | en | ar (по умолчанию ru)",
+            "description": "Language: ru | che | en | ar (default: ru)",
             "schema": {
               "example": "ru",
               "type": "string"
@@ -17264,10 +17278,10 @@
             "description": "{ slug, lang, title, content (Markdown), version, publishedAt, updatedAt }"
           },
           "404": {
-            "description": "Документ с таким slug не опубликован ни в одном языке"
+            "description": "No document with this slug is published in any language"
           }
         },
-        "summary": "Получить опубликованный юридический/информационный документ",
+        "summary": "Get a published legal/informational document",
         "tags": [
           "legal"
         ]
@@ -17790,7 +17804,7 @@
           },
           "avatar": {
             "type": "object",
-            "description": "URL аватара пользователя. Передайте пустую строку, чтобы сбросить аватар (показ инициалов).",
+            "description": "User avatar URL. Pass an empty string to reset the avatar (initials will be shown instead).",
             "example": "https://cdn.example.com/avatars/u123.png"
           },
           "language": {
@@ -17801,7 +17815,7 @@
               "AR",
               "EN"
             ],
-            "description": "Язык, который изучает пользователь"
+            "description": "Language the user is learning"
           },
           "level": {
             "type": "string",
@@ -17810,7 +17824,7 @@
               "B",
               "C"
             ],
-            "description": "Уровень владения языком (CEFR)"
+            "description": "Language proficiency level (CEFR)"
           }
         },
         "required": [
@@ -17825,7 +17839,7 @@
         "properties": {
           "confirmEmail": {
             "type": "string",
-            "description": "Email текущего пользователя. Должен совпадать с email аккаунта — используется как явное подтверждение операции.",
+            "description": "Email of the current user. Must match the account email — used as an explicit confirmation of the operation.",
             "example": "user@example.com"
           }
         },
@@ -17885,7 +17899,7 @@
           },
           "lang": {
             "type": "string",
-            "description": "UI-язык, на котором отправлять письмо",
+            "description": "UI language in which to send the email",
             "enum": [
               "ru",
               "che",
@@ -17904,11 +17918,11 @@
         "properties": {
           "token": {
             "type": "string",
-            "description": "Сырой reset-токен из ссылки в письме"
+            "description": "Raw reset token from the link in the email"
           },
           "password": {
             "type": "string",
-            "description": "Новый пароль. Минимум 8 символов, заглавная буква (latin/cyrillic), цифра или спецсимвол.",
+            "description": "New password. At least 8 characters, one uppercase letter (latin/cyrillic), one digit or special character.",
             "minLength": 8,
             "maxLength": 128
           }
@@ -17923,17 +17937,17 @@
         "properties": {
           "currentPassword": {
             "type": "string",
-            "description": "Текущий пароль"
+            "description": "Current password"
           },
           "newPassword": {
             "type": "string",
-            "description": "Новый пароль. Минимум 8 символов, заглавная буква (latin/cyrillic), цифра или спецсимвол.",
+            "description": "New password. At least 8 characters, one uppercase letter (latin/cyrillic), one digit or special character.",
             "minLength": 8,
             "maxLength": 128
           },
           "lang": {
             "type": "string",
-            "description": "UI-язык, на котором отправлять уведомительное письмо",
+            "description": "UI language in which to send the notification email",
             "enum": [
               "ru",
               "che",
@@ -17953,16 +17967,16 @@
         "properties": {
           "newEmail": {
             "type": "string",
-            "description": "Новый email-адрес. Письмо со ссылкой будет отправлено на него.",
+            "description": "New email address. A confirmation link will be sent to it.",
             "example": "new@example.com"
           },
           "currentPassword": {
             "type": "string",
-            "description": "Текущий пароль (доказательство владения аккаунтом — на случай угона активной сессии)."
+            "description": "Current password (proof of account ownership — to prevent hijacking of an active session)."
           },
           "lang": {
             "type": "string",
-            "description": "UI-язык, на котором отправлять письма подтверждения и уведомления",
+            "description": "UI language in which to send confirmation and notification emails",
             "enum": [
               "ru",
               "che",
@@ -17982,7 +17996,7 @@
         "properties": {
           "token": {
             "type": "string",
-            "description": "Сырой токен подтверждения смены email из ссылки в письме"
+            "description": "Raw email-change confirmation token from the link in the email"
           }
         },
         "required": [
@@ -18152,11 +18166,11 @@
               "BROKEN",
               "OTHER"
             ],
-            "description": "Категория жалобы. SPAM — спам/реклама, INAPPROPRIATE — недопустимый контент, COPYRIGHT — нарушение авторских прав, INCORRECT_CONTENT — ошибки в тексте, BROKEN — технические проблемы, OTHER — другое."
+            "description": "Report category. SPAM — spam/advertising, INAPPROPRIATE — inappropriate content, COPYRIGHT — copyright violation, INCORRECT_CONTENT — errors in the text, BROKEN — technical issues, OTHER — other."
           },
           "comment": {
             "type": "string",
-            "description": "Свободный комментарий пользователя",
+            "description": "Free-form comment from the user",
             "maxLength": 2000
           }
         },
@@ -18519,8 +18533,8 @@
           "tagNames": {
             "description": "Array of tag NAMES to assign to the text. Tags not yet present in the database will be created (find-or-create). Merged with tagIds.",
             "example": [
-              "История",
-              "Грамматика"
+              "History",
+              "Grammar"
             ],
             "type": "array",
             "items": {
@@ -18761,8 +18775,8 @@
           "tagNames": {
             "description": "Array of tag NAMES to assign. Tags not yet present in the database will be created (find-or-create). Merged with tagIds. Sending tagIds and tagNames together replaces existing tags with their union.",
             "example": [
-              "История",
-              "Грамматика"
+              "History",
+              "Grammar"
             ],
             "type": "array",
             "items": {
@@ -18922,7 +18936,7 @@
           },
           "domain": {
             "type": "string",
-            "description": "Domain / topic (free-form): e.g. 'повседневная речь'"
+            "description": "Domain / topic (free-form): e.g. 'everyday speech'"
           }
         },
         "required": [
@@ -19018,7 +19032,7 @@
           "definition": {
             "type": "string",
             "description": "Translation / definition",
-            "example": "язык (орган)"
+            "example": "language (organ)"
           },
           "notes": {
             "type": "string",
@@ -19040,7 +19054,7 @@
           "definition": {
             "type": "string",
             "description": "Translation / definition",
-            "example": "язык (орган)"
+            "example": "language (organ)"
           },
           "notes": {
             "type": "string",
@@ -19062,7 +19076,7 @@
           },
           "translation": {
             "type": "string",
-            "description": "Russian translation of the example"
+            "description": "Translation of the example"
           }
         },
         "required": [
@@ -19232,7 +19246,7 @@
           "translation": {
             "type": "string",
             "description": "Translation text",
-            "example": "книга"
+            "example": "book"
           },
           "headword": {
             "type": "string",
@@ -19267,7 +19281,7 @@
           "domain": {
             "type": "string",
             "description": "Domain / topic (free-form)",
-            "example": "повседневная речь"
+            "example": "everyday speech"
           }
         },
         "required": [
@@ -20022,11 +20036,11 @@
           },
           "description": {
             "type": "string",
-            "description": "Короткое описание плана для UI-карточки (например, '50 переводов в день · 500 слов в словаре')."
+            "description": "Short plan description for the UI card (e.g. '50 translations per day · 500 words in dictionary')."
           },
           "trialDays": {
             "type": "number",
-            "description": "Длительность бесплатного триала в днях. 0 = триал недоступен.",
+            "description": "Free trial duration in days. 0 = trial not available.",
             "example": 0,
             "minimum": 0,
             "default": 0
@@ -20048,25 +20062,25 @@
           },
           "groupCode": {
             "type": "string",
-            "description": "Группирующий код для связки monthly/yearly вариантов одного тарифа (например, 'PRO').",
+            "description": "Grouping code to link monthly/yearly variants of the same plan (e.g. 'PRO').",
             "example": "PRO"
           },
           "displayColor": {
             "type": "string",
-            "description": "HEX-цвет акцента карточки тарифа (например, '#2254d3').",
+            "description": "HEX accent color for the plan card (e.g. '#2254d3').",
             "example": "#2254d3"
           },
           "iconKey": {
             "type": "string",
-            "description": "Ключ иконки в дизайн-системе (например, 'rocket'). Алфавитно-цифровые символы, дефис и подчёркивание.",
+            "description": "Icon key in the design system (e.g. 'rocket'). Alphanumeric characters, hyphen and underscore only.",
             "example": "rocket"
           },
           "highlightFeatures": {
-            "description": "Список из 2–4 коротких фич для карточки тарифа в UI (например, ['∞ переводов', '10 000 слов']).",
+            "description": "List of 2–4 short feature highlights for the plan card in UI (e.g. ['∞ translations', '10 000 words']).",
             "example": [
-              "∞ переводов",
-              "10 000 слов",
-              "Повторения + деки"
+              "∞ translations",
+              "10 000 words",
+              "Repetitions + decks"
             ],
             "type": "array",
             "items": {
@@ -20116,12 +20130,12 @@
           },
           "description": {
             "type": "object",
-            "description": "Короткое описание плана для UI-карточки. Передайте null чтобы очистить.",
+            "description": "Short plan description for the UI card. Pass null to clear.",
             "nullable": true
           },
           "trialDays": {
             "type": "number",
-            "description": "Длительность бесплатного триала в днях. 0 = триал недоступен.",
+            "description": "Free trial duration in days. 0 = trial not available.",
             "example": 0,
             "minimum": 0
           },
@@ -20142,28 +20156,28 @@
           },
           "groupCode": {
             "type": "object",
-            "description": "Группирующий код для связки monthly/yearly вариантов одного тарифа. Передайте null чтобы разорвать связку.",
+            "description": "Grouping code to link monthly/yearly variants of the same plan. Pass null to unlink.",
             "nullable": true,
             "example": "PRO"
           },
           "displayColor": {
             "type": "object",
-            "description": "HEX-цвет акцента карточки тарифа. Передайте null чтобы сбросить.",
+            "description": "HEX accent color for the plan card. Pass null to reset.",
             "nullable": true,
             "example": "#2254d3"
           },
           "iconKey": {
             "type": "object",
-            "description": "Ключ иконки в дизайн-системе. Передайте null чтобы сбросить.",
+            "description": "Icon key in the design system. Pass null to reset.",
             "nullable": true,
             "example": "rocket"
           },
           "highlightFeatures": {
-            "description": "Список из 2–4 коротких фич для карточки тарифа в UI. Передайте [] чтобы очистить.",
+            "description": "List of 2–4 short feature highlights for the plan card in UI. Pass [] to clear.",
             "example": [
-              "∞ переводов",
-              "10 000 слов",
-              "Повторения + деки"
+              "∞ translations",
+              "10 000 words",
+              "Repetitions + decks"
             ],
             "type": "array",
             "items": {
@@ -20275,7 +20289,7 @@
           },
           "replace": {
             "type": "boolean",
-            "description": "Если true — заменить limits целиком переданным объектом (без merge). По умолчанию false: дельта мерджится с текущим limits.",
+            "description": "If true — replace limits entirely with the provided object (no merge). Default false: the delta is merged into the current limits.",
             "default": false
           }
         }
@@ -20458,7 +20472,7 @@
           "name": {
             "type": "string",
             "description": "Human-readable label",
-            "example": "Запуск платформы"
+            "example": "Platform launch"
           },
           "type": {
             "type": "string",
@@ -20537,7 +20551,7 @@
           "name": {
             "type": "string",
             "description": "Human-readable label",
-            "example": "Запуск платформы"
+            "example": "Platform launch"
           },
           "type": {
             "type": "string",
@@ -20619,7 +20633,7 @@
           "reason": {
             "type": "string",
             "description": "Reason for override",
-            "example": "Внутренний тест для support-команды"
+            "example": "Internal test for the support team"
           }
         },
         "required": [
@@ -20710,7 +20724,7 @@
           "description": {
             "type": "string",
             "description": "Human-readable description",
-            "example": "Новый тулбар в режиме чтения"
+            "example": "New toolbar in reader mode"
           },
           "isEnabled": {
             "type": "boolean",
@@ -20843,7 +20857,7 @@
           "reason": {
             "type": "string",
             "description": "Reason for override",
-            "example": "QA доступ к новой функции"
+            "example": "QA access to the new feature"
           }
         },
         "required": [
@@ -21115,7 +21129,7 @@
         "properties": {
           "name": {
             "type": "string",
-            "example": "Литература"
+            "example": "Literature"
           }
         },
         "required": [
@@ -21127,7 +21141,7 @@
         "properties": {
           "name": {
             "type": "string",
-            "example": "История"
+            "example": "History"
           }
         },
         "required": [
@@ -21143,7 +21157,7 @@
           },
           "name": {
             "type": "string",
-            "example": "Приветствия"
+            "example": "Greetings"
           },
           "sortOrder": {
             "type": "number",
@@ -21300,19 +21314,19 @@
         "properties": {
           "autoTokenize": {
             "type": "boolean",
-            "description": "Авто-токенизация при сохранении текста"
+            "description": "Auto-tokenize on text save"
           },
           "normalization": {
             "type": "boolean",
-            "description": "Нормализация к базовой форме"
+            "description": "Normalize words to base form"
           },
           "morphAnalysis": {
             "type": "boolean",
-            "description": "Морфоанализ по правилам"
+            "description": "Morphological analysis by rules"
           },
           "onlineDictionaries": {
             "type": "boolean",
-            "description": "Запросы к внешнему Online API"
+            "description": "Queries to external online API"
           }
         }
       },
@@ -21326,7 +21340,7 @@
               "errors",
               "all"
             ],
-            "description": "pending — только необработанные; errors — тексты с NOT_FOUND/AMBIGUOUS; all — полная переобработка всех"
+            "description": "pending — unprocessed only; errors — texts with NOT_FOUND/AMBIGUOUS tokens; all — full reprocessing of all texts"
           }
         },
         "required": [
@@ -21337,7 +21351,7 @@
         "type": "object",
         "properties": {
           "textIds": {
-            "description": "Массив ID текстов",
+            "description": "Array of text IDs",
             "type": "array",
             "items": {
               "type": "string"
@@ -21354,7 +21368,7 @@
           "slug": {
             "type": "string",
             "example": "privacy",
-            "description": "URL-friendly идентификатор: lowercase, цифры, дефис. Уникален в паре с lang."
+            "description": "URL-friendly identifier: lowercase letters, digits, hyphen. Unique together with lang."
           },
           "lang": {
             "type": "string",
@@ -21368,16 +21382,16 @@
           },
           "title": {
             "type": "string",
-            "example": "Политика конфиденциальности"
+            "example": "Privacy Policy"
           },
           "content": {
             "type": "string",
-            "example": "# Заголовок\n\nТекст в Markdown...",
-            "description": "Markdown-контент документа"
+            "example": "# Heading\n\nText in Markdown...",
+            "description": "Markdown content of the document"
           },
           "isPublished": {
             "type": "boolean",
-            "description": "Сразу опубликовать (по умолчанию false — черновик)",
+            "description": "Publish immediately (default false — draft)",
             "example": false
           }
         },
@@ -21393,11 +21407,11 @@
         "properties": {
           "title": {
             "type": "string",
-            "example": "Политика конфиденциальности (ред.)"
+            "example": "Privacy Policy (rev.)"
           },
           "content": {
             "type": "string",
-            "example": "# Новый заголовок\n\nИсправленный текст..."
+            "example": "# New heading\n\nRevised text..."
           }
         }
       },
@@ -21410,7 +21424,7 @@
           },
           "translation": {
             "type": "string",
-            "example": "в дружбе"
+            "example": "in friendship"
           },
           "language": {
             "type": "string",
@@ -21423,7 +21437,7 @@
           },
           "notes": {
             "type": "string",
-            "example": "Контекстное пояснение"
+            "example": "Contextual note"
           }
         },
         "required": [
@@ -21464,7 +21478,7 @@
           },
           "translation": {
             "type": "string",
-            "example": "играли"
+            "example": "they were playing"
           },
           "language": {
             "type": "string",
@@ -21480,11 +21494,11 @@
           },
           "textId": {
             "type": "string",
-            "description": "ID текста"
+            "description": "Text ID"
           },
           "pageNumber": {
             "type": "number",
-            "description": "Номер страницы (1-based)"
+            "description": "Page number (1-based)"
           }
         },
         "required": [
@@ -21504,7 +21518,7 @@
           },
           "translation": {
             "type": "string",
-            "example": "в дружбе"
+            "example": "in friendship"
           },
           "language": {
             "type": "string",
@@ -21520,19 +21534,19 @@
           },
           "textId": {
             "type": "string",
-            "description": "ID текста"
+            "description": "Text ID"
           },
           "pageNumber": {
             "type": "number",
-            "description": "Номер страницы (1-based)"
+            "description": "Page number (1-based)"
           },
           "startTokenPosition": {
             "type": "number",
-            "description": "position первого токена фразы"
+            "description": "Position of the first phrase token"
           },
           "endTokenPosition": {
             "type": "number",
-            "description": "position последнего токена фразы (inclusive)"
+            "description": "Position of the last phrase token (inclusive)"
           }
         },
         "required": [
@@ -21550,19 +21564,19 @@
         "properties": {
           "textId": {
             "type": "string",
-            "description": "ID текста"
+            "description": "Text ID"
           },
           "pageNumber": {
             "type": "number",
-            "description": "Номер страницы (1-based)"
+            "description": "Page number (1-based)"
           },
           "startTokenPosition": {
             "type": "number",
-            "description": "position первого токена фразы (TextToken.position)"
+            "description": "Position of the first phrase token (TextToken.position)"
           },
           "endTokenPosition": {
             "type": "number",
-            "description": "position последнего токена фразы (TextToken.position, inclusive)"
+            "description": "Position of the last phrase token (TextToken.position, inclusive)"
           }
         },
         "required": [
@@ -21884,11 +21898,11 @@
           },
           "context": {
             "type": "string",
-            "description": "Контекст или пояснение к фразе"
+            "description": "Context or additional notes for the phrase"
           },
           "categoryId": {
             "type": "string",
-            "description": "ID категории, если известна"
+            "description": "Category ID, if known"
           }
         },
         "required": [
@@ -21956,11 +21970,11 @@
           },
           "showReviewReminder": {
             "type": "boolean",
-            "description": "In-app напоминание о повторении на главной странице (число слов на повторение)."
+            "description": "In-app review reminder on the home page (shows the number of words due for review)."
           },
           "enableDecks": {
             "type": "boolean",
-            "description": "Premium-фича: включить авторские деки заучивания (NEW / OLD / RETIRED). При установке в true требуется активная Premium-подписка."
+            "description": "Premium feature: enable curated learning decks (NEW / OLD / RETIRED). Setting to true requires an active Premium subscription."
           },
           "readerFontFamily": {
             "type": "string",
@@ -22090,7 +22104,7 @@
           "timezone": {
             "type": "string",
             "example": "Europe/Moscow",
-            "description": "Часовой пояс в формате IANA (Area/City). Используется крон-планировщиком email-напоминаний."
+            "description": "Timezone in IANA format (Area/City). Used by the cron scheduler for email reminders."
           }
         }
       },

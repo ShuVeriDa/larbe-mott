@@ -11,7 +11,7 @@ export class RunTokenizationDto {
   @ApiProperty({
     enum: RunScope,
     description:
-      "pending — только необработанные; errors — тексты с NOT_FOUND/AMBIGUOUS; all — полная переобработка всех",
+      "pending — unprocessed only; errors — texts with NOT_FOUND/AMBIGUOUS tokens; all — full reprocessing of all texts",
   })
   @IsEnum(RunScope)
   scope: RunScope;

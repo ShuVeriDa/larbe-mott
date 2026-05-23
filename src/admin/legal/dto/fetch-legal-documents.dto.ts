@@ -4,7 +4,7 @@ import { IsBoolean, IsIn, IsOptional, IsString } from "class-validator";
 import { SUPPORTED_LANGS } from "src/legal/legal.service";
 
 export class FetchLegalDocumentsDto {
-  @ApiPropertyOptional({ description: "Фильтр по slug", example: "privacy" })
+  @ApiPropertyOptional({ description: "Filter by slug", example: "privacy" })
   @IsOptional()
   @IsString()
   slug?: string;
@@ -17,7 +17,7 @@ export class FetchLegalDocumentsDto {
 
   @ApiPropertyOptional({
     description:
-      "true — только опубликованные, false — только черновики, не указан — все",
+      "true — published only, false — drafts only, omitted — all",
     example: false,
   })
   @IsOptional()

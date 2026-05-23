@@ -5,7 +5,7 @@ import { IsEnum, IsInt, IsOptional, Max, Min } from "class-validator";
 export class ProblematicTokensQueryDto {
   @ApiPropertyOptional({
     enum: ["NOT_FOUND", "AMBIGUOUS"],
-    description: "Фильтр по статусу токена. Без фильтра — оба статуса",
+    description: "Filter by token status. Without filter — both statuses",
   })
   @IsEnum(["NOT_FOUND", "AMBIGUOUS"])
   @IsOptional()
@@ -13,7 +13,7 @@ export class ProblematicTokensQueryDto {
 
   @ApiPropertyOptional({
     enum: ["ADMIN", "CACHE", "MORPHOLOGY", "ONLINE"],
-    description: "Фильтр по источнику анализа (primary analysis source)",
+    description: "Filter by analysis source (primary analysis source)",
   })
   @IsEnum(["ADMIN", "CACHE", "MORPHOLOGY", "ONLINE"])
   @IsOptional()

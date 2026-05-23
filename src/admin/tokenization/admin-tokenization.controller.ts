@@ -52,9 +52,9 @@ export class AdminTokenizationController {
   @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
   @Sse("events")
   @ApiOperation({
-    summary: "SSE-поток событий токенизации (admin only)",
+    summary: "SSE stream of tokenization events (admin only)",
     description:
-      "Отправляет события: progress {textId, progress}, status_change {textId, status}, queue_changed {queue}",
+      "Emits events: progress {textId, progress}, status_change {textId, status}, queue_changed {queue}",
   })
   @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
   sseEvents() {
@@ -68,11 +68,11 @@ export class AdminTokenizationController {
   @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
   @Get("stats")
   @ApiOperation({
-    summary: "Сводная статистика токенизации (admin only)",
+    summary: "Tokenization summary statistics (admin only)",
     description:
       "totalTokens, analyzedCount/Percent, ambiguousCount/Percent, notFoundCount/Percent, textsWithoutProcessing, counts per tab",
   })
-  @ApiOkResponse({ description: "Агрегированная статистика по всем текущим версиям" })
+  @ApiOkResponse({ description: "Aggregated statistics across all current versions" })
   @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
   async getStats() {
     return this.service.getStats();
@@ -85,11 +85,11 @@ export class AdminTokenizationController {
   @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
   @Get("distribution")
   @ApiOperation({
-    summary: "Распределение токенов + источники анализа (admin only)",
+    summary: "Token distribution and analysis sources (admin only)",
     description:
-      "Данные для donut-графика: total, analyzed/ambiguous/notFound + sources (admin/cache/morphology/online)",
+      "Data for the donut chart: total, analyzed/ambiguous/notFound + sources (admin/cache/morphology/online)",
   })
-  @ApiOkResponse({ description: "Распределение для правой панели" })
+  @ApiOkResponse({ description: "Distribution data for the right-hand panel" })
   @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
   async getDistribution() {
     return this.service.getDistribution();
@@ -102,9 +102,9 @@ export class AdminTokenizationController {
   @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
   @Get("texts")
   @ApiOperation({
-    summary: "Список текстов с данными токенизации (admin only)",
+    summary: "List texts with tokenization data (admin only)",
     description:
-      "Фильтры: tab (all|issues|notfound|pending), search, level, status. Сортировка: errors|date|name. Пагинация.",
+      "Filters: tab (all|issues|notfound|pending), search, level, status. Sort: errors|date|name. Pagination.",
   })
   @ApiOkResponse({
     description:
@@ -122,8 +122,8 @@ export class AdminTokenizationController {
   @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
   @Get("queue")
   @ApiOperation({
-    summary: "Очередь обработки (admin only)",
-    description: "Тексты со статусом RUNNING и их прогресс",
+    summary: "Processing queue (admin only)",
+    description: "Texts with RUNNING status and their progress",
   })
   @ApiOkResponse({ description: "{ items: [{ textId, title, progress, queueStatus }], count }" })
   @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
@@ -138,7 +138,7 @@ export class AdminTokenizationController {
   @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
   @Get("settings")
   @ApiOperation({
-    summary: "Глобальные настройки токенизации (admin only)",
+    summary: "Global tokenization settings (admin only)",
     description: "autoTokenize, normalization, morphAnalysis, onlineDictionaries",
   })
   @ApiOkResponse({ description: "TokenizationSettings singleton" })
@@ -150,11 +150,11 @@ export class AdminTokenizationController {
   @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
   @Patch("settings")
   @ApiOperation({
-    summary: "Обновить настройки токенизации (admin only)",
-    description: "Частичное обновление: autoTokenize, normalization, morphAnalysis, onlineDictionaries",
+    summary: "Update tokenization settings (admin only)",
+    description: "Partial update: autoTokenize, normalization, morphAnalysis, onlineDictionaries",
   })
   @ApiBody({ type: UpdateTokenizationSettingsDto })
-  @ApiOkResponse({ description: "Обновлённые настройки" })
+  @ApiOkResponse({ description: "Updated settings" })
   @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
   async updateSettings(@Body() dto: UpdateTokenizationSettingsDto) {
     return this.service.updateSettings(dto);
@@ -167,9 +167,9 @@ export class AdminTokenizationController {
   @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
   @Post("run")
   @ApiOperation({
-    summary: "Запустить пакетную обработку (admin only)",
+    summary: "Start batch processing (admin only)",
     description:
-      "scope: pending — только необработанные; errors — тексты с ошибками; all — полная переобработка",
+      "scope: pending — unprocessed texts only; errors — texts with errors; all — full reprocessing",
   })
   @ApiBody({ type: RunTokenizationDto })
   @ApiOkResponse({ description: "{ started: number, textIds: string[] }" })
@@ -184,7 +184,7 @@ export class AdminTokenizationController {
 
   @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
   @Post("bulk/run")
-  @ApiOperation({ summary: "Запустить обработку для выбранных текстов (admin only)" })
+  @ApiOperation({ summary: "Start processing for selected texts (admin only)" })
   @ApiBody({ type: BulkTokenizationDto })
   @ApiOkResponse({ description: "{ started: number, textIds: string[] }" })
   @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
@@ -194,7 +194,7 @@ export class AdminTokenizationController {
 
   @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
   @Post("bulk/reset")
-  @ApiOperation({ summary: "Сбросить токены для выбранных текстов (admin only)" })
+  @ApiOperation({ summary: "Reset tokens for selected texts (admin only)" })
   @ApiBody({ type: BulkTokenizationDto })
   @ApiOkResponse({ description: "{ reset: number }" })
   @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
@@ -209,8 +209,8 @@ export class AdminTokenizationController {
   @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
   @Get("texts/:textId")
   @ApiOperation({
-    summary: "Детализация токенизации текста (admin only)",
-    description: "Версия, stats (total/analyzed/ambiguous/notFound + проценты), sources",
+    summary: "Text tokenization detail (admin only)",
+    description: "Version, stats (total/analyzed/ambiguous/notFound + percentages), sources",
   })
   @ApiParam({ name: "textId", description: "Text UUID" })
   @ApiOkResponse({
@@ -225,8 +225,8 @@ export class AdminTokenizationController {
   @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
   @Get("texts/:textId/tokens")
   @ApiOperation({
-    summary: "Проблемные токены текста (admin only)",
-    description: "NOT_FOUND и AMBIGUOUS токены текущей версии. Фильтр по status, пагинация.",
+    summary: "Problematic tokens for a text (admin only)",
+    description: "NOT_FOUND and AMBIGUOUS tokens of the current version. Filter by status, paginated.",
   })
   @ApiParam({ name: "textId", description: "Text UUID" })
   @ApiOkResponse({
@@ -245,8 +245,8 @@ export class AdminTokenizationController {
   @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
   @Post("texts/:textId/run")
   @ApiOperation({
-    summary: "Запустить (пере-)обработку одного текста (admin only)",
-    description: "Запускает токенизацию в фоне. Возвращает сразу.",
+    summary: "Start (re-)processing of a single text (admin only)",
+    description: "Starts tokenization in the background. Returns immediately.",
   })
   @ApiParam({ name: "textId", description: "Text UUID" })
   @ApiOkResponse({ description: "{ textId, started: true }" })
@@ -260,8 +260,8 @@ export class AdminTokenizationController {
   @Delete("texts/:textId/run")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: "Отменить обработку текста (admin only)",
-    description: "Устанавливает статус IDLE. Фактический стоп зависит от реализации процессора.",
+    summary: "Cancel text processing (admin only)",
+    description: "Sets status to IDLE. Actual stop depends on the processor implementation.",
   })
   @ApiParam({ name: "textId", description: "Text UUID" })
   @ApiOkResponse({ description: "{ textId, cancelled: true }" })
@@ -275,8 +275,8 @@ export class AdminTokenizationController {
   @Delete("texts/:textId/tokens")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: "Сбросить все токены текста (admin only)",
-    description: "Удаляет все TextProcessingVersion текста (и токены каскадно). Статус → IDLE.",
+    summary: "Reset all tokens for a text (admin only)",
+    description: "Deletes all TextProcessingVersion records for the text (and tokens via cascade). Status → IDLE.",
   })
   @ApiParam({ name: "textId", description: "Text UUID" })
   @ApiOkResponse({ description: "{ textId, reset: true }" })

@@ -191,7 +191,7 @@ export class DictionaryController {
   @ApiOperation({
     summary: "Bulk assign dictionary entries to folders",
     description:
-      "Assign or remove folderId for multiple dictionary entries in one transaction. Powers the 'Распределить все' action on the folders page. Requires Premium.",
+      "Assign or remove folderId for multiple dictionary entries in one transaction. Powers the 'Distribute all' action on the folders page. Requires Premium.",
   })
   @ApiOkResponse({ description: "Entries reassigned" })
   async bulkAssignDictionaryEntries(

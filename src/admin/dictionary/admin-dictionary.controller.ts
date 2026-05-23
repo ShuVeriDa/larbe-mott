@@ -82,11 +82,11 @@ export class AdminDictionaryController {
   @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)
   @Get("lookup")
   @ApiOperation({
-    summary: "Найти запись по нормализованной форме (admin only)",
+    summary: "Look up an entry by normalized form (admin only)",
     description:
-      "Используется для deep-link из детали токена: если слово уже есть — вернёт lemmaId, иначе found: false.",
+      "Used for deep-linking from a token detail view: if the word already exists it returns the lemmaId, otherwise found: false.",
   })
-  @ApiQuery({ name: "normalized", required: true, description: "Нормализованная форма слова" })
+  @ApiQuery({ name: "normalized", required: true, description: "Normalized word form" })
   @ApiOkResponse({ description: "{ found: boolean, lemmaId?: string, normalized: string }" })
   @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
   async lookup(@Query("normalized") normalized: string) {
@@ -526,7 +526,7 @@ export class AdminDictionaryController {
   }
 
   // ─────────────────────────────────────────────────────
-  // FREQUENCY STATS (sidebar "Частотность")
+  // FREQUENCY STATS (sidebar "Frequency")
   // ─────────────────────────────────────────────────────
 
   @AdminPermission(PermissionCode.CAN_EDIT_DICTIONARY)

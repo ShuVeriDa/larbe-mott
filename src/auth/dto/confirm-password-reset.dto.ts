@@ -9,7 +9,7 @@ import {
 
 export class ConfirmPasswordResetDto {
   @ApiProperty({
-    description: "Сырой reset-токен из ссылки в письме",
+    description: "Raw reset token from the link in the email",
   })
   @IsString()
   @Length(20, 200)
@@ -17,7 +17,7 @@ export class ConfirmPasswordResetDto {
 
   @ApiProperty({
     description:
-      "Новый пароль. Минимум 8 символов, заглавная буква (latin/cyrillic), цифра или спецсимвол.",
+      "New password. At least 8 characters, one uppercase letter (latin/cyrillic), one digit or special character.",
     minLength: 8,
     maxLength: 128,
   })

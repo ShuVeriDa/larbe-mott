@@ -16,7 +16,7 @@ export class CreatePhrasebookCategoryDto {
   @IsString()
   emoji: string;
 
-  @ApiProperty({ example: "Приветствия" })
+  @ApiProperty({ example: "Greetings" })
   @IsString()
   name: string;
 

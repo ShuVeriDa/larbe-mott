@@ -50,7 +50,7 @@ export class FetchUnknownWordsDto {
 
   @ApiPropertyOptional({
     description:
-      "Tab filter: all — все, frequent — seenCount ≥ 5, rare — seenCount < 5",
+      "Tab filter: all — all words, frequent — seenCount ≥ 5, rare — seenCount < 5",
     enum: UnknownWordsTab,
     default: UnknownWordsTab.ALL,
   })

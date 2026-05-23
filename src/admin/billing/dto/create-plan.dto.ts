@@ -38,7 +38,7 @@ export class CreatePlanDto {
 
   @ApiPropertyOptional({
     description:
-      "Короткое описание плана для UI-карточки (например, '50 переводов в день · 500 слов в словаре').",
+      "Short plan description for the UI card (e.g. '50 translations per day · 500 words in dictionary').",
   })
   @IsOptional()
   @IsString()
@@ -46,7 +46,7 @@ export class CreatePlanDto {
 
   @ApiPropertyOptional({
     description:
-      "Длительность бесплатного триала в днях. 0 = триал недоступен.",
+      "Free trial duration in days. 0 = trial not available.",
     example: 0,
     minimum: 0,
     default: 0,
@@ -80,7 +80,7 @@ export class CreatePlanDto {
 
   @ApiPropertyOptional({
     description:
-      "Группирующий код для связки monthly/yearly вариантов одного тарифа (например, 'PRO').",
+      "Grouping code to link monthly/yearly variants of the same plan (e.g. 'PRO').",
     example: "PRO",
   })
   @IsOptional()
@@ -89,7 +89,7 @@ export class CreatePlanDto {
   groupCode?: string;
 
   @ApiPropertyOptional({
-    description: "HEX-цвет акцента карточки тарифа (например, '#2254d3').",
+    description: "HEX accent color for the plan card (e.g. '#2254d3').",
     example: "#2254d3",
   })
   @IsOptional()
@@ -98,21 +98,21 @@ export class CreatePlanDto {
 
   @ApiPropertyOptional({
     description:
-      "Ключ иконки в дизайн-системе (например, 'rocket'). Алфавитно-цифровые символы, дефис и подчёркивание.",
+      "Icon key in the design system (e.g. 'rocket'). Alphanumeric characters, hyphen and underscore only.",
     example: "rocket",
   })
   @IsOptional()
   @IsString()
   @MaxLength(48)
   @Matches(/^[a-zA-Z0-9_-]+$/, {
-    message: "iconKey может содержать только буквы, цифры, дефис и подчёркивание",
+    message: "iconKey may only contain letters, digits, hyphen and underscore",
   })
   iconKey?: string;
 
   @ApiPropertyOptional({
     description:
-      "Список из 2–4 коротких фич для карточки тарифа в UI (например, ['∞ переводов', '10 000 слов']).",
-    example: ["∞ переводов", "10 000 слов", "Повторения + деки"],
+      "List of 2–4 short feature highlights for the plan card in UI (e.g. ['∞ translations', '10 000 words']).",
+    example: ["∞ translations", "10 000 words", "Repetitions + decks"],
     type: [String],
   })
   @IsOptional()

@@ -269,7 +269,11 @@ export class AdminTextService {
         orderBy = { createdAt: dir };
     }
 
-    const texts = await this.prisma.text.findMany({ where, orderBy });
+    const texts = await this.prisma.text.findMany({
+      where,
+      orderBy,
+      include: { pages: { orderBy: { pageNumber: "asc" } } },
+    });
 
     if (!texts.length) {
       return format === "csv" ? "" : [];
@@ -323,6 +327,7 @@ export class AdminTextService {
       return {
         id: t.id,
         title: t.title,
+        description: t.description ?? null,
         language: t.language,
         level: t.level,
         status: t.archivedAt
@@ -332,13 +337,26 @@ export class AdminTextService {
             : "draft",
         author: t.author,
         source: t.source,
+        imageUrl: t.imageUrl ?? null,
+        autoTokenizeOnSave: t.autoTokenizeOnSave,
+        useNormalization: t.useNormalization,
+        useMorphAnalysis: t.useMorphAnalysis,
         processingStatus: t.processingStatus,
+        processingProgress: t.processingProgress,
+        processingError: t.processingError ?? null,
         tokenCount,
         readCount: readCountByTextId.get(t.id) ?? 0,
         tags: (tagsByTextId.get(t.id) ?? []).map((tag) => tag.name).join(", "),
+        pages: t.pages.map((p) => ({
+          pageNumber: p.pageNumber,
+          title: p.title ?? null,
+          contentRich: p.contentRich,
+          contentRaw: p.contentRaw,
+        })),
         publishedAt: t.publishedAt?.toISOString() ?? null,
         archivedAt: t.archivedAt?.toISOString() ?? null,
         createdAt: t.createdAt.toISOString(),
+        updatedAt: t.updatedAt.toISOString(),
       };
     });
 
@@ -347,18 +365,26 @@ export class AdminTextService {
     const columns = [
       "id",
       "title",
+      "description",
       "language",
       "level",
       "status",
       "author",
       "source",
+      "imageUrl",
+      "autoTokenizeOnSave",
+      "useNormalization",
+      "useMorphAnalysis",
       "processingStatus",
+      "processingProgress",
+      "processingError",
       "tokenCount",
       "readCount",
       "tags",
       "publishedAt",
       "archivedAt",
       "createdAt",
+      "updatedAt",
     ] as const;
 
     const escape = (v: unknown): string => {

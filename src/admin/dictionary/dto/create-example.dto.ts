@@ -7,7 +7,7 @@ export class CreateExampleDto {
   @MaxLength(2000)
   text: string;
 
-  @ApiPropertyOptional({ description: "Russian translation of the example" })
+  @ApiPropertyOptional({ description: "Translation of the example" })
   @IsOptional()
   @IsString()
   @MaxLength(2000)

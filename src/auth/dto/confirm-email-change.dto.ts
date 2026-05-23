@@ -3,7 +3,7 @@ import { IsString, Length } from "class-validator";
 
 export class ConfirmEmailChangeDto {
   @ApiProperty({
-    description: "Сырой токен подтверждения смены email из ссылки в письме",
+    description: "Raw email-change confirmation token from the link in the email",
   })
   @IsString()
   @Length(20, 200)

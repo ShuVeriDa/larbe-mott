@@ -37,7 +37,7 @@ export class UpdatePlanDto {
 
   @ApiPropertyOptional({
     description:
-      "Короткое описание плана для UI-карточки. Передайте null чтобы очистить.",
+      "Short plan description for the UI card. Pass null to clear.",
     nullable: true,
   })
   @IsOptional()
@@ -45,7 +45,7 @@ export class UpdatePlanDto {
   description?: string | null;
 
   @ApiPropertyOptional({
-    description: "Длительность бесплатного триала в днях. 0 = триал недоступен.",
+    description: "Free trial duration in days. 0 = trial not available.",
     example: 0,
     minimum: 0,
   })
@@ -75,7 +75,7 @@ export class UpdatePlanDto {
 
   @ApiPropertyOptional({
     description:
-      "Группирующий код для связки monthly/yearly вариантов одного тарифа. Передайте null чтобы разорвать связку.",
+      "Grouping code to link monthly/yearly variants of the same plan. Pass null to unlink.",
     nullable: true,
     example: "PRO",
   })
@@ -85,7 +85,7 @@ export class UpdatePlanDto {
   groupCode?: string | null;
 
   @ApiPropertyOptional({
-    description: "HEX-цвет акцента карточки тарифа. Передайте null чтобы сбросить.",
+    description: "HEX accent color for the plan card. Pass null to reset.",
     nullable: true,
     example: "#2254d3",
   })
@@ -94,7 +94,7 @@ export class UpdatePlanDto {
   displayColor?: string | null;
 
   @ApiPropertyOptional({
-    description: "Ключ иконки в дизайн-системе. Передайте null чтобы сбросить.",
+    description: "Icon key in the design system. Pass null to reset.",
     nullable: true,
     example: "rocket",
   })
@@ -102,14 +102,14 @@ export class UpdatePlanDto {
   @IsString()
   @MaxLength(48)
   @Matches(/^[a-zA-Z0-9_-]+$/, {
-    message: "iconKey может содержать только буквы, цифры, дефис и подчёркивание",
+    message: "iconKey may only contain letters, digits, hyphen and underscore",
   })
   iconKey?: string | null;
 
   @ApiPropertyOptional({
     description:
-      "Список из 2–4 коротких фич для карточки тарифа в UI. Передайте [] чтобы очистить.",
-    example: ["∞ переводов", "10 000 слов", "Повторения + деки"],
+      "List of 2–4 short feature highlights for the plan card in UI. Pass [] to clear.",
+    example: ["∞ translations", "10 000 words", "Repetitions + decks"],
     type: [String],
   })
   @IsOptional()

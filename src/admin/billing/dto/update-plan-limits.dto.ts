@@ -11,12 +11,12 @@ const toBool = ({ value }: { value: unknown }): boolean | unknown => {
   return value;
 };
 
-// Все поля PlanLimits становятся optional — сервер делает merge поверх текущего
-// plan.limits JSON, поэтому фронт может слать только дельту.
+// All PlanLimits fields become optional — the server merges the payload on top of the current
+// plan.limits JSON, so the client only needs to send the delta.
 export class UpdatePlanLimitsDto extends PartialType(PlanLimits) {
   @ApiPropertyOptional({
     description:
-      "Если true — заменить limits целиком переданным объектом (без merge). По умолчанию false: дельта мерджится с текущим limits.",
+      "If true — replace limits entirely with the provided object (no merge). Default false: the delta is merged into the current limits.",
     default: false,
   })
   @IsOptional()

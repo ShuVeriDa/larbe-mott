@@ -219,7 +219,7 @@ export class PatchTextDto {
     description:
       "Array of tag NAMES to assign. Tags not yet present in the database will be created (find-or-create). Merged with tagIds. Sending tagIds and tagNames together replaces existing tags with their union.",
     required: false,
-    example: ["История", "Грамматика"],
+    example: ["History", "Grammar"],
   })
   @IsOptional()
   @IsArray()

@@ -27,7 +27,7 @@ export class CreateFeatureFlagDto {
 
   @ApiPropertyOptional({
     description: "Human-readable description",
-    example: "Новый тулбар в режиме чтения",
+    example: "New toolbar in reader mode",
   })
   @IsOptional()
   @IsString()

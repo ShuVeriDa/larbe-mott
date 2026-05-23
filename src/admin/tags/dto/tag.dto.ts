@@ -2,7 +2,7 @@ import { ApiProperty } from "@nestjs/swagger";
 import { IsNotEmpty, IsString, MaxLength, MinLength } from "class-validator";
 
 export class CreateTagDto {
-  @ApiProperty({ example: "Литература" })
+  @ApiProperty({ example: "Literature" })
   @IsString()
   @IsNotEmpty()
   @MinLength(1)
@@ -11,7 +11,7 @@ export class CreateTagDto {
 }
 
 export class RenameTagDto {
-  @ApiProperty({ example: "История" })
+  @ApiProperty({ example: "History" })
   @IsString()
   @IsNotEmpty()
   @MinLength(1)

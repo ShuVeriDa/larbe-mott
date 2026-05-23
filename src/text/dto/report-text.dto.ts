@@ -14,15 +14,15 @@ export class ReportTextDto {
   @ApiProperty({
     enum: TextReportReason,
     description:
-      "Категория жалобы. SPAM — спам/реклама, INAPPROPRIATE — недопустимый контент, " +
-      "COPYRIGHT — нарушение авторских прав, INCORRECT_CONTENT — ошибки в тексте, " +
-      "BROKEN — технические проблемы, OTHER — другое.",
+      "Report category. SPAM — spam/advertising, INAPPROPRIATE — inappropriate content, " +
+      "COPYRIGHT — copyright violation, INCORRECT_CONTENT — errors in the text, " +
+      "BROKEN — technical issues, OTHER — other.",
   })
   @IsEnum(TextReportReason)
   reason: TextReportReason;
 
   @ApiPropertyOptional({
-    description: "Свободный комментарий пользователя",
+    description: "Free-form comment from the user",
     maxLength: 2000,
   })
   @IsOptional()

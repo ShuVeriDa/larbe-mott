@@ -17,13 +17,13 @@ export class SuggestPhraseDto {
   @IsEnum(Language)
   lang: Language;
 
-  @ApiPropertyOptional({ description: "Контекст или пояснение к фразе" })
+  @ApiPropertyOptional({ description: "Context or additional notes for the phrase" })
   @IsOptional()
   @IsString()
   @MaxLength(1000)
   context?: string;
 
-  @ApiPropertyOptional({ description: "ID категории, если известна" })
+  @ApiPropertyOptional({ description: "Category ID, if known" })
   @IsOptional()
   @IsString()
   categoryId?: string;

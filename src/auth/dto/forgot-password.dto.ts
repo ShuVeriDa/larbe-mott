@@ -7,7 +7,7 @@ export class ForgotPasswordDto {
   email: string;
 
   @ApiPropertyOptional({
-    description: "UI-язык, на котором отправлять письмо",
+    description: "UI language in which to send the email",
     enum: ["ru", "che", "en", "ar"],
     default: "ru",
   })

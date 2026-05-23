@@ -9,7 +9,7 @@ import {
 } from "class-validator";
 
 export class ChangePasswordDto {
-  @ApiProperty({ description: "Текущий пароль" })
+  @ApiProperty({ description: "Current password" })
   @IsString()
   @MinLength(1)
   @MaxLength(128)
@@ -17,7 +17,7 @@ export class ChangePasswordDto {
 
   @ApiProperty({
     description:
-      "Новый пароль. Минимум 8 символов, заглавная буква (latin/cyrillic), цифра или спецсимвол.",
+      "New password. At least 8 characters, one uppercase letter (latin/cyrillic), one digit or special character.",
     minLength: 8,
     maxLength: 128,
   })
@@ -33,7 +33,7 @@ export class ChangePasswordDto {
   newPassword: string;
 
   @ApiPropertyOptional({
-    description: "UI-язык, на котором отправлять уведомительное письмо",
+    description: "UI language in which to send the notification email",
     enum: ["ru", "che", "en", "ar"],
     default: "ru",
   })
