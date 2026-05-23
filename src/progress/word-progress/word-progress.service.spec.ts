@@ -21,7 +21,7 @@ describe("WordProgressService", () => {
     jest.clearAllMocks();
     prisma.$transaction.mockImplementation(async (cb: (tx: typeof prisma) => unknown) => cb(prisma as never));
     prisma.tokenAnalysis.findMany.mockResolvedValue([]);
-    service = new WordProgressService(prisma as never);
+    service = new WordProgressService(prisma as never, { del: jest.fn() } as never);
   });
 
   it("should apply SM-2 and keep LEARNING for short interval", async () => {

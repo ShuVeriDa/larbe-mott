@@ -11,7 +11,7 @@ describe("TextProgressService", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new TextProgressService(prisma as never);
+    service = new TextProgressService(prisma as never, { get: jest.fn().mockResolvedValue(null), set: jest.fn() } as never);
   });
 
   it("should return 0 when latest version does not exist", async () => {

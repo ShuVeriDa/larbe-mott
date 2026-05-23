@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
 } from "@nestjs/common";
 import { AiCacheStatus, AiCacheType } from "@prisma/client";
@@ -99,7 +100,7 @@ export class AiTranslationService {
     }
 
     const prompt = this.buildWordPrompt(dto.word, dto.contextSentence);
-    const raw = await this.callGemini(apiKey, {
+    const raw = await this.callGeminiSafe(apiKey, {
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: { responseMimeType: "application/json" },
     });
@@ -143,7 +144,7 @@ export class AiTranslationService {
     }
 
     const prompt = this.buildPhrasePrompt(dto.phrase, dto.contextSentence);
-    const raw = await this.callGemini(apiKey, {
+    const raw = await this.callGeminiSafe(apiKey, {
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: { responseMimeType: "application/json" },
     });
@@ -166,7 +167,7 @@ export class AiTranslationService {
       dto.previousTranslation,
       dto.hint,
     );
-    const raw = await this.callGemini(apiKey, {
+    const raw = await this.callGeminiSafe(apiKey, {
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: { responseMimeType: "application/json" },
     });
@@ -454,6 +455,21 @@ Return only valid JSON, no markdown.`;
       await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
     }
     throw new Error("Gemini API: exhausted retries");
+  }
+
+  private async callGeminiSafe(
+    apiKey: string,
+    body: Record<string, unknown>,
+  ): Promise<string> {
+    try {
+      return await this.callGemini(apiKey, body);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes("User location is not supported")) {
+        throw new BadRequestException("location_not_supported");
+      }
+      throw new InternalServerErrorException("gemini_error");
+    }
   }
 
   private parseWordResponse(raw: string): {

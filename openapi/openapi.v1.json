@@ -17678,6 +17678,265 @@
           "ai-translation"
         ]
       }
+    },
+    "/api/suggestions": {
+      "post": {
+        "operationId": "SuggestionsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSuggestionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Отправить предложение правки к записи словаря",
+        "tags": [
+          "suggestions"
+        ]
+      },
+      "get": {
+        "operationId": "SuggestionsController_list",
+        "parameters": [
+          {
+            "name": "status",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "offset",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "order",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Список всех предложений (admin)",
+        "tags": [
+          "suggestions"
+        ]
+      }
+    },
+    "/api/suggestions/my": {
+      "get": {
+        "operationId": "SuggestionsController_my",
+        "parameters": [
+          {
+            "name": "status",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "offset",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Мои предложения правок",
+        "tags": [
+          "suggestions"
+        ]
+      }
+    },
+    "/api/suggestions/stats": {
+      "get": {
+        "operationId": "SuggestionsController_stats",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Статистика предложений (admin)",
+        "tags": [
+          "suggestions"
+        ]
+      }
+    },
+    "/api/suggestions/{id}/adjacent": {
+      "get": {
+        "operationId": "SuggestionsController_adjacent",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Предыдущее/следующее предложение (admin)",
+        "tags": [
+          "suggestions"
+        ]
+      }
+    },
+    "/api/suggestions/{id}": {
+      "get": {
+        "operationId": "SuggestionsController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Одно предложение со связями (admin)",
+        "tags": [
+          "suggestions"
+        ]
+      }
+    },
+    "/api/suggestions/{id}/review": {
+      "post": {
+        "operationId": "SuggestionsController_review",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewSuggestionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Одобрить или отклонить предложение (admin)",
+        "tags": [
+          "suggestions"
+        ]
+      }
     }
   },
   "info": {
@@ -17772,7 +18031,8 @@
                 "CAN_VIEW_LOGS",
                 "CAN_MANAGE_FEATURE_FLAGS",
                 "CAN_MANAGE_FEEDBACK",
-                "CAN_MANAGE_LEGAL"
+                "CAN_MANAGE_LEGAL",
+                "CAN_MANAGE_SUGGESTIONS"
               ]
             }
           }
@@ -22241,6 +22501,61 @@
         },
         "required": [
           "vote"
+        ]
+      },
+      "CreateSuggestionDto": {
+        "type": "object",
+        "properties": {
+          "normalized": {
+            "type": "string",
+            "description": "Нормализованная форма слова"
+          },
+          "rawWord": {
+            "type": "string",
+            "description": "Оригинальное написание слова"
+          },
+          "currentTranslation": {
+            "type": "string",
+            "description": "Текущий перевод слова (для создания DictionaryEntry если её нет)"
+          },
+          "field": {
+            "type": "string",
+            "description": "Поле, которое нужно изменить (например: rawTranslate, notes)"
+          },
+          "newValue": {
+            "type": "string",
+            "description": "Предложенное новое значение"
+          },
+          "comment": {
+            "type": "string",
+            "description": "Комментарий автора правки"
+          }
+        },
+        "required": [
+          "normalized",
+          "rawWord",
+          "currentTranslation",
+          "field",
+          "newValue"
+        ]
+      },
+      "ReviewSuggestionDto": {
+        "type": "object",
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approve",
+              "reject"
+            ]
+          },
+          "comment": {
+            "type": "string",
+            "description": "Комментарий рецензента"
+          }
+        },
+        "required": [
+          "decision"
         ]
       }
     }

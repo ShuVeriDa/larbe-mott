@@ -4,10 +4,18 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { PrismaService } from "src/prisma.service";
+import { RedisService } from "src/redis/redis.service";
+
+const PROGRESS_CACHE_TTL_S = 300; // 5 minutes
+const progressCacheKey = (userId: string, textId: string) =>
+  `progress:${userId}:${textId}`;
 
 @Injectable()
 export class TextProgressService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private redis: RedisService,
+  ) {}
 
   /**
    * Persists `progressPercent` for a (user, text) and stamps `completedAt`
@@ -82,9 +90,12 @@ export class TextProgressService {
   }
 
   async calculateProgress(userId: string, textId: string) {
+    const cacheKey = progressCacheKey(userId, textId);
+    const cached = await this.redis.get(cacheKey);
+    if (cached !== null) return parseFloat(cached);
+
     const latestVersion = await this.prisma.textProcessingVersion.findFirst({
-      where: { textId },
-      orderBy: { version: "desc" },
+      where: { textId, isCurrent: true },
       select: { id: true },
     });
     if (!latestVersion) return 0;
@@ -113,6 +124,12 @@ export class TextProgressService {
       },
     });
 
-    return total === 0 ? 0 : (known / total) * 100;
+    const result = total === 0 ? 0 : (known / total) * 100;
+    await this.redis.set(cacheKey, result.toString(), "EX", PROGRESS_CACHE_TTL_S);
+    return result;
+  }
+
+  async invalidateProgressCache(userId: string, textId: string): Promise<void> {
+    await this.redis.del(progressCacheKey(userId, textId));
   }
 }

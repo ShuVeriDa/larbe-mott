@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "src/prisma.service";
+import { RedisService } from "src/redis/redis.service";
 import { attachLatestContexts } from "../latest-context.helper";
 
 const EF_DEFAULT = 2.5;
@@ -10,7 +11,10 @@ const KNOWN_INTERVAL = 21; // дней до автоматического пе�
 export class WordProgressService {
   private readonly logger = new Logger(WordProgressService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private redis: RedisService,
+  ) {}
 
   // SM-2: возвращает новые значения после ответа качества quality (0-5)
   private applySM2(
@@ -532,15 +536,12 @@ export class WordProgressService {
 
     const trackedTextIds = trackedRows.map((r) => r.textId);
     const versions = await this.prisma.textProcessingVersion.findMany({
-      where: { textId: { in: trackedTextIds } },
-      orderBy: { version: "desc" },
+      where: { textId: { in: trackedTextIds }, isCurrent: true },
       select: { id: true, textId: true },
     });
-    const latestVersionByTextId = new Map<string, string>();
-    for (const v of versions) {
-      if (!latestVersionByTextId.has(v.textId))
-        latestVersionByTextId.set(v.textId, v.id);
-    }
+    const latestVersionByTextId = new Map<string, string>(
+      versions.map((v) => [v.textId, v.id]),
+    );
 
     const versionIds = [...latestVersionByTextId.values()];
     const analyses = versionIds.length
@@ -603,6 +604,12 @@ export class WordProgressService {
         where: { userId, textId: { in: completedTextIds }, completedAt: null },
         data: { completedAt: new Date() },
       });
+    }
+
+    // Invalidate calculateProgress Redis cache for all affected texts
+    if (trackedTextIds.length) {
+      const keys = trackedTextIds.map((textId) => `progress:${userId}:${textId}`);
+      await this.redis.del(...keys);
     }
   }
 }

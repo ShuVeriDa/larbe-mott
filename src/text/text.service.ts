@@ -11,6 +11,7 @@ import { TokenizerProcessor } from "src/markup-engine/tokenizer/tokenizer.proces
 import { PrismaService } from "src/prisma.service";
 import { TextProgressService } from "src/progress/text-progress/text-progress.service";
 import { WordProgressService } from "src/progress/word-progress/word-progress.service";
+import { RedisService } from "src/redis/redis.service";
 import { ReportTextDto, TextReportReason } from "./dto/report-text.dto";
 
 export type TextProgressStatus = "NEW" | "IN_PROGRESS" | "COMPLETED";
@@ -31,6 +32,11 @@ const WORDS_PER_MINUTE = 200;
 const LEVEL_ORDER: Record<string, number> = { A1: 0, A2: 1, B1: 2, B2: 3, C1: 4, C2: 5 };
 const NEW_TEXT_DAYS = 30;
 
+const TEXT_STATS_CACHE_TTL_S = 86400; // 1 day — stable after tokenization
+const totalPagesCacheKey = (textId: string) => `text:totalPages:${textId}`;
+const wordCountCacheKey = (textId: string, versionId: string) =>
+  `text:wordCount:${textId}:${versionId}`;
+
 function calcReadingTime(wordCount: number): number {
   return Math.max(1, Math.round(wordCount / WORDS_PER_MINUTE));
 }
@@ -48,6 +54,7 @@ export class TextService {
     private readonly tokenizerProcessor: TokenizerProcessor,
     private readonly wordProgress: WordProgressService,
     private readonly textProgress: TextProgressService,
+    private readonly redis: RedisService,
   ) {}
 
   async getAllTags() {
@@ -337,15 +344,27 @@ export class TextService {
     });
     if (!text) throw new NotFoundException("Text not found");
 
-    const [page, latestVersion, totalPages] = await Promise.all([
+    const cachedTotalPages = await this.redis.get(totalPagesCacheKey(textId));
+    const [page, latestVersion, freshTotalPages] = await Promise.all([
       this.prisma.textPage.findFirst({ where: { textId, pageNumber } }),
       this.prisma.textProcessingVersion.findFirst({
-        where: { textId },
-        orderBy: { version: "desc" },
+        where: { textId, isCurrent: true },
         select: { id: true },
       }),
-      this.prisma.textPage.count({ where: { textId } }),
+      cachedTotalPages === null
+        ? this.prisma.textPage.count({ where: { textId } })
+        : Promise.resolve(null),
     ]);
+    const totalPages =
+      cachedTotalPages !== null ? parseInt(cachedTotalPages, 10) : freshTotalPages!;
+    if (cachedTotalPages === null) {
+      void this.redis.set(
+        totalPagesCacheKey(textId),
+        totalPages.toString(),
+        "EX",
+        TEXT_STATS_CACHE_TTL_S,
+      );
+    }
     if (!page) throw new NotFoundException("Page not found");
 
     // Bump reading position (monotonic forward) and read it back together with the
@@ -385,7 +404,9 @@ export class TextService {
       };
     }
 
-    const [tokens, wordCount] = await Promise.all([
+    const wcKey = wordCountCacheKey(textId, latestVersion.id);
+    const cachedWordCount = await this.redis.get(wcKey);
+    const [tokens, freshWordCount] = await Promise.all([
       this.prisma.textToken.findMany({
         where: { versionId: latestVersion.id, pageId: page.id },
         orderBy: { position: "asc" },
@@ -400,8 +421,15 @@ export class TextService {
           endOffset: true,
         },
       }),
-      this.prisma.textToken.count({ where: { versionId: latestVersion.id } }),
+      cachedWordCount === null
+        ? this.prisma.textToken.count({ where: { versionId: latestVersion.id } })
+        : Promise.resolve(null),
     ]);
+    const wordCount =
+      cachedWordCount !== null ? parseInt(cachedWordCount, 10) : freshWordCount!;
+    if (cachedWordCount === null) {
+      void this.redis.set(wcKey, wordCount.toString(), "EX", TEXT_STATS_CACHE_TTL_S);
+    }
 
     // Primary lemmaId per token
     const tokenAnalyses = await this.prisma.tokenAnalysis.findMany({
@@ -431,7 +459,7 @@ export class TextService {
     }
 
     if (userId) {
-      await this.prisma.userEvent.create({
+      void this.prisma.userEvent.create({
         data: {
           userId,
           type: UserEventType.OPEN_TEXT,
