@@ -93,23 +93,25 @@ export class WordProgressService {
   // Вызывается при открытии текста — пассивная встреча со словами
   async registerSeenWords(userId: string, lemmaIds: string[]) {
     const unique = [...new Set(lemmaIds)];
+    if (!unique.length) return;
     const now = new Date();
 
-    await this.prisma.userWordProgress.createMany({
-      data: unique.map((lemmaId) => ({
-        userId,
-        lemmaId,
-        lastSeen: now,
-        easeFactor: EF_DEFAULT,
-        interval: 0,
-      })),
-      skipDuplicates: true,
-    });
-
-    await this.prisma.userWordProgress.updateMany({
-      where: { userId, lemmaId: { in: unique } },
-      data: { lastSeen: now, seenCount: { increment: 1 } },
-    });
+    // Single UPSERT: insert new rows, increment seenCount for existing ones.
+    // Avoids the previous createMany + updateMany double-write pattern.
+    await this.prisma.$executeRaw`
+      INSERT INTO "UserWordProgress" ("userId", "lemmaId", "lastSeen", "easeFactor", "interval", "seenCount")
+      SELECT
+        ${userId}::text,
+        lemma_id,
+        ${now},
+        ${EF_DEFAULT},
+        0,
+        1
+      FROM UNNEST(${unique}::text[]) AS t(lemma_id)
+      ON CONFLICT ("userId", "lemmaId") DO UPDATE
+        SET "lastSeen"  = EXCLUDED."lastSeen",
+            "seenCount" = "UserWordProgress"."seenCount" + 1
+    `;
   }
 
   // Обрабатывает результат повторения слова (quality 0-5)

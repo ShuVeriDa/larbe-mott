@@ -77,7 +77,7 @@ export class AiTranslationService {
       ? AiCacheType.WORD_IN_CONTEXT
       : AiCacheType.WORD_ONLY;
 
-    // 1. Check AI cache
+    // 1a. Check exact cache (WORD_IN_CONTEXT if context provided, WORD_ONLY otherwise)
     const cached = await this.prisma.aiTranslationCache.findFirst({
       where: {
         lemma: normalized,
@@ -91,6 +91,25 @@ export class AiTranslationService {
         data: { requestCount: { increment: 1 } },
       });
       return { ...cached, fromCache: true };
+    }
+
+    // 1b. Fallback: if context was provided but no WORD_IN_CONTEXT hit,
+    //     check WORD_ONLY — avoids a Gemini call when a base translation exists
+    if (dto.contextSentence) {
+      const cachedWordOnly = await this.prisma.aiTranslationCache.findFirst({
+        where: {
+          lemma: normalized,
+          cacheType: AiCacheType.WORD_ONLY,
+          status: { in: [AiCacheStatus.PENDING, AiCacheStatus.APPROVED] },
+        },
+      });
+      if (cachedWordOnly) {
+        await this.prisma.aiTranslationCache.update({
+          where: { id: cachedWordOnly.id },
+          data: { requestCount: { increment: 1 } },
+        });
+        return { ...cachedWordOnly, fromCache: true };
+      }
     }
 
     // 2. Call Gemini

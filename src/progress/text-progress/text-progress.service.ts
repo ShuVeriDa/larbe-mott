@@ -22,6 +22,12 @@ export class TextProgressService {
    * the first time progress reaches 100%. Optionally bumps `lastOpened`.
    * Stamping is conditional on `completedAt IS NULL` so re-reads don't
    * overwrite the original completion timestamp used by statistics.
+   *
+   * Dirty-check: when the row already exists and the stored progressPercent
+   * is within 0.01 % of the new value, we skip writing progressPercent
+   * (saves a write on every page turn when no new words were encountered).
+   * `lastOpened` is still updated if `touchLastOpened` is set, so the
+   * "continue reading" list always reflects the real last-seen timestamp.
    */
   async persistProgress(
     userId: string,
@@ -30,34 +36,59 @@ export class TextProgressService {
     opts: { touchLastOpened?: boolean } = {},
   ): Promise<void> {
     const now = new Date();
-    const data = {
-      progressPercent,
-      ...(opts.touchLastOpened ? { lastOpened: now } : {}),
-    };
-    await this.prisma.userTextProgress.upsert({
+
+    const existing = await this.prisma.userTextProgress.findUnique({
       where: { userId_textId: { userId, textId } },
-      update: data,
-      create: { userId, textId, ...data },
+      select: { progressPercent: true, completedAt: true },
     });
-    if (progressPercent >= 100) {
-      await this.prisma.userTextProgress.updateMany({
-        where: { userId, textId, completedAt: null },
-        data: { completedAt: now },
+
+    const progressChanged =
+      !existing || Math.abs((existing.progressPercent ?? 0) - progressPercent) > 0.01;
+    const needsCompletionStamp = progressPercent >= 100 && !existing?.completedAt;
+
+    if (!existing) {
+      await this.prisma.userTextProgress.create({
+        data: {
+          userId,
+          textId,
+          progressPercent,
+          ...(opts.touchLastOpened ? { lastOpened: now } : {}),
+          ...(needsCompletionStamp ? { completedAt: now } : {}),
+        },
       });
+      return;
     }
+
+    // Build update payload only with what actually changed
+    const updateData: Record<string, unknown> = {};
+    if (progressChanged) updateData.progressPercent = progressPercent;
+    if (opts.touchLastOpened) updateData.lastOpened = now;
+    if (needsCompletionStamp) updateData.completedAt = now;
+
+    if (Object.keys(updateData).length === 0) return; // nothing to write
+
+    await this.prisma.userTextProgress.update({
+      where: { userId_textId: { userId, textId } },
+      data: updateData,
+    });
   }
 
   /**
    * Updates the user's reading position. Bumps lastPageNumber forward only
    * (never moves it backwards on revisits) and refreshes lastOpened.
    * Validates that pageNumber is within [1, totalPages].
+   *
+   * Pass `knownTotalPages` when the caller already has it (e.g. getPage which
+   * just fetched/cached it) to avoid a redundant COUNT query.
    */
   async setPosition(
     userId: string,
     textId: string,
     pageNumber: number,
+    knownTotalPages?: number,
   ): Promise<{ lastPageNumber: number; totalPages: number }> {
-    const totalPages = await this.prisma.textPage.count({ where: { textId } });
+    const totalPages =
+      knownTotalPages ?? (await this.prisma.textPage.count({ where: { textId } }));
     if (totalPages === 0) {
       throw new NotFoundException("Text has no pages");
     }
@@ -68,25 +99,25 @@ export class TextProgressService {
     }
 
     const now = new Date();
-    const existing = await this.prisma.userTextProgress.findUnique({
+
+    // Single UPSERT with a conditional lastPageNumber update:
+    // - on insert: use pageNumber as the initial position
+    // - on conflict: advance only if the new page is further ahead
+    // This replaces the previous SELECT + UPSERT two-round-trip pattern.
+    await this.prisma.$executeRaw`
+      INSERT INTO "UserTextProgress" ("userId", "textId", "lastPageNumber", "lastOpened")
+      VALUES (${userId}, ${textId}, ${pageNumber}, ${now})
+      ON CONFLICT ("userId", "textId") DO UPDATE
+        SET "lastPageNumber" = GREATEST("UserTextProgress"."lastPageNumber", EXCLUDED."lastPageNumber"),
+            "lastOpened"     = EXCLUDED."lastOpened"
+    `;
+
+    const updated = await this.prisma.userTextProgress.findUnique({
       where: { userId_textId: { userId, textId } },
       select: { lastPageNumber: true },
     });
 
-    const nextPage = Math.max(existing?.lastPageNumber ?? 1, pageNumber);
-
-    await this.prisma.userTextProgress.upsert({
-      where: { userId_textId: { userId, textId } },
-      update: { lastPageNumber: nextPage, lastOpened: now },
-      create: {
-        userId,
-        textId,
-        lastPageNumber: nextPage,
-        lastOpened: now,
-      },
-    });
-
-    return { lastPageNumber: nextPage, totalPages };
+    return { lastPageNumber: updated?.lastPageNumber ?? pageNumber, totalPages };
   }
 
   async calculateProgress(userId: string, textId: string) {
@@ -100,32 +131,27 @@ export class TextProgressService {
     });
     if (!latestVersion) return 0;
 
-    const primaryAnalyses = await this.prisma.tokenAnalysis.findMany({
-      where: {
-        isPrimary: true,
-        lemmaId: { not: null },
-        token: { versionId: latestVersion.id },
-      },
-      select: { lemmaId: true },
-    });
-    const lemmaIds = new Set(
-      primaryAnalyses
-        .map((analysis) => analysis.lemmaId)
-        .filter((lemmaId): lemmaId is string => lemmaId !== null),
-    );
+    // Single query: count total unique lemmas and known unique lemmas for this
+    // text version in one DB round-trip, avoiding the previous findMany that
+    // pulled the entire TokenAnalysis table into Node.js memory.
+    const [row] = await this.prisma.$queryRaw<[{ total: bigint; known: bigint }]>`
+      SELECT
+        COUNT(DISTINCT ta."lemmaId")                                                       AS total,
+        COUNT(DISTINCT CASE WHEN uwp.status = 'KNOWN' THEN ta."lemmaId" END)              AS known
+      FROM   "TokenAnalysis"       ta
+      JOIN   "TextToken"           tt  ON tt.id        = ta."tokenId"
+                                      AND tt."versionId" = ${latestVersion.id}
+      LEFT JOIN "UserWordProgress" uwp ON uwp."lemmaId" = ta."lemmaId"
+                                      AND uwp."userId"   = ${userId}
+      WHERE  ta."isPrimary" = true
+        AND  ta."lemmaId"  IS NOT NULL
+    `;
 
-    const total = lemmaIds.size;
-
-    const known = await this.prisma.userWordProgress.count({
-      where: {
-        userId,
-        lemmaId: { in: [...lemmaIds] },
-        status: "KNOWN",
-      },
-    });
-
+    const total = Number(row.total);
+    const known = Number(row.known);
     const result = total === 0 ? 0 : (known / total) * 100;
-    await this.redis.set(cacheKey, result.toString(), "EX", PROGRESS_CACHE_TTL_S);
+
+    void this.redis.set(cacheKey, result.toString(), "EX", PROGRESS_CACHE_TTL_S);
     return result;
   }
 

@@ -23,6 +23,7 @@ import {
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
 import { Language, Level } from "@prisma/client";
+import { Throttle } from "@nestjs/throttler";
 import { Auth } from "src/auth/decorators/auth.decorator";
 import { OptionalAuth } from "src/auth/decorators/optional-auth.decorator";
 import { User } from "src/user/decorators/user.decorator";
@@ -127,6 +128,8 @@ export class TextController {
 
   @Get(":id/pages/:pageNumber")
   @OptionalAuth()
+  // 60 req/min ≈ 1 page/sec — realistic upper bound for a human reader
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
   @ApiOperation({
     summary: "Get one page of a text (optimized)",
     description:

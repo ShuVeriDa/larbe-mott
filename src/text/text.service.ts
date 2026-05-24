@@ -36,6 +36,11 @@ const TEXT_STATS_CACHE_TTL_S = 86400; // 1 day — stable after tokenization
 const totalPagesCacheKey = (textId: string) => `text:totalPages:${textId}`;
 const wordCountCacheKey = (textId: string, versionId: string) =>
   `text:wordCount:${textId}:${versionId}`;
+// Tokens + their primary lemma mappings are immutable after processing.
+// Cache them for 24 h; invalidated explicitly when a new processing version is created.
+const PAGE_TOKENS_CACHE_TTL_S = 86400;
+const pageTokensCacheKey = (versionId: string, pageId: string) =>
+  `text:tokens:${versionId}:${pageId}`;
 
 function calcReadingTime(wordCount: number): number {
   return Math.max(1, Math.round(wordCount / WORDS_PER_MINUTE));
@@ -371,7 +376,7 @@ export class TextService {
     // bookmark flag in a single Promise.all to keep this hot path tight.
     const [position, bookmark] = await Promise.all([
       userId
-        ? this.textProgress.setPosition(userId, textId, pageNumber)
+        ? this.textProgress.setPosition(userId, textId, pageNumber, totalPages)
         : Promise.resolve(null),
       userId
         ? this.prisma.userTextBookmark.findUnique({
@@ -405,37 +410,68 @@ export class TextService {
     }
 
     const wcKey = wordCountCacheKey(textId, latestVersion.id);
-    const cachedWordCount = await this.redis.get(wcKey);
-    const [tokens, freshWordCount] = await Promise.all([
-      this.prisma.textToken.findMany({
-        where: { versionId: latestVersion.id, pageId: page.id },
-        orderBy: { position: "asc" },
-        select: {
-          id: true,
-          position: true,
-          original: true,
-          normalized: true,
-          status: true,
-          vocabId: true,
-          startOffset: true,
-          endOffset: true,
-        },
-      }),
-      cachedWordCount === null
-        ? this.prisma.textToken.count({ where: { versionId: latestVersion.id } })
-        : Promise.resolve(null),
+    const tokKey = pageTokensCacheKey(latestVersion.id, page.id);
+
+    // Fetch word-count scalar and token+analysis payload in parallel.
+    // Both are keyed by versionId so they are invalidated together when a new
+    // processing version is promoted.
+    const [cachedWordCount, cachedTokenPayload] = await Promise.all([
+      this.redis.get(wcKey),
+      this.redis.get(tokKey),
     ]);
-    const wordCount =
-      cachedWordCount !== null ? parseInt(cachedWordCount, 10) : freshWordCount!;
-    if (cachedWordCount === null) {
-      void this.redis.set(wcKey, wordCount.toString(), "EX", TEXT_STATS_CACHE_TTL_S);
+
+    type RawToken = {
+      id: string; position: number; original: string; normalized: string;
+      status: string; vocabId: string | null; startOffset: number | null; endOffset: number | null;
+    };
+    type TokenPayload = {
+      tokens: RawToken[];
+      analyses: { tokenId: string; lemmaId: string | null }[];
+    };
+
+    let tokens: RawToken[];
+    let tokenAnalyses: { tokenId: string; lemmaId: string | null }[];
+    let wordCount: number;
+
+    if (cachedTokenPayload !== null && cachedWordCount !== null) {
+      // Full cache hit — zero DB round-trips for static data
+      const payload = JSON.parse(cachedTokenPayload) as TokenPayload;
+      tokens = payload.tokens;
+      tokenAnalyses = payload.analyses;
+      wordCount = parseInt(cachedWordCount, 10);
+    } else {
+      // Cache miss — fetch everything from DB in parallel
+      const [rawTokens, freshWordCount] = await Promise.all([
+        this.prisma.textToken.findMany({
+          where: { versionId: latestVersion.id, pageId: page.id },
+          orderBy: { position: "asc" },
+          select: {
+            id: true, position: true, original: true, normalized: true,
+            status: true, vocabId: true, startOffset: true, endOffset: true,
+          },
+        }),
+        cachedWordCount === null
+          ? this.prisma.textToken.count({ where: { versionId: latestVersion.id } })
+          : Promise.resolve(null),
+      ]);
+      tokens = rawTokens;
+      wordCount = cachedWordCount !== null ? parseInt(cachedWordCount, 10) : freshWordCount!;
+
+      tokenAnalyses = await this.prisma.tokenAnalysis.findMany({
+        where: { tokenId: { in: tokens.map((t) => t.id) }, isPrimary: true },
+        select: { tokenId: true, lemmaId: true },
+      });
+
+      // Persist both caches non-blocking
+      const payload: TokenPayload = { tokens, analyses: tokenAnalyses };
+      void Promise.all([
+        cachedWordCount === null
+          ? this.redis.set(wcKey, wordCount.toString(), "EX", TEXT_STATS_CACHE_TTL_S)
+          : Promise.resolve("OK"),
+        this.redis.set(tokKey, JSON.stringify(payload), "EX", PAGE_TOKENS_CACHE_TTL_S),
+      ]);
     }
 
-    // Primary lemmaId per token
-    const tokenAnalyses = await this.prisma.tokenAnalysis.findMany({
-      where: { tokenId: { in: tokens.map((t) => t.id) }, isPrimary: true },
-      select: { tokenId: true, lemmaId: true },
-    });
     const analyzedTokenIds = new Set(tokenAnalyses.map((a) => a.tokenId));
     const lemmaIdByTokenId = new Map(
       tokenAnalyses
@@ -444,36 +480,35 @@ export class TextService {
     );
     const uniqueLemmaIds = [...new Set(lemmaIdByTokenId.values())];
 
-    if (userId && uniqueLemmaIds.length) {
-      await this.wordProgress.registerSeenWords(userId, uniqueLemmaIds);
-    }
+    // Run all three independent user-specific operations in parallel:
+    //   1. registerSeenWords  — write-only, result not needed
+    //   2. userWordProgress   — read word statuses for token rendering
+    //   3. calculateProgress  — cached 5 min; result needed for the response
+    // userEvent is fire-and-forget. persistProgress depends on calculateProgress
+    // but is itself fire-and-forget — we don't await it so it doesn't add to
+    // response latency.
+    const [progressRows, progress] = await Promise.all([
+      userId && uniqueLemmaIds.length
+        ? this.prisma.userWordProgress.findMany({
+            where: { userId, lemmaId: { in: uniqueLemmaIds } },
+            select: { lemmaId: true, status: true },
+          })
+        : Promise.resolve([] as { lemmaId: string; status: string }[]),
+      userId
+        ? this.textProgress.calculateProgress(userId, textId)
+        : Promise.resolve(0),
+      userId && uniqueLemmaIds.length
+        ? this.wordProgress.registerSeenWords(userId, uniqueLemmaIds)
+        : Promise.resolve(),
+    ]);
 
-    // userStatus per lemma
-    let userStatusByLemmaId = new Map<string, string>();
-    if (userId && uniqueLemmaIds.length) {
-      const progressRows = await this.prisma.userWordProgress.findMany({
-        where: { userId, lemmaId: { in: uniqueLemmaIds } },
-        select: { lemmaId: true, status: true },
-      });
-      userStatusByLemmaId = new Map(progressRows.map((r) => [r.lemmaId, r.status]));
-    }
+    const userStatusByLemmaId = new Map(progressRows.map((r) => [r.lemmaId, r.status]));
 
     if (userId) {
       void this.prisma.userEvent.create({
-        data: {
-          userId,
-          type: UserEventType.OPEN_TEXT,
-          metadata: { textId, pageNumber },
-        },
+        data: { userId, type: UserEventType.OPEN_TEXT, metadata: { textId, pageNumber } },
       });
-    }
-
-    const progress = userId
-      ? await this.textProgress.calculateProgress(userId, textId)
-      : 0;
-
-    if (userId) {
-      await this.textProgress.persistProgress(userId, textId, progress, { touchLastOpened: true });
+      void this.textProgress.persistProgress(userId, textId, progress, { touchLastOpened: true });
     }
 
     const tokensWithStatus = tokens.map((t) => {
