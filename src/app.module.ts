@@ -37,6 +37,7 @@ import { UserModule } from "./user/user.module";
 import { WordsModule } from "./words/words.module";
 import { DictionaryExportModule } from "./dictionary-export/dictionary-export.module";
 import { SuggestionsModule } from "./suggestions/suggestions.module";
+import { TrackingModule } from "./tracking/tracking.module";
 import { envValidationSchema } from "./config/env.validation";
 
 @Module({
@@ -91,6 +92,7 @@ import { envValidationSchema } from "./config/env.validation";
     AiTranslationModule,
     DictionaryExportModule,
     SuggestionsModule,
+    TrackingModule,
   ],
   controllers: [],
   providers: [

@@ -8,6 +8,7 @@ import {
   ParseUUIDPipe,
   Post,
   Query,
+  Req,
 } from "@nestjs/common";
 import {
   ApiBearerAuth,
@@ -24,9 +25,11 @@ import {
 } from "@nestjs/swagger";
 import { Language, Level } from "@prisma/client";
 import { Throttle } from "@nestjs/throttler";
+import type { Request } from "express";
 import { Auth } from "src/auth/decorators/auth.decorator";
 import { OptionalAuth } from "src/auth/decorators/optional-auth.decorator";
 import { User } from "src/user/decorators/user.decorator";
+import { TrackingService } from "src/tracking/tracking.service";
 import { GetTextsResponseDto } from "./dto/get-texts-response.dto";
 import { ReportTextDto } from "./dto/report-text.dto";
 import { TextService } from "./text.service";
@@ -37,7 +40,10 @@ import type { TextProgressStatus, TextSortOrder } from "./text.service";
 @Controller("texts")
 @ApiUnauthorizedResponse({ description: "Missing or invalid bearer token" })
 export class TextController {
-  constructor(private readonly textService: TextService) {}
+  constructor(
+    private readonly textService: TextService,
+    private readonly tracking: TrackingService,
+  ) {}
 
   @Get("tags")
   @OptionalAuth()
@@ -175,8 +181,23 @@ export class TextController {
   async getTextById(
     @Param("id", ParseUUIDPipe) textId: string,
     @User("id") userId: string | undefined,
+    @Req() req: Request,
   ) {
-    return this.textService.getTextById(textId, userId);
+    const result = await this.textService.getTextById(textId, userId);
+
+    void this.tracking.track({
+      type: "text_open",
+      path: `/texts/${textId}`,
+      ip: extractIp(req),
+      userAgent: req.headers["user-agent"],
+      userId,
+      metadata: {
+        textId,
+        title: (result as Record<string, unknown>)?.title ?? null,
+      },
+    });
+
+    return result;
   }
 
   @Post(":id/bookmark")
@@ -284,3 +305,11 @@ export class TextController {
     return this.textService.getRelatedTexts(textId, userId);
   }
 }
+
+const extractIp = (req: Request): string => {
+  const xff = req.headers["x-forwarded-for"];
+  if (typeof xff === "string" && xff.length > 0) return xff.split(",")[0].trim();
+  const real = req.headers["x-real-ip"];
+  if (typeof real === "string" && real.length > 0) return real;
+  return req.ip ?? req.socket.remoteAddress ?? "unknown";
+};

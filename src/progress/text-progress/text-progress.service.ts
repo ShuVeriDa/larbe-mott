@@ -105,10 +105,10 @@ export class TextProgressService {
     // - on conflict: advance only if the new page is further ahead
     // This replaces the previous SELECT + UPSERT two-round-trip pattern.
     await this.prisma.$executeRaw`
-      INSERT INTO "UserTextProgress" ("userId", "textId", "lastPageNumber", "lastOpened")
+      INSERT INTO "user_text_progress" ("userId", "textId", "lastPageNumber", "lastOpened")
       VALUES (${userId}, ${textId}, ${pageNumber}, ${now})
       ON CONFLICT ("userId", "textId") DO UPDATE
-        SET "lastPageNumber" = GREATEST("UserTextProgress"."lastPageNumber", EXCLUDED."lastPageNumber"),
+        SET "lastPageNumber" = GREATEST("user_text_progress"."lastPageNumber", EXCLUDED."lastPageNumber"),
             "lastOpened"     = EXCLUDED."lastOpened"
     `;
 
@@ -138,11 +138,11 @@ export class TextProgressService {
       SELECT
         COUNT(DISTINCT ta."lemmaId")                                                       AS total,
         COUNT(DISTINCT CASE WHEN uwp.status = 'KNOWN' THEN ta."lemmaId" END)              AS known
-      FROM   "TokenAnalysis"       ta
-      JOIN   "TextToken"           tt  ON tt.id        = ta."tokenId"
+      FROM   "token_analysis"       ta
+      JOIN   "text_token"           tt  ON tt.id        = ta."tokenId"
                                       AND tt."versionId" = ${latestVersion.id}
-      LEFT JOIN "UserWordProgress" uwp ON uwp."lemmaId" = ta."lemmaId"
-                                      AND uwp."userId"   = ${userId}
+      LEFT JOIN "user_word_progress" uwp ON uwp."lemmaId" = ta."lemmaId"
+                                       AND uwp."userId"   = ${userId}
       WHERE  ta."isPrimary" = true
         AND  ta."lemmaId"  IS NOT NULL
     `;

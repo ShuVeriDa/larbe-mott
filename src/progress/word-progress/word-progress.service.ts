@@ -99,8 +99,9 @@ export class WordProgressService {
     // Single UPSERT: insert new rows, increment seenCount for existing ones.
     // Avoids the previous createMany + updateMany double-write pattern.
     await this.prisma.$executeRaw`
-      INSERT INTO "UserWordProgress" ("userId", "lemmaId", "lastSeen", "easeFactor", "interval", "seenCount")
+      INSERT INTO "user_word_progress" ("id", "userId", "lemmaId", "lastSeen", "easeFactor", "interval", "seenCount")
       SELECT
+        gen_random_uuid()::text,
         ${userId}::text,
         lemma_id,
         ${now},
@@ -110,7 +111,7 @@ export class WordProgressService {
       FROM UNNEST(${unique}::text[]) AS t(lemma_id)
       ON CONFLICT ("userId", "lemmaId") DO UPDATE
         SET "lastSeen"  = EXCLUDED."lastSeen",
-            "seenCount" = "UserWordProgress"."seenCount" + 1
+            "seenCount" = "user_word_progress"."seenCount" + 1
     `;
   }
 

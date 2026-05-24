@@ -1571,3 +1571,49 @@ enum FeedbackMessageType {
   PUBLIC_REPLY
   INTERNAL_NOTE
 }
+
+model TrackingEvent {
+  id        BigInt   @id @default(autoincrement())
+  visitorId String
+  sessionId String
+  userId    String?
+
+  eventType String
+  path      String?
+  referrer  String?
+  device    String?
+  browser   String?
+  os        String?
+  country   String?
+  city      String?
+  metadata  Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([visitorId, createdAt])
+  @@index([eventType, createdAt])
+  @@index([path, createdAt])
+  @@index([eventType, createdAt, path])
+  @@map("tracking_event")
+}
+
+model TrackingDailyStats {
+  date             DateTime @id
+  uniqueVisitors   Int
+  sessions         Int
+  pageviews        Int
+  totalEvents      Int
+  avgSessionSec    Int
+  bounceRate       Float
+  topPaths         Json
+  topReferrers     Json
+  topCountries     Json
+  topCities        Json
+  topEventTypes    Json
+  deviceBreakdown  Json
+  browserBreakdown Json
+  osBreakdown      Json
+
+  @@map("tracking_daily_stats")
+}

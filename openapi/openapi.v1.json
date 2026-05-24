@@ -1035,6 +1035,866 @@
         ]
       }
     },
+    "/api/tracking/track": {
+      "post": {
+        "operationId": "TrackingController_track",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrackEventDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": ""
+          }
+        },
+        "summary": "Track a site-analytics event (pageview or custom)",
+        "tags": [
+          "tracking"
+        ]
+      }
+    },
+    "/api/admin/tracking/overview": {
+      "get": {
+        "operationId": "TrackingAdminController_overview",
+        "parameters": [
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "2026-04-01",
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "2026-04-24",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Dashboard overview: current range, comparison with previous, realtime",
+        "tags": [
+          "admin/tracking"
+        ]
+      }
+    },
+    "/api/admin/tracking/realtime": {
+      "get": {
+        "operationId": "TrackingAdminController_realtime",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Realtime stats: active visitors (5 min), queue size, events/min",
+        "tags": [
+          "admin/tracking"
+        ]
+      }
+    },
+    "/api/admin/tracking/timeseries": {
+      "get": {
+        "operationId": "TrackingAdminController_timeseries",
+        "parameters": [
+          {
+            "name": "metric",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "granularity",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "compare",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Metric timeseries. Pass compare=true for previous-period comparison.",
+        "tags": [
+          "admin/tracking"
+        ]
+      }
+    },
+    "/api/admin/tracking/timeseries/summary": {
+      "get": {
+        "operationId": "TrackingAdminController_timeseriesSummary",
+        "parameters": [
+          {
+            "name": "metric",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "granularity",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Timeseries aggregates: total, avg, peak, min.",
+        "tags": [
+          "admin/tracking"
+        ]
+      }
+    },
+    "/api/admin/tracking/timeseries/multi": {
+      "get": {
+        "operationId": "TrackingAdminController_timeseriesMulti",
+        "parameters": [
+          {
+            "name": "granularity",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "metrics",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "example": "pageviews,uniqueVisitors,sessions,totalEvents,bounceRate,avgSessionSec"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Multi-metric timeseries in one request (for Overview sparklines)",
+        "tags": [
+          "admin/tracking"
+        ]
+      }
+    },
+    "/api/admin/tracking/top-pages": {
+      "get": {
+        "operationId": "TrackingAdminController_topPages",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "from",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Top pages from daily aggregate (top-20/day preview)",
+        "tags": [
+          "admin/tracking"
+        ]
+      }
+    },
+    "/api/admin/tracking/pages": {
+      "get": {
+        "operationId": "TrackingAdminController_pages",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "offset",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "search",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "country",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Paginated URL list with exact counts from raw events",
+        "tags": [
+          "admin/tracking"
+        ]
+      }
+    },
+    "/api/admin/tracking/top-referrers": {
+      "get": {
+        "operationId": "TrackingAdminController_topReferrers",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": 0,
+              "type": "number"
+            }
+          },
+          {
+            "name": "from",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "category",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "search",
+                "direct",
+                "social",
+                "other"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Top referrer domains with category. Pass category to filter.",
+        "tags": [
+          "admin/tracking"
+        ]
+      }
+    },
+    "/api/admin/tracking/referrers/breakdown": {
+      "get": {
+        "operationId": "TrackingAdminController_referrerBreakdown",
+        "parameters": [
+          {
+            "name": "from",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Referrer category breakdown: total, uniqueHosts, byCategory",
+        "tags": [
+          "admin/tracking"
+        ]
+      }
+    },
+    "/api/admin/tracking/top-countries": {
+      "get": {
+        "operationId": "TrackingAdminController_topCountries",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "from",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Top countries (filled only when GeoIP is configured)",
+        "tags": [
+          "admin/tracking"
+        ]
+      }
+    },
+    "/api/admin/tracking/top-cities": {
+      "get": {
+        "operationId": "TrackingAdminController_topCities",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "country",
+            "required": false,
+            "in": "query",
+            "description": "ISO country code to filter cities",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Top cities (requires City GeoIP database)",
+        "tags": [
+          "admin/tracking"
+        ]
+      }
+    },
+    "/api/admin/tracking/geography/stats": {
+      "get": {
+        "operationId": "TrackingAdminController_geographyStats",
+        "parameters": [
+          {
+            "name": "from",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Geography stats: event counts, unique countries/cities, top country/city",
+        "tags": [
+          "admin/tracking"
+        ]
+      }
+    },
+    "/api/admin/tracking/geography/status": {
+      "get": {
+        "operationId": "TrackingAdminController_geographyStatus",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "GeoIP setup status + coverage for last 7 days",
+        "tags": [
+          "admin/tracking"
+        ]
+      }
+    },
+    "/api/admin/tracking/devices": {
+      "get": {
+        "operationId": "TrackingAdminController_devices",
+        "parameters": [
+          {
+            "name": "from",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Device breakdown (desktop/mobile/tablet/bot)",
+        "tags": [
+          "admin/tracking"
+        ]
+      }
+    },
+    "/api/admin/tracking/browsers": {
+      "get": {
+        "operationId": "TrackingAdminController_browsers",
+        "parameters": [
+          {
+            "name": "from",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Browser breakdown",
+        "tags": [
+          "admin/tracking"
+        ]
+      }
+    },
+    "/api/admin/tracking/os": {
+      "get": {
+        "operationId": "TrackingAdminController_os",
+        "parameters": [
+          {
+            "name": "from",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "OS breakdown",
+        "tags": [
+          "admin/tracking"
+        ]
+      }
+    },
+    "/api/admin/tracking/word-clicks": {
+      "get": {
+        "operationId": "TrackingAdminController_topWordClicks",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": 50,
+              "type": "number"
+            }
+          },
+          {
+            "name": "from",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "to",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Top clicked words — the key metric for the reader app",
+        "tags": [
+          "admin/tracking"
+        ]
+      }
+    },
+    "/api/admin/tracking/recent": {
+      "get": {
+        "operationId": "TrackingAdminController_recent",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": 100,
+              "type": "number"
+            }
+          },
+          {
+            "name": "sinceId",
+            "required": false,
+            "in": "query",
+            "description": "Return only events with id > sinceId",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "eventType",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "example": "word_click,text_open",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Recent events (live feed). Supports sinceId for incremental polling.",
+        "tags": [
+          "admin/tracking"
+        ]
+      }
+    },
+    "/api/admin/tracking/aggregate": {
+      "post": {
+        "operationId": "TrackingAdminController_aggregate",
+        "parameters": [
+          {
+            "name": "day",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Force re-aggregate daily stats (for day=YYYY-MM-DD or last 3 days)",
+        "tags": [
+          "admin/tracking"
+        ]
+      }
+    },
     "/api/tokens/{id}": {
       "get": {
         "description": "Returns translation, grammar, and base form for the token. Used for word lookup by token identifier.",
@@ -18436,6 +19296,39 @@
         },
         "required": [
           "reason"
+        ]
+      },
+      "TrackEventDto": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "pageview",
+              "text_open",
+              "text_finish",
+              "word_click",
+              "word_add_dict",
+              "word_dismiss",
+              "ai_translation",
+              "search"
+            ],
+            "example": "pageview"
+          },
+          "path": {
+            "type": "string",
+            "example": "/texts/abc123"
+          },
+          "referrer": {
+            "type": "string",
+            "example": "https://google.com"
+          },
+          "metadata": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "type"
         ]
       },
       "SetTextPositionDto": {
