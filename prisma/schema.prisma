@@ -388,6 +388,7 @@ model UserDictionaryEntry {
   @@index([userId])
   @@index([folderId])
   @@index([learningLevel])
+  @@index([lemmaId])
   @@map("user_dictionary_entry")
 }
 
@@ -452,6 +453,7 @@ model Lemma {
   audioUrl              String?
   declensionClass       String?
   domain                String?
+  doshamId              Int?
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt
   feedbackReactions     FeedbackReaction[]    @relation("LemmaFeedbackReactions")
@@ -471,6 +473,7 @@ model Lemma {
   @@unique([normalized, language])
   @@index([normalized])
   @@index([language, normalized])
+  @@index([doshamId])
   @@map("lemma")
 }
 

@@ -84,6 +84,7 @@ export class OnlineDictionaryService {
       if (entry.nounClass) tags.push(entry.nounClass);
 
       return {
+        doshamId: entry.id ?? null,
         normalized: word,
         translation: meanings[0].translation,
         baseForm,

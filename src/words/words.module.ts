@@ -6,6 +6,7 @@ import { OnlineDictionaryModule } from "src/markup-engine/online-dictionary/onli
 import { TokenizerModule } from "src/markup-engine/tokenizer/tokenizer.module";
 import { UnknownWordModule } from "src/markup-engine/unknown-word/unknown-word.module";
 import { PrismaService } from "src/prisma.service";
+import { WordProgressModule } from "src/progress/word-progress/word-progress.module";
 import { TokenModule } from "src/token/token.module";
 import { WordExamplesService } from "./word-examples.service";
 import { WordLookupByWordService } from "./word-lookup-by-word.service";
@@ -16,6 +17,7 @@ import { WordsService } from "./words.service";
 @Module({
   imports: [
     TokenModule,
+    WordProgressModule,
     DictionaryModule,
     DictionaryCacheModule,
     OnlineDictionaryModule,

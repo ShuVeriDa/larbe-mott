@@ -10,6 +10,11 @@ import { parseTranslation } from "src/markup-engine/online-dictionary/translatio
 import { TokenizerService } from "src/markup-engine/tokenizer/tokenizer.service";
 import { PrismaService } from "src/prisma.service";
 import { WordProgressService } from "src/progress/word-progress/word-progress.service";
+import { RedisService } from "src/redis/redis.service";
+
+// Cached plan limit per user: { limit: number (-1 = unlimited) }. TTL 10 min — plan changes are rare.
+const PLAN_LIMIT_KEY = (userId: string) => `plan-limit:${userId}`;
+const PLAN_LIMIT_TTL = 600;
 
 @Injectable()
 export class TokenService {
@@ -20,30 +25,41 @@ export class TokenService {
     private wordProgress: WordProgressService,
     private cache: TokenInfoCacheService,
     private tokenizerService: TokenizerService,
+    private redis: RedisService,
   ) {}
 
+  private async getTranslationsPerDay(userId: string): Promise<number> {
+    const cached = await this.redis.get(PLAN_LIMIT_KEY(userId));
+    if (cached !== null) return parseInt(cached, 10);
+
+    const subscription = await this.prisma.subscription.findFirst({
+      where: {
+        userId,
+        status: { in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING] },
+      },
+      select: { plan: { select: { limits: true } } },
+      orderBy: { startDate: "desc" },
+    });
+
+    const planLimits = subscription?.plan?.limits as Record<string, number> | null;
+    const limit = planLimits?.translationsPerDay ?? 50;
+    await this.redis.set(PLAN_LIMIT_KEY(userId), String(limit), "EX", PLAN_LIMIT_TTL);
+    return limit;
+  }
+
   async getTokenInfo(tokenId: string, userId: string | undefined) {
-    // Enforce translationsPerDay plan limit (-1 = безлимит)
+    // Enforce translationsPerDay plan limit (-1 = unlimited)
     if (userId) {
       const todayStart = new Date();
       todayStart.setUTCHours(0, 0, 0, 0);
 
-      const [translationsToday, subscription] = await Promise.all([
+      const [translationsToday, translationsPerDay] = await Promise.all([
         this.prisma.userEvent.count({
           where: { userId, type: UserEventType.CLICK_WORD, createdAt: { gte: todayStart } },
         }),
-        this.prisma.subscription.findFirst({
-          where: {
-            userId,
-            status: { in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING] },
-          },
-          include: { plan: true },
-          orderBy: { startDate: "desc" },
-        }),
+        this.getTranslationsPerDay(userId),
       ]);
 
-      const planLimits = subscription?.plan?.limits as Record<string, number> | null;
-      const translationsPerDay = planLimits?.translationsPerDay ?? 50;
       if (translationsPerDay !== -1 && translationsToday >= translationsPerDay) {
         throw new ForbiddenException(
           `Daily translation limit of ${translationsPerDay} reached. Upgrade your plan for more.`,
@@ -55,11 +71,6 @@ export class TokenService {
     const cached = await this.cache.get(tokenId);
     if (cached) {
       if (userId && cached.lemmaId) {
-        // Побочные эффекты не блокируют ответ — fire-and-forget
-        this.runInBackground(
-          this.wordProgress.registerClick(userId, cached.lemmaId),
-          "registerClick(cached)",
-        );
         this.runInBackground(this.prisma.userEvent.create({
           data: {
             userId,
@@ -135,34 +146,26 @@ export class TokenService {
           baseForm: cachedByWord.baseForm ?? null,
           tags: cachedByWord.tags ?? [],
         };
-        if (userId && result.lemmaId) {
-          this.runInBackground(
-            this.wordProgress.registerClick(userId, result.lemmaId),
-            "registerClick(cachedByWord)",
-          );
+        if (userId) {
+          if (result.lemmaId) {
+            this.runInBackground(
+              this.wordProgress.saveContext(userId, result.lemmaId, token.version.textId, token.original, token.id),
+              "saveContext(cachedByWord)",
+            );
+          }
           this.runInBackground(this.prisma.userEvent.create({
             data: {
               userId,
               type: UserEventType.CLICK_WORD,
               metadata: {
                 tokenId: token.id,
-                lemmaId: result.lemmaId,
+                lemmaId: result.lemmaId ?? null,
                 textId: token.version.textId,
                 word: token.original,
                 normalized: token.normalized,
               },
             },
           }), "userEvent.create(cachedByWord)");
-          this.runInBackground(
-            this.wordProgress.saveContext(
-              userId,
-              result.lemmaId,
-              token.version.textId,
-              token.original,
-              token.id,
-            ),
-            "saveContext(cachedByWord)",
-          );
         }
         await this.cache.set(token.id, token.versionId, token.normalized, result);
         return result;
@@ -172,36 +175,6 @@ export class TokenService {
     const primary =
       token.analyses.find((a) => a.isPrimary) ?? token.analyses[0];
     const lemmaId = primary?.lemmaId;
-
-    if (userId && lemmaId) {
-      this.runInBackground(
-        this.wordProgress.registerClick(userId, lemmaId),
-        "registerClick(db)",
-      );
-      this.runInBackground(this.prisma.userEvent.create({
-        data: {
-          userId,
-          type: UserEventType.CLICK_WORD,
-          metadata: {
-            tokenId: token.id,
-            lemmaId,
-            textId: token.version.textId,
-            word: token.original,
-            normalized: token.normalized,
-          },
-        },
-      }), "userEvent.create(db)");
-      this.runInBackground(
-        this.wordProgress.saveContext(
-          userId,
-          lemmaId,
-          token.version.textId,
-          token.original,
-          token.id,
-        ),
-        "saveContext(db)",
-      );
-    }
 
     const headword = primary?.lemma?.headwords?.[0];
     const entry = headword?.entry as { rawTranslate?: string } | undefined;
@@ -273,6 +246,29 @@ export class TokenService {
     } else {
       await this.cache.set(token.id, token.versionId, token.normalized, result);
     }
+
+    if (userId) {
+      if (lemmaId) {
+        this.runInBackground(
+          this.wordProgress.saveContext(userId, lemmaId, token.version.textId, token.original, token.id),
+          "saveContext(db)",
+        );
+      }
+      this.runInBackground(this.prisma.userEvent.create({
+        data: {
+          userId,
+          type: UserEventType.CLICK_WORD,
+          metadata: {
+            tokenId: token.id,
+            lemmaId: lemmaId ?? null,
+            textId: token.version.textId,
+            word: token.original,
+            normalized: token.normalized,
+          },
+        },
+      }), "userEvent.create(db)");
+    }
+
     return result;
   }
 

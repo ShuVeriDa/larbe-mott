@@ -1,5 +1,5 @@
-import { ForbiddenException, Injectable, Logger } from "@nestjs/common";
-import { Language, SubscriptionStatus, UserEventType } from "@prisma/client";
+import { Injectable, Logger } from "@nestjs/common";
+import { Language, UserEventType } from "@prisma/client";
 import { DictionaryCacheService } from "src/markup-engine/dictionary-cache/dictionary-cache.service";
 import { DictionaryService } from "src/markup-engine/dictionary/dictionary.service";
 import { MorphologyService } from "src/markup-engine/morphology/morphology.service";
@@ -33,6 +33,7 @@ export interface WordLookupGrammar {
 }
 
 export type WordLookupResult = {
+  lemmaId: string | null;
   translation: string | null;
   grammar: string | null;
   grammarForms: WordLookupGrammar | null;
@@ -61,6 +62,10 @@ type LookupContext = {
 export class WordLookupByWordService {
   private readonly logger = new Logger(WordLookupByWordService.name);
 
+  // In-memory language cache: userId → { language, expiresAt }. Language changes are rare.
+  private readonly languageCache = new Map<string, { language: Language; expiresAt: number }>();
+  private static readonly LANG_CACHE_TTL_MS = 5 * 60_000;
+
   constructor(
     private prisma: PrismaService,
     private adminDictionary: DictionaryService,
@@ -77,35 +82,22 @@ export class WordLookupByWordService {
   ): Promise<WordLookupResult> {
     const normalized = normalizeToken(normalizedOrRaw);
     const language = await this.resolveUserLanguage(userId);
-    await this.enforceTranslationLimit(userId);
 
     // 1️⃣ Админский словарь
     const fromAdmin = await this.fromAdmin(normalized, language);
-    if (fromAdmin) {
-      this.recordTranslationUsage(userId, normalized, context, "admin");
-      return fromAdmin;
-    }
+    if (fromAdmin) return fromAdmin;
 
     // 2️⃣ Кэш (DictionaryCache)
     const fromCache = await this.fromCache(normalized);
-    if (fromCache) {
-      this.recordTranslationUsage(userId, normalized, context, "cache");
-      return fromCache;
-    }
+    if (fromCache) return fromCache;
 
     // 3️⃣ Онлайн словарь
     const fromOnline = await this.fromOnline(normalizedOrRaw, language);
-    if (fromOnline) {
-      this.recordTranslationUsage(userId, normalized, context, "online");
-      return fromOnline;
-    }
+    if (fromOnline) return fromOnline;
 
     // 4️⃣ Морфология
     const fromMorphology = await this.fromMorphology(normalized, language);
-    if (fromMorphology) {
-      this.recordTranslationUsage(userId, normalized, context, "morphology");
-      return fromMorphology;
-    }
+    if (fromMorphology) return fromMorphology;
 
     // Не найдено — тихо записываем в неизвестные (без задержки ответа)
     void this.unknownWordProcessor.recordFromLookup(normalized).catch(() => {});
@@ -128,6 +120,7 @@ export class WordLookupByWordService {
     }
 
     return {
+      lemmaId: null,
       translation: null,
       grammar: null,
       grammarForms: null,
@@ -146,11 +139,17 @@ export class WordLookupByWordService {
 
   private async resolveUserLanguage(userId?: string): Promise<Language> {
     if (!userId) return Language.CHE;
+    const now = Date.now();
+    const hit = this.languageCache.get(userId);
+    if (hit && hit.expiresAt > now) return hit.language;
+
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { language: true },
     });
-    return user?.language ?? Language.CHE;
+    const language = user?.language ?? Language.CHE;
+    this.languageCache.set(userId, { language, expiresAt: now + WordLookupByWordService.LANG_CACHE_TTL_MS });
+    return language;
   }
 
   private async fromAdmin(
@@ -169,10 +168,17 @@ export class WordLookupByWordService {
     const map = await this.dictionaryCache.findMap([normalized]);
     const row = map.get(normalized);
     if (!row) return null;
+    // Cache hit without lemmaId — fall through to online so lemma gets created
+    if (!row.lemmaId) return null;
     const translation = row.translation ?? null;
     const meanings = (row.meanings as WordLookupMeaning[] | null) ?? [];
     const cached = (row.examples as unknown[] | null);
-    const base: Omit<WordLookupResult, 'grammar' | 'baseForm' | 'tags'> = {
+    const lemma = await this.prisma.lemma.findUnique({
+      where: { id: row.lemmaId },
+      select: { baseForm: true, partOfSpeech: true },
+    });
+    return {
+      lemmaId: row.lemmaId,
       translation,
       grammarForms: null,
       nounClass: null,
@@ -183,20 +189,10 @@ export class WordLookupByWordService {
       attested: false,
       setPhrases: null,
       meanings: meanings.length > 0 ? meanings : (cached as WordLookupMeaning[] ?? []),
+      grammar: lemma?.partOfSpeech ?? null,
+      baseForm: lemma?.baseForm ?? null,
+      tags: lemma?.partOfSpeech ? [lemma.partOfSpeech] : [],
     };
-    if (row.lemmaId) {
-      const lemma = await this.prisma.lemma.findUnique({
-        where: { id: row.lemmaId },
-        select: { baseForm: true, partOfSpeech: true },
-      });
-      return {
-        ...base,
-        grammar: lemma?.partOfSpeech ?? null,
-        baseForm: lemma?.baseForm ?? null,
-        tags: lemma?.partOfSpeech ? [lemma.partOfSpeech] : [],
-      };
-    }
-    return { ...base, grammar: null, baseForm: null, tags: [] };
   }
 
   private async fromOnline(
@@ -205,7 +201,39 @@ export class WordLookupByWordService {
   ): Promise<WordLookupResult | null> {
     const result = await this.onlineDictionary.lookupWord(normalized, language);
     if (!result?.translation) return null;
+
+    // Upsert Lemma so we have a stable lemmaId for progress/dictionary tracking
+    const lemma = await this.prisma.lemma.upsert({
+      where: { normalized_language: { normalized, language } },
+      create: {
+        normalized,
+        baseForm: result.baseForm ?? normalized,
+        language,
+        partOfSpeech: result.grammar ?? null,
+        ...(result.doshamId != null && { doshamId: result.doshamId }),
+      },
+      update: {
+        baseForm: result.baseForm ?? normalized,
+        partOfSpeech: result.grammar ?? null,
+        ...(result.doshamId != null && { doshamId: result.doshamId }),
+      },
+      select: { id: true },
+    });
+
+    // Keep cache fresh with lemmaId — fire-and-forget, not needed for the response
+    void this.prisma.dictionaryCache.upsert({
+      where: { normalized },
+      create: {
+        normalized,
+        translation: result.translation,
+        meanings: (result.meanings ?? []) as never,
+        lemmaId: lemma.id,
+      },
+      update: { lemmaId: lemma.id },
+    }).catch((e) => this.logger.warn(`dictionaryCache upsert failed: ${e instanceof Error ? e.message : String(e)}`));
+
     return {
+      lemmaId: lemma.id,
       translation: result.translation,
       grammar: result.grammar ?? null,
       grammarForms: result.grammarForms ?? null,
@@ -235,9 +263,10 @@ export class WordLookupByWordService {
     const lemmaId = lemma?.id ?? null;
     if (lemmaId) return this.lemmaToResult(lemmaId);
     return null;
+
   }
 
-  private async lemmaToResult(lemmaId: string): Promise<WordLookupResult> {
+  async lemmaToResult(lemmaId: string): Promise<WordLookupResult> {
     const lemma = await this.prisma.lemma.findUnique({
       where: { id: lemmaId },
       include: {
@@ -265,6 +294,7 @@ export class WordLookupByWordService {
       },
     });
     const emptyResult: WordLookupResult = {
+      lemmaId,
       translation: null,
       grammar: null,
       grammarForms: null,
@@ -303,74 +333,13 @@ export class WordLookupByWordService {
 
     return {
       ...emptyResult,
+      lemmaId,
       translation: meanings[0]?.translation ?? rawTranslate,
       grammar: pos,
       baseForm: lemma.baseForm ?? null,
       tags: pos ? [pos] : [],
       meanings,
     };
-  }
-
-  private async enforceTranslationLimit(userId?: string): Promise<void> {
-    if (!userId) return;
-
-    const todayStart = new Date();
-    todayStart.setUTCHours(0, 0, 0, 0);
-
-    const [translationsToday, subscription] = await Promise.all([
-      this.prisma.userEvent.count({
-        where: {
-          userId,
-          type: UserEventType.CLICK_WORD,
-          createdAt: { gte: todayStart },
-        },
-      }),
-      this.prisma.subscription.findFirst({
-        where: {
-          userId,
-          status: {
-            in: [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING],
-          },
-        },
-        include: { plan: true },
-        orderBy: { startDate: "desc" },
-      }),
-    ]);
-
-    const planLimits = subscription?.plan?.limits as Record<
-      string,
-      number
-    > | null;
-    const translationsPerDay = planLimits?.translationsPerDay ?? 50;
-    if (translationsPerDay !== -1 && translationsToday >= translationsPerDay) {
-      throw new ForbiddenException(
-        `Daily translation limit of ${translationsPerDay} reached. Upgrade your plan for more.`,
-      );
-    }
-  }
-
-  private recordTranslationUsage(
-    userId: string | undefined,
-    normalized: string,
-    context: LookupContext | undefined,
-    source: "admin" | "cache" | "online" | "morphology",
-  ): void {
-    if (!userId) return;
-    this.runInBackground(
-      this.prisma.userEvent.create({
-        data: {
-          userId,
-          type: UserEventType.CLICK_WORD,
-          metadata: {
-            normalized,
-            source: `lookup_by_word:${source}`,
-            ...(context?.tokenId ? { tokenId: context.tokenId } : {}),
-            ...(context?.textId ? { textId: context.textId } : {}),
-          },
-        },
-      }),
-      "recordLookupByWordUsage",
-    );
   }
 
   private runInBackground(promise: Promise<unknown>, operation: string): void {

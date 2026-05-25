@@ -15,7 +15,7 @@ export class CreateDictionaryEntryDto {
       "Token ID when adding from text click. If set, word/translation are resolved server-side.",
   })
   @IsOptional()
-  @IsUUID()
+  @IsString()
   tokenId?: string;
 
   @ApiPropertyOptional({

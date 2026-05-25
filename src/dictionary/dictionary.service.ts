@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -619,48 +618,45 @@ export class DictionaryService {
       }
     }
 
-    const normalized = resolvedWord
-      ? normalizeToken(resolvedWord)
-      : null;
-    const data: Prisma.UserDictionaryEntryCreateInput = {
-      word: resolvedWord ?? "",
-      translation: resolvedTranslation ?? "",
-      normalized,
-      user: { connect: { id: userId } },
-      ...(cefrLevel && { cefrLevel }),
-      ...(folderId && { folder: { connect: { id: folderId } } }),
-      ...(lemmaId && { lemma: { connect: { id: lemmaId } } }),
-    };
+    const normalized = resolvedWord ? normalizeToken(resolvedWord) : null;
 
-    try {
-      const entry = await this.prismaService.userDictionaryEntry.create({
-        data,
-      });
+    // Upsert: если слово уже создано автоматически (registerClick), обновляем папку/уровень
+    const entry = await this.prismaService.userDictionaryEntry.upsert({
+      where: { userId_normalized: { userId, normalized: normalized ?? "" } },
+      create: {
+        word: resolvedWord ?? "",
+        translation: resolvedTranslation ?? "",
+        normalized,
+        user: { connect: { id: userId } },
+        ...(cefrLevel && { cefrLevel }),
+        ...(folderId && { folder: { connect: { id: folderId } } }),
+        ...(lemmaId && { lemma: { connect: { id: lemmaId } } }),
+      },
+      update: {
+        // Обновляем перевод если токен дал более точный
+        ...(resolvedTranslation && { translation: resolvedTranslation }),
+        ...(cefrLevel && { cefrLevel }),
+        // Папку обновляем только если явно передана
+        ...(folderId
+          ? { folder: { connect: { id: folderId } } }
+          : {}),
+        ...(lemmaId && { lemma: { connect: { id: lemmaId } } }),
+      },
+    });
 
-      await this.prismaService.userEvent.create({
-        data: {
-          userId,
-          type: UserEventType.ADD_TO_DICTIONARY,
-          metadata: {
-            entryId: entry.id,
-            lemmaId,
-            ...(textId ? { textId } : {}),
-          },
+    await this.prismaService.userEvent.create({
+      data: {
+        userId,
+        type: UserEventType.ADD_TO_DICTIONARY,
+        metadata: {
+          entryId: entry.id,
+          lemmaId,
+          ...(textId ? { textId } : {}),
         },
-      });
+      },
+    });
 
-      return entry;
-    } catch (e) {
-      if (
-        e instanceof Prisma.PrismaClientKnownRequestError &&
-        e.code === "P2002"
-      ) {
-        throw new ConflictException(
-          "This word is already in your dictionary (same normalized form)",
-        );
-      }
-      throw e;
-    }
+    return entry;
   }
 
   async updateUserDictionaryEntry(

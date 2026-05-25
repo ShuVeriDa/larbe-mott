@@ -64,7 +64,11 @@ export class WordProgressService {
   }
 
   // Вызывается при клике на слово (первое знакомство / активный просмотр)
-  async registerClick(userId: string, lemmaId: string) {
+  async registerClick(
+    userId: string,
+    lemmaId: string,
+    hint?: { word: string; normalized: string; translation: string },
+  ) {
     const today = new Date();
     today.setUTCHours(0, 0, 0, 0);
 
@@ -87,6 +91,30 @@ export class WordProgressService {
         },
       });
     });
+
+    // Первый клик = слово попадает в словарь автоматически
+    if (hint) {
+      await this.ensureDictionaryEntry(userId, {
+        lemmaId,
+        word: hint.word,
+        normalized: hint.normalized,
+        translation: hint.translation,
+      });
+    } else {
+      // fallback без hint — берём данные из БД внутри ensureDictionaryEntry
+      const lemma = await this.prisma.lemma.findUnique({
+        where: { id: lemmaId },
+        select: { baseForm: true, normalized: true },
+      });
+      if (lemma) {
+        await this.ensureDictionaryEntry(userId, {
+          lemmaId,
+          word: lemma.baseForm,
+          normalized: lemma.normalized,
+          translation: "",
+        });
+      }
+    }
     await this.syncTextProgressForLemma(userId, lemmaId);
   }
 
@@ -360,6 +388,18 @@ export class WordProgressService {
           data: { learningLevel: "LEARNING", repetitionCount: 0 },
         }),
       ]);
+      const lemmaForEntry = await this.prisma.lemma.findUnique({
+        where: { id: lemmaId },
+        select: { baseForm: true, normalized: true },
+      });
+      if (lemmaForEntry) {
+        await this.ensureDictionaryEntry(userId, {
+          lemmaId,
+          word: lemmaForEntry.baseForm,
+          normalized: lemmaForEntry.normalized,
+          translation: "",
+        });
+      }
       await this.syncTextProgressForLemma(userId, lemmaId);
       return result;
     }
@@ -393,6 +433,18 @@ export class WordProgressService {
         data: { learningLevel: "KNOWN" },
       }),
     ]);
+    const lemmaForEntry = await this.prisma.lemma.findUnique({
+      where: { id: lemmaId },
+      select: { baseForm: true, normalized: true },
+    });
+    if (lemmaForEntry) {
+      await this.ensureDictionaryEntry(userId, {
+        lemmaId,
+        word: lemmaForEntry.baseForm,
+        normalized: lemmaForEntry.normalized,
+        translation: "",
+      });
+    }
     await this.syncTextProgressForLemma(userId, lemmaId);
     return result;
   }
@@ -613,6 +665,95 @@ export class WordProgressService {
     if (trackedTextIds.length) {
       const keys = trackedTextIds.map((textId) => `progress:${userId}:${textId}`);
       await this.redis.del(...keys);
+    }
+  }
+
+  // Создаёт UserDictionaryEntry если её ещё нет.
+  // lemmaId опционален — для токенов без леммы создаём запись только по normalized+word+translation.
+  // Idempotent: повторный вызов безопасен.
+  async ensureDictionaryEntry(
+    userId: string,
+    opts: {
+      lemmaId?: string | null;
+      word: string;
+      normalized: string;
+      translation: string;
+      cefrLevel?: string | null;
+    },
+  ): Promise<void> {
+    const { lemmaId, word, normalized, translation, cefrLevel } = opts;
+
+    // Проверяем существующую запись: по lemmaId если есть, иначе по userId+normalized
+    const existing = lemmaId
+      ? await this.prisma.userDictionaryEntry.findFirst({
+          where: { userId, lemmaId },
+          select: { id: true },
+        })
+      : await this.prisma.userDictionaryEntry.findFirst({
+          where: { userId, normalized },
+          select: { id: true },
+        });
+    if (existing) return;
+
+    // Если есть лемма — пробуем взять перевод из headwords / DictionaryCache
+    let resolvedTranslation = translation;
+    let resolvedLevel = cefrLevel ?? null;
+
+    if (lemmaId) {
+      const lemma = await this.prisma.lemma.findUnique({
+        where: { id: lemmaId },
+        select: {
+          level: true,
+          headwords: {
+            take: 1,
+            orderBy: { order: "asc" },
+            include: { entry: { select: { rawTranslate: true } } },
+          },
+        },
+      });
+      if (lemma) {
+        resolvedLevel = lemma.level ?? cefrLevel ?? null;
+        const headwordTranslation =
+          (lemma.headwords[0]?.entry as { rawTranslate?: string } | undefined)
+            ?.rawTranslate ?? null;
+        if (headwordTranslation) {
+          resolvedTranslation = headwordTranslation;
+        } else if (!resolvedTranslation) {
+          const cache = await this.prisma.dictionaryCache.findFirst({
+            where: { normalized },
+            select: { translation: true },
+          });
+          resolvedTranslation = cache?.translation ?? resolvedTranslation;
+        }
+      }
+    }
+
+    if (!resolvedTranslation) {
+      this.logger.debug(
+        `ensureDictionaryEntry: no translation for ${word} (lemmaId=${lemmaId}), skipping`,
+      );
+      return;
+    }
+
+    try {
+      await this.prisma.userDictionaryEntry.create({
+        data: {
+          userId,
+          word,
+          normalized,
+          translation: resolvedTranslation,
+          learningLevel: "LEARNING",
+          ...(resolvedLevel && { cefrLevel: resolvedLevel as never }),
+          ...(lemmaId && { lemmaId }),
+        },
+      });
+    } catch (e) {
+      if (e instanceof Error && e.message.includes("Unique constraint")) {
+        return; // уже создано параллельным запросом
+      }
+      this.logger.warn(
+        `ensureDictionaryEntry: failed for ${word}: ${e instanceof Error ? e.message : String(e)}`,
+      );
     }
   }
 }

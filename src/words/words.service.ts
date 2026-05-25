@@ -1,15 +1,19 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "src/prisma.service";
 import { UnknownWordProcessor } from "src/markup-engine/unknown-word/unknown-word.processor";
+import { WordProgressService } from "src/progress/word-progress/word-progress.service";
 import { TokenService } from "src/token/token.service";
 import { WordLookupByWordService } from "./word-lookup-by-word.service";
 
 @Injectable()
 export class WordsService {
+  private readonly logger = new Logger(WordsService.name);
+
   constructor(
     private readonly tokenService: TokenService,
     private readonly wordLookupByWordService: WordLookupByWordService,
     private readonly unknownWordProcessor: UnknownWordProcessor,
+    private readonly wordProgress: WordProgressService,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -33,6 +37,7 @@ export class WordsService {
     let attested = false;
     let setPhrases: { nah: string; ru: string }[] | null = null;
     let byWordMeanings: import("./word-lookup-by-word.service").WordLookupMeaning[] = [];
+    let byWordLemmaId: string | null = null;
 
     if (hasData) {
       translation = info.translation ?? null;
@@ -44,6 +49,7 @@ export class WordsService {
         tokenId: info.tokenId,
         textId: info.textId,
       });
+      byWordLemmaId = byWord.lemmaId ?? null;
       translation = byWord.translation ?? null;
       grammar = byWord.grammar ?? null;
       grammarForms = byWord.grammarForms ?? null;
@@ -66,14 +72,18 @@ export class WordsService {
       }
     }
 
-    const lemmaId = info.lemmaId ?? null;
+    // Use lemmaId from TokenAnalysis first, fall back to lemmaId resolved by word lookup.
+    // lemmaId from info (TokenAnalysis) may point to an admin-dict lemma with headwords;
+    // byWordLemmaId is always from the online dict and never has headwords — skip the query.
+    const lemmaId = info.lemmaId ?? byWordLemmaId;
     const forms: string[] = info.forms ?? [];
 
-    // meanings: prefer DB senses (rich), fallback to byWord/online data
+    // meanings: only query headwords for admin-dict lemmas (info.lemmaId present).
+    // Online-lookup lemmas (byWordLemmaId) have no headwords — use byWordMeanings directly.
     let meanings: import("./word-lookup-by-word.service").WordLookupMeaning[] = [];
-    if (lemmaId) {
+    if (info.lemmaId) {
       const headwords = await this.prisma.headword.findMany({
-        where: { lemmaId },
+        where: { lemmaId: info.lemmaId },
         select: {
           entry: {
             select: {
@@ -101,10 +111,27 @@ export class WordsService {
       meanings = byWordMeanings;
     }
 
+    // Register click (awaited so userStatus/inDictionary below reflect the updated state)
+    if (userId) {
+      const hint = {
+        word: info.word ?? info.normalized,
+        normalized: info.normalized,
+        translation: translation ?? "",
+      };
+      if (lemmaId) {
+        await this.wordProgress.registerClick(userId, lemmaId, hint);
+      } else if (hint.translation) {
+        void this.wordProgress.ensureDictionaryEntry(userId, hint).catch((e) => {
+          this.logger.warn(`ensureDictionaryEntry(no-lemma) failed: ${e instanceof Error ? e.message : String(e)}`);
+        });
+      }
+    }
+
     // userStatus from UserWordProgress + inDictionary from UserDictionaryEntry
     let userStatus: string | null = null;
     let inDictionary = false;
     let dictionaryEntryId: string | null = null;
+    let dictionaryFolder: { id: string; name: string } | null = null;
     if (userId && lemmaId) {
       const [progress, dictEntry] = await Promise.all([
         this.prisma.userWordProgress.findUnique({
@@ -113,12 +140,16 @@ export class WordsService {
         }),
         this.prisma.userDictionaryEntry.findFirst({
           where: { userId, lemmaId },
-          select: { id: true },
+          select: {
+            id: true,
+            folder: { select: { id: true, name: true } },
+          },
         }),
       ]);
       userStatus = progress?.status ?? null;
       inDictionary = dictEntry !== null;
       dictionaryEntryId = dictEntry?.id ?? null;
+      dictionaryFolder = dictEntry?.folder ?? null;
     }
 
     return {
@@ -140,6 +171,7 @@ export class WordsService {
       userStatus,
       inDictionary,
       dictionaryEntryId,
+      dictionaryFolder,
     };
   }
 

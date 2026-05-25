@@ -63,6 +63,7 @@ export interface LookupGrammar {
 }
 
 export type LookupResult = {
+  doshamId: number | null;
   normalized: string;
   translation: string | null;
   baseForm: string | null;
