@@ -3,6 +3,7 @@ import { AnalyticsService } from "src/analytics/analytics.service";
 import { PrismaService } from "src/prisma.service";
 import { SubscriptionService } from "src/subscription/subscription.service";
 import { TextService } from "src/text/text.service";
+import { UserService } from "src/user/user.service";
 
 @Injectable()
 export class DashboardService {
@@ -11,17 +12,23 @@ export class DashboardService {
     private readonly analyticsService: AnalyticsService,
     private readonly textService: TextService,
     private readonly subscriptionService: SubscriptionService,
+    private readonly userService: UserService,
   ) {}
 
   async getDashboard(userId: string) {
-    const [stats, continueReading, dictionaryStats, plan] = await Promise.all([
-      this.analyticsService.getUserAnalytics(userId),
-      this.textService.getContinueReading(userId),
-      this.getDictionaryStats(userId),
-      this.getPlanSnapshot(userId),
-    ]);
+    const [stats, continueReading, dictionaryStats, plan, user, subscription] =
+      await Promise.all([
+        this.analyticsService.getUserAnalytics(userId),
+        this.textService.getContinueReading(userId),
+        this.getDictionaryStats(userId),
+        this.getPlanSnapshot(userId),
+        this.userService.getUserById(userId),
+        this.subscriptionService.getMySubscription(userId),
+      ]);
 
     return {
+      user,
+      subscription,
       stats: {
         textsRead: stats.texts.opened,
         wordsInDictionary: dictionaryStats.total,

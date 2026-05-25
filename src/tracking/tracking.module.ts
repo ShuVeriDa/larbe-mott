@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { ConfigModule } from "@nestjs/config";
 import { ScheduleModule } from "@nestjs/schedule";
 import { AuthModule } from "src/auth/auth.module";
 import { PrismaService } from "src/prisma.service";
@@ -12,7 +13,7 @@ import { TrackingController } from "./tracking.controller";
 import { TrackingAdminController } from "./tracking-admin.controller";
 
 @Module({
-  imports: [ScheduleModule, RedisModule, AuthModule],
+  imports: [ConfigModule, ScheduleModule, RedisModule, AuthModule],
   providers: [
     PrismaService,
     GeoIpService,

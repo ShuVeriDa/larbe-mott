@@ -5,6 +5,7 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 
 const DEFAULT_PATHS = [
   "/data/geoip/GeoLite2-City.mmdb",
@@ -33,6 +34,8 @@ export class GeoIpService implements OnModuleInit, OnModuleDestroy {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private reader: any = null;
   private cachedStatus: GeoIpStatus | null = null;
+
+  constructor(private readonly config: ConfigService) {}
 
   async onModuleInit(): Promise<void> {
     const candidates = this.pathCandidates();
@@ -130,7 +133,7 @@ export class GeoIpService implements OnModuleInit, OnModuleDestroy {
   }
 
   private pathCandidates(): string[] {
-    const fromEnv = process.env.GEOIP_MMDB_PATH?.trim();
+    const fromEnv = this.config.get<string>("GEOIP_MMDB_PATH")?.trim();
     if (fromEnv) return [fromEnv];
     return DEFAULT_PATHS;
   }

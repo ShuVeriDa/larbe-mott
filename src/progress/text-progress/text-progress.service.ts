@@ -105,8 +105,8 @@ export class TextProgressService {
     // - on conflict: advance only if the new page is further ahead
     // This replaces the previous SELECT + UPSERT two-round-trip pattern.
     await this.prisma.$executeRaw`
-      INSERT INTO "user_text_progress" ("userId", "textId", "lastPageNumber", "lastOpened")
-      VALUES (${userId}, ${textId}, ${pageNumber}, ${now})
+      INSERT INTO "user_text_progress" ("id", "userId", "textId", "lastPageNumber", "lastOpened")
+      VALUES (gen_random_uuid(), ${userId}, ${textId}, ${pageNumber}, ${now})
       ON CONFLICT ("userId", "textId") DO UPDATE
         SET "lastPageNumber" = GREATEST("user_text_progress"."lastPageNumber", EXCLUDED."lastPageNumber"),
             "lastOpened"     = EXCLUDED."lastOpened"

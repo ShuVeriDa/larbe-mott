@@ -18797,6 +18797,47 @@
           "suggestions"
         ]
       }
+    },
+    "/api/reader-context": {
+      "get": {
+        "description": "Returns page content (with tokens), phrases, highlights and notes for a given page. Replaces four separate API calls made on every reader page load.",
+        "operationId": "ReaderContextController_getContext",
+        "parameters": [
+          {
+            "name": "textId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageNumber",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ page, phrases, highlights, notes }"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get full reader page context in one request",
+        "tags": [
+          "reader-context"
+        ]
+      }
     }
   },
   "info": {
