@@ -42,15 +42,60 @@ export class WordProgressService {
       newEF = Math.max(EF_MIN, newEF - 0.2);
     }
 
-    const nextReview = new Date();
-    nextReview.setUTCDate(nextReview.getUTCDate() + newInterval);
-
     return {
       repetitions: newRep,
       easeFactor: newEF,
       interval: newInterval,
-      nextReview,
     };
+  }
+
+  // Returns midnight of (today + intervalDays) in the user's local timezone.
+  // Strategy: format today's date in their timezone, advance by intervalDays,
+  // then find the UTC instant when that calendar day begins in their timezone.
+  // Falls back to UTC midnight if the timezone string is invalid.
+  private nextReviewDate(intervalDays: number, timezone: string): Date {
+    try {
+      const now = new Date();
+      // Get today's y/m/d in the user's timezone
+      const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: timezone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+      }).formatToParts(now);
+      const y = Number(parts.find((p) => p.type === "year")!.value);
+      const m = Number(parts.find((p) => p.type === "month")!.value) - 1;
+      const d = Number(parts.find((p) => p.type === "day")!.value);
+
+      // Advance by intervalDays in their local calendar
+      const local = new Date(y, m, d + intervalDays);
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const dateStr = `${local.getFullYear()}-${pad(local.getMonth() + 1)}-${pad(local.getDate())}`;
+
+      // "YYYY-MM-DDT00:00:00" interpreted as a wall-clock time in their timezone.
+      // We find the UTC equivalent by computing the offset: parse the wall-clock
+      // as if UTC, then measure how far Intl shifts it, and correct.
+      const naiveUtc = new Date(`${dateStr}T00:00:00Z`);
+      const shifted = new Intl.DateTimeFormat("en-CA", {
+        timeZone: timezone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+      }).format(naiveUtc);
+      // shifted is "YYYY-MM-DD, HH:mm:ss" — parse as UTC to get the offset
+      const shiftedMs = new Date(shifted.replace(", ", "T") + "Z").getTime();
+      const offsetMs = naiveUtc.getTime() - shiftedMs;
+      return new Date(naiveUtc.getTime() + offsetMs);
+    } catch {
+      const d = new Date();
+      d.setUTCDate(d.getUTCDate() + intervalDays);
+      d.setUTCHours(0, 0, 0, 0);
+      return d;
+    }
   }
 
   // Применяет эффект частоты: чем больше уникальных текстов, тем короче интервал
@@ -145,9 +190,17 @@ export class WordProgressService {
 
   // Обрабатывает результат повторения слова (quality 0-5)
   async submitReview(userId: string, lemmaId: string, quality: number) {
-    const progress = await this.prisma.userWordProgress.findUnique({
-      where: { userId_lemmaId: { userId, lemmaId } },
-    });
+    const [progress, notifPrefs] = await Promise.all([
+      this.prisma.userWordProgress.findUnique({
+        where: { userId_lemmaId: { userId, lemmaId } },
+      }),
+      this.prisma.userNotificationPreferences.findUnique({
+        where: { userId },
+        select: { timezone: true },
+      }),
+    ]);
+
+    const timezone = notifPrefs?.timezone ?? "Europe/Moscow";
 
     const current = progress ?? {
       repetitions: 0,
@@ -156,20 +209,27 @@ export class WordProgressService {
     };
     const intervalBefore = current.interval;
 
-    let { repetitions, easeFactor, interval, nextReview } = this.applySM2(
+    let { repetitions, easeFactor, interval } = this.applySM2(
       current.repetitions,
       current.easeFactor,
       current.interval,
       quality,
     );
 
-    // Эффект частоты: смотрим сколько уникальных текстов для этого слова
-    const uniqueTextsCount = await this.prisma.wordContext.count({
-      where: { userId, lemmaId },
-    });
+    // Эффект частоты: кэшируем в Redis, TTL 1 час
+    const freqKey = `freq:${userId}:${lemmaId}`;
+    let uniqueTextsCount: number;
+    const cached = await this.redis.get(freqKey);
+    if (cached !== null) {
+      uniqueTextsCount = Number(cached);
+    } else {
+      uniqueTextsCount = await this.prisma.wordContext.count({
+        where: { userId, lemmaId },
+      });
+      await this.redis.set(freqKey, String(uniqueTextsCount), "EX", 3600);
+    }
     interval = this.applyFrequencyEffect(interval, uniqueTextsCount);
-    nextReview = new Date();
-    nextReview.setUTCDate(nextReview.getUTCDate() + interval);
+    const nextReview = this.nextReviewDate(interval, timezone);
 
     const newStatus =
       quality < 3

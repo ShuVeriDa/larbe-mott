@@ -121,13 +121,21 @@ export class DeckService {
     if (!card) throw new NotFoundException({ code: ErrorCode.CARD_NOT_FOUND, message: "Card not found" });
 
     if (result === "know") {
-      const updated = await this.prisma.userDeckCard.update({
-        where: { userId_lemmaId: { userId, lemmaId } },
-        data: { movedAt: new Date() },
-      });
+      const [updated] = await this.prisma.$transaction([
+        this.prisma.userDeckCard.update({
+          where: { userId_lemmaId: { userId, lemmaId } },
+          data: { movedAt: new Date() },
+        }),
+        this.prisma.userDeckLog.create({
+          data: { userId, lemmaId, deckType: card.deckType, result },
+        }),
+      ]);
       return { ...updated, shouldRefreshDeck: true };
     }
 
+    await this.prisma.userDeckLog.create({
+      data: { userId, lemmaId, deckType: card.deckType, result },
+    });
     return { ...card, shouldRefreshDeck: false };
   }
 

@@ -46,6 +46,7 @@ model User {
   initiatedVersions        TextProcessingVersion[]      @relation("VersionInitiator")
   tokenizationJobs         TokenizationJob[]            @relation("TokenizationJobInitiator")
   deckCards                UserDeckCard[]               @relation("UserDeckCards")
+  deckLogs                 UserDeckLog[]                @relation("UserDeckLogs")
   deckState                UserDeckState?               @relation("UserDeckState")
   userDictionaryEntries    UserDictionaryEntry[]        @relation("UserDictionaryEntryUser")
   userDictionaryFolders    UserDictionaryFolder[]       @relation("UserDictionaryFolderUser")
@@ -463,6 +464,7 @@ model Lemma {
   vocabulary            TextVocabulary[]
   tokenAnalyses         TokenAnalysis[]       @relation("TokenLemma")
   deckCards             UserDeckCard[]        @relation("LemmaDeckCards")
+  deckLogs              UserDeckLog[]         @relation("LemmaDeckLogs")
   userDictionaryEntries UserDictionaryEntry[] @relation("UserDictionaryEntryLemma")
   reviewLogs            UserReviewLog[]       @relation("LemmaReviewLogs")
   wordProgress          UserWordProgress[]
@@ -900,6 +902,21 @@ model UserDeckState {
   user                 User      @relation("UserDeckState", fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_deck_state")
+}
+
+model UserDeckLog {
+  id        String   @id @default(cuid())
+  userId    String
+  lemmaId   String
+  deckType  DeckType
+  result    String
+  createdAt DateTime @default(now())
+  lemma     Lemma    @relation("LemmaDeckLogs", fields: [lemmaId], references: [id], onDelete: Cascade)
+  user      User     @relation("UserDeckLogs", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId])
+  @@map("user_deck_log")
 }
 
 model PhrasebookCategory {
