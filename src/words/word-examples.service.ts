@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
+import { ErrorCode } from "src/common/errors/error-codes";
 import { PrismaService } from "src/prisma.service";
 
 const SNIPPET_RADIUS = 6; // токенов до и после слова
@@ -10,7 +11,7 @@ export class WordExamplesService {
 
   async getExamples(lemmaId: string) {
     const lemma = await this.prisma.lemma.findUnique({ where: { id: lemmaId } });
-    if (!lemma) throw new NotFoundException("Lemma not found");
+    if (!lemma) throw new NotFoundException({ code: ErrorCode.LEMMA_NOT_FOUND, message: "Lemma not found" });
 
     // Находим токены, связанные с леммой через TokenAnalysis
     const analyses = await this.prisma.tokenAnalysis.findMany({

@@ -11,6 +11,7 @@ import {
   RoleName,
   SubscriptionStatus,
 } from "@prisma/client";
+import { ErrorCode } from "src/common/errors/error-codes";
 import { PrismaService } from "src/prisma.service";
 import { AdminReplyDto } from "./dto/admin-reply.dto";
 import { AssignFeedbackDto } from "./dto/assign-feedback.dto";
@@ -190,7 +191,7 @@ export class AdminFeedbackService {
         text: { select: { id: true, title: true } },
       },
     });
-    if (!thread) throw new NotFoundException("Thread not found");
+    if (!thread) throw new NotFoundException({ code: ErrorCode.THREAD_NOT_FOUND, message: "Thread not found" });
 
     const authorIds = [...new Set(thread.messages.map((message) => message.authorId))];
     const authors = await this.prisma.user.findMany({
@@ -242,7 +243,7 @@ export class AdminFeedbackService {
         where: { id: dto.assigneeAdminId },
         select: { id: true },
       });
-      if (!targetAdmin) throw new NotFoundException("Assignee admin not found");
+      if (!targetAdmin) throw new NotFoundException({ code: ErrorCode.USER_NOT_FOUND, message: "Assignee admin not found" });
     }
 
     return this.prisma.feedbackThread.update({
@@ -309,14 +310,14 @@ export class AdminFeedbackService {
   async transfer(adminId: string, threadId: string, dto: TransferFeedbackDto) {
     await this.ensureExists(threadId);
     if (dto.targetAdminId === adminId) {
-      throw new BadRequestException("Cannot transfer thread to yourself");
+      throw new BadRequestException({ code: ErrorCode.FEEDBACK_CANNOT_TRANSFER_TO_SELF, message: "Cannot transfer thread to yourself" });
     }
 
     const targetAdmin = await this.prisma.user.findUnique({
       where: { id: dto.targetAdminId },
       select: { id: true, name: true, surname: true },
     });
-    if (!targetAdmin) throw new NotFoundException("Target admin not found");
+    if (!targetAdmin) throw new NotFoundException({ code: ErrorCode.USER_NOT_FOUND, message: "Target admin not found" });
 
     const result = await this.prisma.$transaction(async (tx) => {
       const thread = await tx.feedbackThread.update({
@@ -480,6 +481,6 @@ export class AdminFeedbackService {
       where: { id: threadId },
       select: { id: true },
     });
-    if (!thread) throw new NotFoundException("Thread not found");
+    if (!thread) throw new NotFoundException({ code: ErrorCode.THREAD_NOT_FOUND, message: "Thread not found" });
   }
 }

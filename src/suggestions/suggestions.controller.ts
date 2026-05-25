@@ -13,6 +13,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { PermissionCode, SuggestionStatus } from "@prisma/client";
 import { Auth } from "src/auth/decorators/auth.decorator";
+import { ErrorCode } from "src/common/errors/error-codes";
 import { AdminPermission } from "src/auth/decorators/admin-permission.decorator";
 import { User } from "src/user/decorators/user.decorator";
 import { SuggestionsService } from "./suggestions.service";
@@ -24,7 +25,7 @@ const VALID_STATUSES = new Set(Object.values(SuggestionStatus));
 const parseStatus = (raw?: string): SuggestionStatus | undefined => {
   if (!raw) return undefined;
   if (!VALID_STATUSES.has(raw as SuggestionStatus)) {
-    throw new BadRequestException(`Недопустимый статус: ${raw}`);
+    throw new BadRequestException({ code: ErrorCode.SUGGESTION_INVALID_STATUS, message: `Invalid status: ${raw}` });
   }
   return raw as SuggestionStatus;
 };

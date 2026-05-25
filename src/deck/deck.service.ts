@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { DeckType, Prisma } from "@prisma/client";
+import { ErrorCode } from "src/common/errors/error-codes";
 import { PrismaService } from "src/prisma.service";
 import { attachLatestContexts } from "src/progress/latest-context.helper";
 
@@ -64,7 +65,7 @@ export class DeckService {
     if (existing) return { ...existing, shouldRefreshDeck: false };
 
     const lemma = await this.prisma.lemma.findUnique({ where: { id: lemmaId } });
-    if (!lemma) throw new NotFoundException("Lemma not found");
+    if (!lemma) throw new NotFoundException({ code: ErrorCode.LEMMA_NOT_FOUND, message: "Lemma not found" });
 
     const card = await this.prisma.userDeckCard.create({
       data: { userId, lemmaId, deckType: DeckType.NEW },
@@ -78,7 +79,7 @@ export class DeckService {
     const existing = await this.prisma.userDeckCard.findUnique({
       where: { userId_lemmaId: { userId, lemmaId } },
     });
-    if (!existing) throw new NotFoundException("Card not found");
+    if (!existing) throw new NotFoundException({ code: ErrorCode.CARD_NOT_FOUND, message: "Card not found" });
 
     const removed = await this.prisma.userDeckCard.delete({
       where: { userId_lemmaId: { userId, lemmaId } },
@@ -97,7 +98,7 @@ export class DeckService {
     const card = await this.prisma.userDeckCard.findUnique({
       where: { userId_lemmaId: { userId, lemmaId } },
     });
-    if (!card) throw new NotFoundException("Card not found");
+    if (!card) throw new NotFoundException({ code: ErrorCode.CARD_NOT_FOUND, message: "Card not found" });
 
     if (result === "know") {
       const updated = await this.prisma.userDeckCard.update({

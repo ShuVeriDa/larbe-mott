@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { AiCacheStatus } from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
+import { ErrorCode } from "src/common/errors/error-codes";
 
 export interface FetchAiCacheQuery {
   status?: AiCacheStatus;
@@ -99,7 +100,7 @@ export class AdminAiCacheService {
     const entry = await this.prisma.aiTranslationCache.findUnique({
       where: { id },
     });
-    if (!entry) throw new NotFoundException("AI cache entry not found");
+    if (!entry) throw new NotFoundException({ code: ErrorCode.AI_CACHE_ENTRY_NOT_FOUND, message: "AI cache entry not found" });
     return this.prisma.aiTranslationCache.update({
       where: { id },
       data: { status: AiCacheStatus.APPROVED },
@@ -110,7 +111,7 @@ export class AdminAiCacheService {
     const entry = await this.prisma.aiTranslationCache.findUnique({
       where: { id },
     });
-    if (!entry) throw new NotFoundException("AI cache entry not found");
+    if (!entry) throw new NotFoundException({ code: ErrorCode.AI_CACHE_ENTRY_NOT_FOUND, message: "AI cache entry not found" });
     return this.prisma.aiTranslationCache.update({
       where: { id },
       data: { status: AiCacheStatus.REJECTED },
@@ -121,7 +122,7 @@ export class AdminAiCacheService {
     const entry = await this.prisma.aiTranslationCache.findUnique({
       where: { id },
     });
-    if (!entry) throw new NotFoundException("AI cache entry not found");
+    if (!entry) throw new NotFoundException({ code: ErrorCode.AI_CACHE_ENTRY_NOT_FOUND, message: "AI cache entry not found" });
     await this.prisma.aiTranslationCache.delete({ where: { id } });
   }
 
@@ -139,7 +140,7 @@ export class AdminAiCacheService {
       select: { geminiApiKeyEncrypted: true },
     });
     if (!user?.geminiApiKeyEncrypted) {
-      throw new NotFoundException("Admin Gemini API key not configured");
+      throw new NotFoundException({ code: ErrorCode.ADMIN_GEMINI_KEY_NOT_CONFIGURED, message: "Admin Gemini API key not configured" });
     }
 
     const { decryptApiKey } =

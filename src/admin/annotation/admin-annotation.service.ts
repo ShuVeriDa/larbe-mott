@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { AnalysisSource, Language } from "@prisma/client";
+import { ErrorCode } from "src/common/errors/error-codes";
 import { TokenInfoCacheService } from "src/cache/token-info-cache.service";
 import { OnlineDictionaryService } from "src/markup-engine/online-dictionary/online-dictionary.service";
 import { PrismaService } from "src/prisma.service";
@@ -174,7 +175,7 @@ export class AdminAnnotationService {
       where: { id: lemmaId },
       select: { id: true, baseForm: true },
     });
-    if (!lemma) throw new NotFoundException("Lemma not found");
+    if (!lemma) throw new NotFoundException({ code: ErrorCode.LEMMA_NOT_FOUND, message: "Lemma not found" });
 
     await this.prisma.$transaction([
       // Upsert MorphForm so this (normalized, lemmaId) pair is visible on the annotations page
@@ -227,7 +228,7 @@ export class AdminAnnotationService {
       where: { id: lemmaId },
       select: { id: true, baseForm: true },
     });
-    if (!lemma) throw new NotFoundException("Lemma not found");
+    if (!lemma) throw new NotFoundException({ code: ErrorCode.LEMMA_NOT_FOUND, message: "Lemma not found" });
 
     const tokens = await this.prisma.textToken.findMany({
       where: { normalized },
@@ -280,13 +281,13 @@ export class AdminAnnotationService {
       where: { id: tokenId },
       select: { id: true, versionId: true, normalized: true, original: true },
     });
-    if (!token) throw new NotFoundException("Token not found");
+    if (!token) throw new NotFoundException({ code: ErrorCode.TOKEN_NOT_FOUND, message: "Token not found" });
 
     const lemma = await this.prisma.lemma.findUnique({
       where: { id: lemmaId },
       select: { id: true, baseForm: true },
     });
-    if (!lemma) throw new NotFoundException("Lemma not found");
+    if (!lemma) throw new NotFoundException({ code: ErrorCode.LEMMA_NOT_FOUND, message: "Lemma not found" });
 
     if (scope === "global") {
       await this.prisma.morphForm.upsert({
@@ -506,7 +507,7 @@ export class AdminAnnotationService {
       where: { id: morphFormId },
       select: { normalized: true, lemmaId: true },
     });
-    if (!mf) throw new NotFoundException("MorphForm not found");
+    if (!mf) throw new NotFoundException({ code: ErrorCode.MORPH_FORM_NOT_FOUND, message: "MorphForm not found" });
 
     const annotatedTokens = await this.prisma.textToken.findMany({
       where: {
@@ -650,7 +651,7 @@ export class AdminAnnotationService {
         lemma: { select: { id: true, baseForm: true, normalized: true, partOfSpeech: true } },
       },
     });
-    if (!mf) throw new NotFoundException("MorphForm not found");
+    if (!mf) throw new NotFoundException({ code: ErrorCode.MORPH_FORM_NOT_FOUND, message: "MorphForm not found" });
     const tokenCount = await this.prisma.textToken.count({ where: { normalized: mf.normalized } });
     return { ...mf, tokenCount };
   }
@@ -669,7 +670,7 @@ export class AdminAnnotationService {
         },
       });
     } catch (e: unknown) {
-      if ((e as { code?: string }).code === "P2025") throw new NotFoundException("MorphForm not found");
+      if ((e as { code?: string }).code === "P2025") throw new NotFoundException({ code: ErrorCode.MORPH_FORM_NOT_FOUND, message: "MorphForm not found" });
       throw e;
     }
   }
@@ -679,7 +680,7 @@ export class AdminAnnotationService {
       where: { id },
       select: { id: true, normalized: true, lemmaId: true },
     });
-    if (!mf) throw new NotFoundException("MorphForm not found");
+    if (!mf) throw new NotFoundException({ code: ErrorCode.MORPH_FORM_NOT_FOUND, message: "MorphForm not found" });
 
     // Find tokens with this normalized form that have ADMIN analyses for this lemma
     const tokens = await this.prisma.textToken.findMany({

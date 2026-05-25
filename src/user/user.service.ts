@@ -11,6 +11,7 @@ import { PrismaService } from "../prisma.service";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { DeleteAccountDto } from "./dto/delete-account.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
+import { ErrorCode } from "src/common/errors/error-codes";
 
 // Конфликт с username — единственно возможный для PATCH /users теперь, когда
 // email/password убраны в auth-flow.
@@ -27,7 +28,7 @@ export class UserService {
       where: { id },
     });
 
-    if (!user) throw new NotFoundException("The user not found");
+    if (!user) throw new NotFoundException({ code: ErrorCode.USER_NOT_FOUND, message: "The user not found" });
 
     const {
       password,
@@ -64,7 +65,7 @@ export class UserService {
       return await this.prisma.user.create({ data: user });
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-        throw new ConflictException("User with this email or username already exists");
+        throw new ConflictException({ code: ErrorCode.USER_ALREADY_EXISTS, message: "User with this email or username already exists" });
       }
       throw e;
     }
@@ -76,13 +77,11 @@ export class UserService {
     if (
       dto.confirmEmail.trim().toLowerCase() !== user.email.trim().toLowerCase()
     ) {
-      throw new BadRequestException(
-        "Confirmation email does not match the account email",
-      );
+      throw new BadRequestException({ code: ErrorCode.EMAIL_MISMATCH, message: "Confirmation email does not match the account email" });
     }
 
     if (user.status === UserStatus.DELETED) {
-      throw new BadRequestException("Account is already scheduled for deletion");
+      throw new BadRequestException({ code: ErrorCode.ALREADY_SCHEDULED_FOR_DELETION, message: "Account is already scheduled for deletion" });
     }
 
     // Soft-delete: ставим статус DELETED + deletedAt. Hard-delete выполняется фоновым cron-job
@@ -114,7 +113,7 @@ export class UserService {
       where: { id: userId },
     });
 
-    if (!user) throw new NotFoundException("The user not found");
+    if (!user) throw new NotFoundException({ code: ErrorCode.USER_NOT_FOUND, message: "The user not found" });
 
     return user;
   }
@@ -138,7 +137,7 @@ export class UserService {
       });
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-        throw new ConflictException("Username is already taken");
+        throw new ConflictException({ code: ErrorCode.USERNAME_TAKEN, message: "Username is already taken" });
       }
       throw e;
     }

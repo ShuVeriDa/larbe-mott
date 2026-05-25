@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import { SubscriptionStatus, UserEventType } from "@prisma/client";
 import { TokenInfoCacheService } from "src/cache/token-info-cache.service";
+import { ErrorCode } from "src/common/errors/error-codes";
 import { parseTranslation } from "src/markup-engine/online-dictionary/translation-parser";
 import { TokenizerService } from "src/markup-engine/tokenizer/tokenizer.service";
 import { PrismaService } from "src/prisma.service";
@@ -61,9 +62,7 @@ export class TokenService {
       ]);
 
       if (translationsPerDay !== -1 && translationsToday >= translationsPerDay) {
-        throw new ForbiddenException(
-          `Daily translation limit of ${translationsPerDay} reached. Upgrade your plan for more.`,
-        );
+        throw new ForbiddenException({ code: ErrorCode.DAILY_TRANSLATION_LIMIT_REACHED, message: `Daily translation limit of ${translationsPerDay} reached. Upgrade your plan for more.` });
       }
     }
 
@@ -123,7 +122,7 @@ export class TokenService {
     });
 
     if (!token) {
-      throw new NotFoundException("Token not found");
+      throw new NotFoundException({ code: ErrorCode.TOKEN_NOT_FOUND, message: "Token not found" });
     }
 
     // 3️⃣ кэш по (versionId, normalized): то же слово на другой странице — без повторного разбора.

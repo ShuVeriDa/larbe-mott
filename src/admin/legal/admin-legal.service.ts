@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import { ErrorCode } from "src/common/errors/error-codes";
 import { PrismaService } from "src/prisma.service";
 import { CreateLegalDocumentDto } from "./dto/create-legal-document.dto";
 import { FetchLegalDocumentsDto } from "./dto/fetch-legal-documents.dto";
@@ -28,7 +29,7 @@ export class AdminLegalService {
 
   async getById(id: string) {
     const doc = await this.prisma.legalDocument.findUnique({ where: { id } });
-    if (!doc) throw new NotFoundException("Legal document not found");
+    if (!doc) throw new NotFoundException({ code: ErrorCode.LEGAL_DOCUMENT_NOT_FOUND, message: "Legal document not found" });
     return doc;
   }
 

@@ -1,5 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { Language } from "@prisma/client";
+import { ErrorCode } from "src/common/errors/error-codes";
 import { PagePhrasesCacheService } from "src/cache/page-phrases-cache.service";
 import { PrismaService } from "src/prisma.service";
 import {
@@ -54,7 +55,7 @@ export class AdminTextPhraseService {
         },
       },
     });
-    if (!phrase) throw new NotFoundException("Phrase not found");
+    if (!phrase) throw new NotFoundException({ code: ErrorCode.PHRASE_NOT_FOUND, message: "Phrase not found" });
     return phrase;
   }
 
@@ -83,7 +84,7 @@ export class AdminTextPhraseService {
       await this.invalidatePhrasePages(id);
       return phrase;
     } catch (e: unknown) {
-      if ((e as { code?: string }).code === "P2025") throw new NotFoundException("Phrase not found");
+      if ((e as { code?: string }).code === "P2025") throw new NotFoundException({ code: ErrorCode.PHRASE_NOT_FOUND, message: "Phrase not found" });
       throw e;
     }
   }
@@ -100,7 +101,7 @@ export class AdminTextPhraseService {
         occurrences.map(o => this.pagePhrasesCache.invalidate(o.textId, o.pageNumber)),
       );
     } catch (e: unknown) {
-      if ((e as { code?: string }).code === "P2025") throw new NotFoundException("Phrase not found");
+      if ((e as { code?: string }).code === "P2025") throw new NotFoundException({ code: ErrorCode.PHRASE_NOT_FOUND, message: "Phrase not found" });
       throw e;
     }
   }
@@ -168,8 +169,8 @@ export class AdminTextPhraseService {
       }),
     ]);
 
-    if (!page) throw new NotFoundException("Text page not found");
-    if (!version) throw new NotFoundException("Text has not been tokenized yet");
+    if (!page) throw new NotFoundException({ code: ErrorCode.TEXT_PAGE_NOT_FOUND, message: "Text page not found" });
+    if (!version) throw new NotFoundException({ code: ErrorCode.TEXT_NOT_TOKENIZED, message: "Text has not been tokenized yet" });
 
     const tokens = await this.prisma.textToken.findMany({
       where: { versionId: version.id, pageId: page.id },
@@ -247,7 +248,7 @@ export class AdminTextPhraseService {
       this.prisma.textPhrase.findUnique({ where: { id: phraseId } }),
       this.findTextOrThrow(dto.textId),
     ]);
-    if (!phrase) throw new NotFoundException("Phrase not found");
+    if (!phrase) throw new NotFoundException({ code: ErrorCode.PHRASE_NOT_FOUND, message: "Phrase not found" });
 
     try {
       const occurrence = await this.prisma.textPhraseOccurrence.create({
@@ -263,7 +264,7 @@ export class AdminTextPhraseService {
       return occurrence;
     } catch (e: unknown) {
       if ((e as { code?: string }).code === "P2002") {
-        throw new ConflictException("This phrase occurrence already exists");
+        throw new ConflictException({ code: ErrorCode.PHRASE_OCCURRENCE_ALREADY_EXISTS, message: "This phrase occurrence already exists" });
       }
       throw e;
     }
@@ -274,7 +275,7 @@ export class AdminTextPhraseService {
       where: { id: occurrenceId },
       select: { textId: true, pageNumber: true },
     });
-    if (!occ) throw new NotFoundException("Occurrence not found");
+    if (!occ) throw new NotFoundException({ code: ErrorCode.PHRASE_OCCURRENCE_NOT_FOUND, message: "Occurrence not found" });
 
     await this.prisma.textPhraseOccurrence.delete({ where: { id: occurrenceId } });
     await this.pagePhrasesCache.invalidate(occ.textId, occ.pageNumber);
@@ -299,7 +300,7 @@ export class AdminTextPhraseService {
 
   private async findTextOrThrow(id: string) {
     const text = await this.prisma.text.findUnique({ where: { id }, select: { id: true } });
-    if (!text) throw new NotFoundException("Text not found");
+    if (!text) throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
     return text;
   }
 

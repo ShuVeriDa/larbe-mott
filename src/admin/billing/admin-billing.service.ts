@@ -13,6 +13,7 @@ import {
   SubscriptionStatus,
   UserStatus,
 } from "@prisma/client";
+import { ErrorCode } from "src/common/errors/error-codes";
 import { MailService } from "src/mail/mail.service";
 import { PrismaService } from "src/prisma.service";
 import { CancelSubscriptionDto } from "./dto/cancel-subscription.dto";
@@ -87,7 +88,7 @@ export class AdminBillingService {
 
   async updatePlan(id: string, dto: UpdatePlanDto) {
     const plan = await this.prisma.plan.findUnique({ where: { id } });
-    if (!plan) throw new NotFoundException("Plan not found");
+    if (!plan) throw new NotFoundException({ code: ErrorCode.PLAN_NOT_FOUND, message: "Plan not found" });
 
     return this.prisma.plan.update({
       where: { id },
@@ -115,7 +116,7 @@ export class AdminBillingService {
 
   async deactivatePlan(id: string) {
     const plan = await this.prisma.plan.findUnique({ where: { id } });
-    if (!plan) throw new NotFoundException("Plan not found");
+    if (!plan) throw new NotFoundException({ code: ErrorCode.PLAN_NOT_FOUND, message: "Plan not found" });
     if (!plan.isActive) return plan;
 
     return this.prisma.plan.update({
@@ -126,7 +127,7 @@ export class AdminBillingService {
 
   async deletePlan(id: string) {
     const plan = await this.prisma.plan.findUnique({ where: { id } });
-    if (!plan) throw new NotFoundException("Plan not found");
+    if (!plan) throw new NotFoundException({ code: ErrorCode.PLAN_NOT_FOUND, message: "Plan not found" });
 
     const subscriberCount = await this.prisma.subscription.count({
       where: { planId: id },
@@ -142,7 +143,7 @@ export class AdminBillingService {
 
   async updatePlanLimits(id: string, dto: UpdatePlanLimitsDto) {
     const plan = await this.prisma.plan.findUnique({ where: { id } });
-    if (!plan) throw new NotFoundException("Plan not found");
+    if (!plan) throw new NotFoundException({ code: ErrorCode.PLAN_NOT_FOUND, message: "Plan not found" });
 
     const { replace, ...limitsPatch } = dto;
     const current =
@@ -624,7 +625,7 @@ export class AdminBillingService {
       },
     });
 
-    if (!sub) throw new NotFoundException("Subscription not found");
+    if (!sub) throw new NotFoundException({ code: ErrorCode.SUBSCRIPTION_NOT_FOUND, message: "Subscription not found" });
     return sub;
   }
 
@@ -700,7 +701,7 @@ export class AdminBillingService {
 
   async cancelSubscription(id: string, dto?: CancelSubscriptionDto) {
     const existing = await this.prisma.subscription.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException("Subscription not found");
+    if (!existing) throw new NotFoundException({ code: ErrorCode.SUBSCRIPTION_NOT_FOUND, message: "Subscription not found" });
 
     return this.prisma.$transaction(async (tx) => {
       const sub = await tx.subscription.update({
@@ -723,9 +724,9 @@ export class AdminBillingService {
 
   async extendSubscription(id: string, dto: ExtendSubscriptionDto) {
     const existing = await this.prisma.subscription.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException("Subscription not found");
+    if (!existing) throw new NotFoundException({ code: ErrorCode.SUBSCRIPTION_NOT_FOUND, message: "Subscription not found" });
     if (existing.isLifetime) {
-      throw new BadRequestException("Lifetime subscription cannot be extended");
+      throw new BadRequestException({ code: ErrorCode.SUBSCRIPTION_CANNOT_EXTEND_LIFETIME, message: "Lifetime subscription cannot be extended" });
     }
 
     const base = existing.endDate ?? new Date();
@@ -1025,20 +1026,20 @@ export class AdminBillingService {
       },
     });
 
-    if (!payment) throw new NotFoundException("Payment not found");
+    if (!payment) throw new NotFoundException({ code: ErrorCode.PAYMENT_NOT_FOUND, message: "Payment not found" });
     return payment;
   }
 
   async refundPayment(id: string, dto: RefundPaymentDto) {
     const payment = await this.prisma.payment.findUnique({ where: { id } });
-    if (!payment) throw new NotFoundException("Payment not found");
+    if (!payment) throw new NotFoundException({ code: ErrorCode.PAYMENT_NOT_FOUND, message: "Payment not found" });
 
     const remaining = payment.amountCents - payment.refundedCents;
-    if (remaining <= 0) throw new BadRequestException("Payment already fully refunded");
+    if (remaining <= 0) throw new BadRequestException({ code: ErrorCode.PAYMENT_ALREADY_REFUNDED, message: "Payment already fully refunded" });
 
     const toRefund = dto.amountCents ?? remaining;
     if (toRefund <= 0 || toRefund > remaining) {
-      throw new BadRequestException("Invalid refund amount");
+      throw new BadRequestException({ code: ErrorCode.PAYMENT_INVALID_REFUND_AMOUNT, message: "Invalid refund amount" });
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -1140,11 +1141,11 @@ export class AdminBillingService {
         },
       },
     });
-    if (!payment) throw new NotFoundException("Payment not found");
+    if (!payment) throw new NotFoundException({ code: ErrorCode.PAYMENT_NOT_FOUND, message: "Payment not found" });
 
     const to = overrideEmail?.trim() || payment.user?.email;
     if (!to) {
-      throw new BadRequestException("No recipient email available for this payment");
+      throw new BadRequestException({ code: ErrorCode.PAYMENT_NO_RECIPIENT_EMAIL, message: "No recipient email available for this payment" });
     }
 
     const recipientName =
@@ -1424,7 +1425,7 @@ export class AdminBillingService {
       },
     });
 
-    if (!coupon) throw new NotFoundException("Coupon not found");
+    if (!coupon) throw new NotFoundException({ code: ErrorCode.COUPON_NOT_FOUND, message: "Coupon not found" });
 
     return { ...coupon, computedStatus: this.computeCouponStatus(coupon) };
   }
@@ -1435,7 +1436,7 @@ export class AdminBillingService {
 
   async createCoupon(dto: CreateCouponDto) {
     if (dto.type === CouponType.PERCENT && dto.amount > 100) {
-      throw new BadRequestException("Percent coupon amount must be <= 100");
+      throw new BadRequestException({ code: ErrorCode.COUPON_INVALID_AMOUNT, message: "Percent coupon amount must be <= 100" });
     }
 
     return this.prisma.coupon.create({
@@ -1458,10 +1459,10 @@ export class AdminBillingService {
 
   async updateCoupon(id: string, dto: UpdateCouponDto) {
     const coupon = await this.prisma.coupon.findUnique({ where: { id } });
-    if (!coupon) throw new NotFoundException("Coupon not found");
+    if (!coupon) throw new NotFoundException({ code: ErrorCode.COUPON_NOT_FOUND, message: "Coupon not found" });
 
     if (dto.type === CouponType.PERCENT && dto.amount && dto.amount > 100) {
-      throw new BadRequestException("Percent coupon amount must be <= 100");
+      throw new BadRequestException({ code: ErrorCode.COUPON_INVALID_AMOUNT, message: "Percent coupon amount must be <= 100" });
     }
 
     return this.prisma.coupon.update({
@@ -1491,7 +1492,7 @@ export class AdminBillingService {
 
   async deactivateCoupon(id: string) {
     const coupon = await this.prisma.coupon.findUnique({ where: { id } });
-    if (!coupon) throw new NotFoundException("Coupon not found");
+    if (!coupon) throw new NotFoundException({ code: ErrorCode.COUPON_NOT_FOUND, message: "Coupon not found" });
 
     return this.prisma.coupon.update({
       where: { id },
@@ -1501,7 +1502,7 @@ export class AdminBillingService {
 
   async activateCoupon(id: string) {
     const coupon = await this.prisma.coupon.findUnique({ where: { id } });
-    if (!coupon) throw new NotFoundException("Coupon not found");
+    if (!coupon) throw new NotFoundException({ code: ErrorCode.COUPON_NOT_FOUND, message: "Coupon not found" });
 
     return this.prisma.coupon.update({
       where: { id },
@@ -1575,7 +1576,7 @@ export class AdminBillingService {
 
   async deleteCoupon(id: string) {
     const coupon = await this.prisma.coupon.findUnique({ where: { id } });
-    if (!coupon) throw new NotFoundException("Coupon not found");
+    if (!coupon) throw new NotFoundException({ code: ErrorCode.COUPON_NOT_FOUND, message: "Coupon not found" });
     if (coupon.redeemedCount > 0) {
       throw new BadRequestException(
         "Cannot delete a coupon that has been redeemed. Deactivate it instead.",
@@ -1589,18 +1590,18 @@ export class AdminBillingService {
       where: { code: couponCode },
     });
     if (!coupon || !coupon.isActive) {
-      throw new BadRequestException("Invalid coupon");
+      throw new BadRequestException({ code: ErrorCode.COUPON_INVALID, message: "Invalid coupon" });
     }
 
     const now = new Date();
     if (coupon.validFrom && coupon.validFrom > now) {
-      throw new BadRequestException("Coupon not active yet");
+      throw new BadRequestException({ code: ErrorCode.COUPON_NOT_ACTIVE_YET, message: "Coupon not active yet" });
     }
     if (coupon.validUntil && coupon.validUntil < now) {
-      throw new BadRequestException("Coupon expired");
+      throw new BadRequestException({ code: ErrorCode.COUPON_EXPIRED, message: "Coupon expired" });
     }
     if (coupon.maxRedemptions !== null && coupon.redeemedCount >= coupon.maxRedemptions) {
-      throw new BadRequestException("Coupon redemption limit reached");
+      throw new BadRequestException({ code: ErrorCode.COUPON_LIMIT_REACHED, message: "Coupon redemption limit reached" });
     }
 
     if (coupon.maxPerUser !== null) {
@@ -1608,7 +1609,7 @@ export class AdminBillingService {
         where: { couponId: coupon.id, userId },
       });
       if (userUsages >= coupon.maxPerUser) {
-        throw new BadRequestException("Coupon per-user limit reached");
+        throw new BadRequestException({ code: ErrorCode.COUPON_PER_USER_LIMIT_REACHED, message: "Coupon per-user limit reached" });
       }
     }
 
@@ -1635,17 +1636,17 @@ export class AdminBillingService {
   private async resolvePlan(planId?: string, planCode?: string) {
     if (planId) {
       const plan = await this.prisma.plan.findUnique({ where: { id: planId } });
-      if (!plan) throw new NotFoundException("Plan not found");
+      if (!plan) throw new NotFoundException({ code: ErrorCode.PLAN_NOT_FOUND, message: "Plan not found" });
       return plan;
     }
     if (planCode) {
       const plan = await this.prisma.plan.findUnique({
         where: { code: planCode.toUpperCase() },
       });
-      if (!plan) throw new NotFoundException("Plan not found");
+      if (!plan) throw new NotFoundException({ code: ErrorCode.PLAN_NOT_FOUND, message: "Plan not found" });
       return plan;
     }
-    throw new BadRequestException("Either planId or planCode is required");
+    throw new BadRequestException({ code: ErrorCode.PLAN_ID_OR_CODE_REQUIRED, message: "Either planId or planCode is required" });
   }
 
   private async resolveUserId(userId?: string, email?: string): Promise<string> {
@@ -1654,7 +1655,7 @@ export class AdminBillingService {
         where: { id: userId },
         select: { id: true },
       });
-      if (!user) throw new NotFoundException("User not found");
+      if (!user) throw new NotFoundException({ code: ErrorCode.USER_NOT_FOUND, message: "User not found" });
       return user.id;
     }
     if (email) {
@@ -1662,10 +1663,10 @@ export class AdminBillingService {
         where: { email: email.toLowerCase() },
         select: { id: true },
       });
-      if (!user) throw new NotFoundException("User not found by email");
+      if (!user) throw new NotFoundException({ code: ErrorCode.USER_NOT_FOUND, message: "User not found by email" });
       return user.id;
     }
-    throw new BadRequestException("Either userId or email is required");
+    throw new BadRequestException({ code: ErrorCode.USER_ID_OR_EMAIL_REQUIRED, message: "Either userId or email is required" });
   }
 
   private computeCouponStatus(c: {

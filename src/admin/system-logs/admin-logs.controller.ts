@@ -1,4 +1,5 @@
 import { Controller, Get, NotFoundException, Param, Query, Res } from "@nestjs/common";
+import { ErrorCode } from "src/common/errors/error-codes";
 import {
   ApiBearerAuth,
   ApiOkResponse,
@@ -109,7 +110,7 @@ export class AdminLogsController {
   async getById(@Param("id") id: string): Promise<unknown> {
     const data = await this.logsService.getById(id);
     if (!data) {
-      throw new NotFoundException(`Log ${id} not found`);
+      throw new NotFoundException({ code: ErrorCode.LOG_NOT_FOUND, message: `Log ${id} not found` });
     }
     return data;
   }

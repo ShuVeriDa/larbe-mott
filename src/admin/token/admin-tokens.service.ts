@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import { ErrorCode } from "src/common/errors/error-codes";
 import { TokenInfoCacheService } from "src/cache/token-info-cache.service";
 import { replaceInTiptapDoc } from "src/common/utils/replaceInTiptapDoc";
 import { TokenizerService } from "src/markup-engine/tokenizer/tokenizer.service";
@@ -43,7 +44,7 @@ export class AdminTokenService {
       },
     });
     if (!token) {
-      throw new NotFoundException("Token not found");
+      throw new NotFoundException({ code: ErrorCode.TOKEN_NOT_FOUND, message: "Token not found" });
     }
     return {
       id: token.id,
@@ -130,7 +131,7 @@ export class AdminTokenService {
       },
     });
     if (!token) {
-      throw new NotFoundException("Token not found");
+      throw new NotFoundException({ code: ErrorCode.TOKEN_NOT_FOUND, message: "Token not found" });
     }
 
     if (dto.vocabId !== undefined && dto.vocabId !== null) {
@@ -139,7 +140,7 @@ export class AdminTokenService {
         select: { versionId: true },
       });
       if (!vocab) {
-        throw new BadRequestException("TextVocabulary not found");
+        throw new BadRequestException({ code: ErrorCode.DICTIONARY_ENTRY_NOT_FOUND, message: "TextVocabulary not found" });
       }
       if (vocab.versionId !== token.versionId) {
         throw new BadRequestException(

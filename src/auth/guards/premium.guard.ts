@@ -5,6 +5,7 @@ import {
   Injectable,
 } from "@nestjs/common";
 import { PlanType, RoleName, SubscriptionStatus, User as UserPrisma } from "@prisma/client";
+import { ErrorCode } from "src/common/errors/error-codes";
 import { PrismaService } from "src/prisma.service";
 import { RedisService } from "src/redis/redis.service";
 
@@ -27,21 +28,21 @@ export class PremiumGuard implements CanActivate {
     const userId = request.user?.id;
 
     if (!userId) {
-      throw new ForbiddenException("Access denied");
+      throw new ForbiddenException({ code: ErrorCode.ACCESS_DENIED, message: "Access denied" });
     }
 
     const cached = await this.getCachedState(userId);
     if (cached === "active") return true;
     if (cached === "expired") {
       throw new ForbiddenException({
-        error: "SUBSCRIPTION_EXPIRED",
+        code: ErrorCode.SUBSCRIPTION_EXPIRED,
         message:
           "Your Premium subscription has expired. Your data is preserved — renew to continue.",
       });
     }
     if (cached === "none") {
       throw new ForbiddenException({
-        error: "SUBSCRIPTION_REQUIRED",
+        code: ErrorCode.SUBSCRIPTION_REQUIRED,
         message: "This feature requires a Premium subscription.",
       });
     }
@@ -76,7 +77,7 @@ export class PremiumGuard implements CanActivate {
     ) {
       await this.setCachedState(userId, "expired");
       throw new ForbiddenException({
-        error: "SUBSCRIPTION_EXPIRED",
+        code: ErrorCode.SUBSCRIPTION_EXPIRED,
         message:
           "Your Premium subscription has expired. Your data is preserved — renew to continue.",
       });
@@ -84,7 +85,7 @@ export class PremiumGuard implements CanActivate {
 
     await this.setCachedState(userId, "none");
     throw new ForbiddenException({
-      error: "SUBSCRIPTION_REQUIRED",
+      code: ErrorCode.SUBSCRIPTION_REQUIRED,
       message: "This feature requires a Premium subscription.",
     });
   }

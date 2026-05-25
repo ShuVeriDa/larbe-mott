@@ -18,6 +18,7 @@ import {
 } from "@nestjs/swagger";
 import { PermissionCode } from "@prisma/client";
 import { randomUUID } from "crypto";
+import { ErrorCode } from "src/common/errors/error-codes";
 import * as fs from "fs";
 import { diskStorage } from "multer";
 import { extname, join } from "path";
@@ -72,7 +73,7 @@ export class AdminUploadsController {
     }),
   )
   async uploadCover(@UploadedFile() file: Express.Multer.File) {
-    if (!file) throw new BadRequestException("File is required");
+    if (!file) throw new BadRequestException({ code: ErrorCode.FILE_REQUIRED, message: "File is required" });
     return { imageUrl: `/uploads/covers/${file.filename}` };
   }
 }

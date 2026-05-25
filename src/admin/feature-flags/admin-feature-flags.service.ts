@@ -10,6 +10,7 @@ import {
   FeatureFlagHistoryEventType,
   Prisma,
 } from "@prisma/client";
+import { ErrorCode } from "src/common/errors/error-codes";
 import { PrismaService } from "src/prisma.service";
 import { CreateFeatureFlagDto } from "./dto/create-feature-flag.dto";
 import {
@@ -228,7 +229,7 @@ export class AdminFeatureFlagsService {
 
   async createFlag(dto: CreateFeatureFlagDto, actorId?: string) {
     const existing = await this.prisma.featureFlag.findUnique({ where: { key: dto.key } });
-    if (existing) throw new ConflictException(`Feature flag "${dto.key}" already exists`);
+    if (existing) throw new ConflictException({ code: ErrorCode.FEATURE_FLAG_ALREADY_EXISTS, message: `Feature flag already exists` });
 
     return this.prisma.$transaction(async (tx) => {
       const created = await tx.featureFlag.create({
@@ -268,7 +269,7 @@ export class AdminFeatureFlagsService {
 
   async updateFlag(id: string, dto: UpdateFeatureFlagDto, actorId?: string) {
     const flag = await this.prisma.featureFlag.findUnique({ where: { id } });
-    if (!flag || flag.deletedAt) throw new NotFoundException("Feature flag not found");
+    if (!flag || flag.deletedAt) throw new NotFoundException({ code: ErrorCode.FEATURE_FLAG_NOT_FOUND, message: "Feature flag not found" });
 
     if (dto.key && dto.key !== flag.key) {
       const duplicate = await this.prisma.featureFlag.findFirst({
@@ -276,7 +277,7 @@ export class AdminFeatureFlagsService {
         select: { id: true },
       });
       if (duplicate) {
-        throw new ConflictException(`Feature flag "${dto.key}" already exists`);
+        throw new ConflictException({ code: ErrorCode.FEATURE_FLAG_ALREADY_EXISTS, message: `Feature flag already exists` });
       }
     }
 
@@ -368,7 +369,7 @@ export class AdminFeatureFlagsService {
 
   async toggleFlag(id: string, isEnabled: boolean, actorId?: string) {
     const flag = await this.prisma.featureFlag.findUnique({ where: { id } });
-    if (!flag || flag.deletedAt) throw new NotFoundException("Feature flag not found");
+    if (!flag || flag.deletedAt) throw new NotFoundException({ code: ErrorCode.FEATURE_FLAG_NOT_FOUND, message: "Feature flag not found" });
     if (flag.isEnabled === isEnabled) return flag;
 
     return this.prisma.$transaction(async (tx) => {
@@ -391,7 +392,7 @@ export class AdminFeatureFlagsService {
 
   async deleteFlag(id: string, actorId?: string) {
     const flag = await this.prisma.featureFlag.findUnique({ where: { id } });
-    if (!flag || flag.deletedAt) throw new NotFoundException("Feature flag not found");
+    if (!flag || flag.deletedAt) throw new NotFoundException({ code: ErrorCode.FEATURE_FLAG_NOT_FOUND, message: "Feature flag not found" });
 
     return this.prisma.$transaction(async (tx) => {
       const deleted = await tx.featureFlag.update({
@@ -413,9 +414,9 @@ export class AdminFeatureFlagsService {
 
   async duplicateFlag(id: string, newKey: string, actorId?: string) {
     const source = await this.prisma.featureFlag.findUnique({ where: { id } });
-    if (!source || source.deletedAt) throw new NotFoundException("Feature flag not found");
+    if (!source || source.deletedAt) throw new NotFoundException({ code: ErrorCode.FEATURE_FLAG_NOT_FOUND, message: "Feature flag not found" });
     const existing = await this.prisma.featureFlag.findUnique({ where: { key: newKey } });
-    if (existing) throw new ConflictException(`Feature flag "${newKey}" already exists`);
+    if (existing) throw new ConflictException({ code: ErrorCode.FEATURE_FLAG_ALREADY_EXISTS, message: `Feature flag already exists` });
 
     return this.prisma.$transaction(async (tx) => {
       const duplicated = await tx.featureFlag.create({
@@ -604,10 +605,10 @@ export class AdminFeatureFlagsService {
       where: { id: dto.flagId },
       select: { id: true, key: true, deletedAt: true },
     });
-    if (!flag || flag.deletedAt) throw new NotFoundException("Feature flag not found");
+    if (!flag || flag.deletedAt) throw new NotFoundException({ code: ErrorCode.FEATURE_FLAG_NOT_FOUND, message: "Feature flag not found" });
 
     const user = await this.findUserByIdOrEmail(dto.userIdOrEmail);
-    if (!user) throw new NotFoundException("User not found");
+    if (!user) throw new NotFoundException({ code: ErrorCode.USER_NOT_FOUND, message: "User not found" });
 
     return this.setUserOverride(flag.id, user.id, dto.isEnabled, dto.reason, actorId);
   }
@@ -623,13 +624,13 @@ export class AdminFeatureFlagsService {
       where: { id: flagId },
       select: { id: true, key: true, deletedAt: true },
     });
-    if (!flag || flag.deletedAt) throw new NotFoundException("Feature flag not found");
+    if (!flag || flag.deletedAt) throw new NotFoundException({ code: ErrorCode.FEATURE_FLAG_NOT_FOUND, message: "Feature flag not found" });
 
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { id: true },
     });
-    if (!user) throw new NotFoundException("User not found");
+    if (!user) throw new NotFoundException({ code: ErrorCode.USER_NOT_FOUND, message: "User not found" });
 
     return this.prisma.$transaction(async (tx) => {
       const existing = await tx.userFeatureFlag.findUnique({
@@ -687,7 +688,7 @@ export class AdminFeatureFlagsService {
       where: { id: overrideId },
       include: { featureFlag: { select: { id: true, key: true } } },
     });
-    if (!override) throw new NotFoundException("Override does not exist");
+    if (!override) throw new NotFoundException({ code: ErrorCode.FEATURE_FLAG_OVERRIDE_NOT_FOUND, message: "Override does not exist" });
 
     return this.prisma.$transaction(async (tx) => {
       await tx.userFeatureFlag.delete({ where: { id: overrideId } });
@@ -716,7 +717,7 @@ export class AdminFeatureFlagsService {
       include: { featureFlag: { select: { id: true, key: true } } },
     });
     if (!override) {
-      throw new NotFoundException("Override does not exist");
+      throw new NotFoundException({ code: ErrorCode.FEATURE_FLAG_OVERRIDE_NOT_FOUND, message: "Override does not exist" });
     }
 
     try {
@@ -746,7 +747,7 @@ export class AdminFeatureFlagsService {
         e instanceof Prisma.PrismaClientKnownRequestError &&
         e.code === "P2025"
       ) {
-        throw new NotFoundException("Override does not exist");
+        throw new NotFoundException({ code: ErrorCode.FEATURE_FLAG_OVERRIDE_NOT_FOUND, message: "Override does not exist" });
       }
       throw e;
     }
@@ -758,7 +759,7 @@ export class AdminFeatureFlagsService {
       select: { id: true, deletedAt: true },
     });
     if (!flag || flag.deletedAt) {
-      throw new NotFoundException("Feature flag not found");
+      throw new NotFoundException({ code: ErrorCode.FEATURE_FLAG_NOT_FOUND, message: "Feature flag not found" });
     }
   }
 
@@ -804,7 +805,7 @@ export class AdminFeatureFlagsService {
     const normalized = value.trim().toLowerCase();
     if (normalized === "true" || normalized === "1" || normalized === "on") return true;
     if (normalized === "false" || normalized === "0" || normalized === "off") return false;
-    throw new BadRequestException("isEnabled filter must be true/false (or on/off)");
+    throw new BadRequestException({ code: ErrorCode.INVALID_FILTER_VALUE, message: "isEnabled filter must be true/false (or on/off)" });
   }
 }
 

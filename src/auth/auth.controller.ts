@@ -12,6 +12,7 @@ import {
   Res,
   UnauthorizedException,
 } from "@nestjs/common";
+import { ErrorCode } from "src/common/errors/error-codes";
 import { Throttle } from "@nestjs/throttler";
 import { ConfigService } from "@nestjs/config";
 import {
@@ -114,7 +115,7 @@ export class AuthController {
 
     if (!refreshTokenFromCookies) {
       this.authService.removeRefreshTokenFromResponse(res);
-      throw new UnauthorizedException("Refresh token not passed");
+      throw new UnauthorizedException({ code: ErrorCode.REFRESH_TOKEN_NOT_PASSED, message: "Refresh token not passed" });
     }
 
     const { refreshToken, ...response } = await this.authService.getNewTokens(

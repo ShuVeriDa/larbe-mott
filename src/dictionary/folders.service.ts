@@ -7,6 +7,7 @@ import {
 } from "@nestjs/common";
 import { SubscriptionStatus } from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
+import { ErrorCode } from "src/common/errors/error-codes";
 import { CreateDictionaryFolderDto } from "./dto/create-folder";
 import { ReorderFoldersDto } from "./dto/reorder-folders.dto";
 import { UpdateDictionaryFolderDto } from "./dto/update-folder";
@@ -64,7 +65,7 @@ export class FoldersService {
       },
     });
     if (!folder || folder.userId !== userId) {
-      throw new NotFoundException("Dictionary folder not found");
+      throw new NotFoundException({ code: ErrorCode.FOLDER_NOT_FOUND, message: "Dictionary folder not found" });
     }
 
     const { entries, ...rest } = folder;
@@ -129,18 +130,14 @@ export class FoldersService {
     ]);
 
     if (existingFolder) {
-      throw new ConflictException("Dictionary folder already exists");
+      throw new ConflictException({ code: ErrorCode.FOLDER_ALREADY_EXISTS, message: "Dictionary folder already exists" });
     }
 
     if (maxFolders === 0) {
-      throw new ForbiddenException(
-        "Folders are not available on your plan. Upgrade to Premium.",
-      );
+      throw new ForbiddenException({ code: ErrorCode.FOLDERS_NOT_AVAILABLE, message: "Folders are not available on your plan. Upgrade to Premium." });
     }
     if (maxFolders > 0 && foldersCount >= maxFolders) {
-      throw new ForbiddenException(
-        `Folder limit of ${maxFolders} reached. Upgrade your plan to create more.`,
-      );
+      throw new ForbiddenException({ code: ErrorCode.FOLDER_LIMIT_REACHED, message: `Folder limit of ${maxFolders} reached. Upgrade your plan to create more.` });
     }
 
     return await this.prismaService.userDictionaryFolder.create({
@@ -186,7 +183,7 @@ export class FoldersService {
 
     const unique = new Set(orderedIds);
     if (unique.size !== orderedIds.length) {
-      throw new BadRequestException("orderedIds contains duplicates");
+      throw new BadRequestException({ code: ErrorCode.DUPLICATE_FOLDER_ORDER_IDS, message: "orderedIds contains duplicates" });
     }
 
     const folders = await this.prismaService.userDictionaryFolder.findMany({
@@ -196,13 +193,11 @@ export class FoldersService {
     const ownedIds = new Set(folders.map((f) => f.id));
 
     if (orderedIds.length !== ownedIds.size) {
-      throw new BadRequestException(
-        "orderedIds must contain exactly the user's folder IDs",
-      );
+      throw new BadRequestException({ code: ErrorCode.FOLDER_ORDER_IDS_MISMATCH, message: "orderedIds must contain exactly the user's folder IDs" });
     }
     for (const id of orderedIds) {
       if (!ownedIds.has(id)) {
-        throw new BadRequestException(`Folder ${id} does not belong to user`);
+        throw new BadRequestException({ code: ErrorCode.FOLDER_NOT_BELONG_TO_USER, message: `Folder ${id} does not belong to user` });
       }
     }
 

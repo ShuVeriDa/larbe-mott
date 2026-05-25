@@ -20,6 +20,7 @@ import {
 } from "@nestjs/swagger";
 import { PermissionCode } from "@prisma/client";
 import { Auth } from "src/auth/decorators/auth.decorator";
+import { ErrorCode } from "src/common/errors/error-codes";
 import { PermissionsService } from "src/auth/permissions/permissions.service";
 import { User } from "./decorators/user.decorator";
 import { DeleteAccountDto } from "./dto/delete-account.dto";
@@ -66,7 +67,7 @@ export class UserController {
       PermissionCode.CAN_MANAGE_USERS,
     );
     if (!isAdmin && userId !== currentUserId) {
-      throw new ForbiddenException("Access denied");
+      throw new ForbiddenException({ code: ErrorCode.ACCESS_DENIED, message: "Access denied" });
     }
     return this.userService.getUserById(userId);
   }

@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
+import { ErrorCode } from "src/common/errors/error-codes";
 import { PrismaService } from "src/prisma.service";
 import { RedisService } from "src/redis/redis.service";
 
@@ -90,12 +91,10 @@ export class TextProgressService {
     const totalPages =
       knownTotalPages ?? (await this.prisma.textPage.count({ where: { textId } }));
     if (totalPages === 0) {
-      throw new NotFoundException("Text has no pages");
+      throw new NotFoundException({ code: ErrorCode.TEXT_HAS_NO_PAGES, message: "Text has no pages" });
     }
     if (!Number.isInteger(pageNumber) || pageNumber < 1 || pageNumber > totalPages) {
-      throw new BadRequestException(
-        `pageNumber must be an integer in [1, ${totalPages}]`,
-      );
+      throw new BadRequestException({ code: ErrorCode.INVALID_PAGE_NUMBER, message: `pageNumber must be an integer in [1, ${totalPages}]` });
     }
 
     const now = new Date();

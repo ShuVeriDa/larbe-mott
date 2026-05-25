@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
+import { ErrorCode } from "src/common/errors/error-codes";
 import { PrismaService } from "src/prisma.service";
 import {
   CreatePhrasebookCategoryDto,
@@ -174,7 +175,7 @@ export class AdminPhrasebookService {
 
   async deleteSuggestion(id: string) {
     const s = await this.prisma.phrasebookSuggestion.findUnique({ where: { id } });
-    if (!s) throw new NotFoundException("Suggestion not found");
+    if (!s) throw new NotFoundException({ code: ErrorCode.PHRASE_SUGGESTION_NOT_FOUND, message: "Suggestion not found" });
     await this.prisma.phrasebookSuggestion.delete({ where: { id } });
   }
 
@@ -184,7 +185,7 @@ export class AdminPhrasebookService {
     const cat = await this.prisma.phrasebookCategory.findUnique({
       where: { id },
     });
-    if (!cat) throw new NotFoundException("Phrasebook category not found");
+    if (!cat) throw new NotFoundException({ code: ErrorCode.PHRASEBOOK_CATEGORY_NOT_FOUND, message: "Phrasebook category not found" });
     return cat;
   }
 
@@ -192,7 +193,7 @@ export class AdminPhrasebookService {
     const phrase = await this.prisma.phrasebookPhrase.findUnique({
       where: { id },
     });
-    if (!phrase) throw new NotFoundException("Phrasebook phrase not found");
+    if (!phrase) throw new NotFoundException({ code: ErrorCode.PHRASE_NOT_FOUND, message: "Phrasebook phrase not found" });
     return phrase;
   }
 }

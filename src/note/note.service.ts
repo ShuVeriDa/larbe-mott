@@ -1,4 +1,5 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { ErrorCode } from "src/common/errors/error-codes";
 import { PrismaService } from "src/prisma.service";
 import { CreateNoteDto } from "./dto/create-note.dto";
 import { UpdateNoteDto } from "./dto/update-note.dto";
@@ -38,7 +39,7 @@ export class NoteService {
       where: { id },
       select: { userId: true },
     });
-    if (!note) throw new NotFoundException("Note not found");
+    if (!note) throw new NotFoundException({ code: ErrorCode.NOTE_NOT_FOUND, message: "Note not found" });
     if (note.userId !== userId) throw new ForbiddenException();
   }
 }

@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { PermissionCode, User as UserPrisma } from "@prisma/client";
+import { ErrorCode } from "src/common/errors/error-codes";
 import { PermissionsService } from "./permissions.service";
 import { PERMISSION_KEY } from "./permission.decorator";
 
@@ -32,12 +33,12 @@ export class PermissionGuard implements CanActivate {
     const user = request.user;
 
     if (!user?.id) {
-      throw new ForbiddenException("Access denied");
+      throw new ForbiddenException({ code: ErrorCode.ACCESS_DENIED, message: "Access denied" });
     }
 
     const has = await this.permissionsService.hasPermission(user.id, permission);
     if (!has) {
-      throw new ForbiddenException("Access denied");
+      throw new ForbiddenException({ code: ErrorCode.ACCESS_DENIED, message: "Access denied" });
     }
     return true;
   }

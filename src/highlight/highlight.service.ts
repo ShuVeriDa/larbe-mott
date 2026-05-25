@@ -1,4 +1,5 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { ErrorCode } from "src/common/errors/error-codes";
 import { PrismaService } from "src/prisma.service";
 import { CreateHighlightDto } from "./dto/create-highlight.dto";
 import { UpdateHighlightDto } from "./dto/update-highlight.dto";
@@ -38,7 +39,7 @@ export class HighlightService {
       where: { id },
       select: { userId: true },
     });
-    if (!highlight) throw new NotFoundException("Highlight not found");
+    if (!highlight) throw new NotFoundException({ code: ErrorCode.HIGHLIGHT_NOT_FOUND, message: "Highlight not found" });
     if (highlight.userId !== userId) throw new ForbiddenException();
   }
 }

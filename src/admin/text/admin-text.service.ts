@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma, ProcessingStatus, ProcessingTrigger } from "@prisma/client";
+import { ErrorCode } from "src/common/errors/error-codes";
 import { BulkImportResultItem } from "src/admin/text/dto/bulk-import.dto";
 import { CreateTextDto } from "src/admin/text/dto/create.dto";
 import {
@@ -415,7 +416,7 @@ export class AdminTextService {
         tags: { include: { tag: { select: { id: true, name: true } } } },
       },
     });
-    if (!text) throw new NotFoundException("Text not found");
+    if (!text) throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
 
     if (format === "json") {
       return {
@@ -474,7 +475,7 @@ export class AdminTextService {
         tags: { include: { tag: { select: { id: true, name: true } } } },
       },
     });
-    if (!text) throw new NotFoundException("Text not found");
+    if (!text) throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
 
     const latestVersion = await this.prisma.textProcessingVersion.findFirst({
       where: { textId },
@@ -625,7 +626,7 @@ export class AdminTextService {
       where: { id: textId },
       include: { pages: true },
     });
-    if (!text) throw new NotFoundException("Text not found");
+    if (!text) throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
 
     const updated = await this.prisma.$transaction(async (tx) => {
       const textData: Parameters<typeof tx.text.update>[0]["data"] = {};
@@ -741,7 +742,7 @@ export class AdminTextService {
 
   async uploadCover(textId: string, file: Express.Multer.File) {
     const text = await this.prisma.text.findUnique({ where: { id: textId } });
-    if (!text) throw new NotFoundException("Text not found");
+    if (!text) throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
 
     const imageUrl = `/uploads/covers/${file.filename}`;
     await this.prisma.text.update({
@@ -758,7 +759,7 @@ export class AdminTextService {
 
   async deleteText(textId: string) {
     const text = await this.prisma.text.findUnique({ where: { id: textId } });
-    if (!text) throw new NotFoundException("Text not found");
+    if (!text) throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
     await this.deleteTextById(textId);
   }
 
@@ -772,7 +773,7 @@ export class AdminTextService {
     initiatorId: string,
   ) {
     const text = await this.prisma.text.findUnique({ where: { id: textId } });
-    if (!text) throw new NotFoundException("Text not found");
+    if (!text) throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
 
     const opts: ProcessTextOpts = {
       trigger: ProcessingTrigger.MANUAL,
@@ -822,7 +823,7 @@ export class AdminTextService {
 
   async clearDictionaryCache(textId: string): Promise<{ deleted: number }> {
     const text = await this.prisma.text.findUnique({ where: { id: textId } });
-    if (!text) throw new NotFoundException("Text not found");
+    if (!text) throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
 
     const currentVersion = await this.prisma.textProcessingVersion.findFirst({
       where: { textId, isCurrent: true },
@@ -855,7 +856,7 @@ export class AdminTextService {
       where: { id: versionId, textId },
       select: { useNormalization: true, useMorphAnalysis: true },
     });
-    if (!version) throw new NotFoundException("Version not found");
+    if (!version) throw new NotFoundException({ code: ErrorCode.TEXT_VERSION_NOT_FOUND, message: "Version not found" });
 
     return this.startProcessing(
       textId,
@@ -873,7 +874,7 @@ export class AdminTextService {
 
   async getTextVersions(textId: string, statusFilter?: ProcessingStatus) {
     const text = await this.prisma.text.findUnique({ where: { id: textId } });
-    if (!text) throw new NotFoundException("Text not found");
+    if (!text) throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
 
     // Counters always reflect the full history (so the filter tabs show real totals).
     const counters = await this.prisma.textProcessingVersion.groupBy({
@@ -984,7 +985,7 @@ export class AdminTextService {
         logs: { orderBy: { timestamp: "asc" } },
       },
     });
-    if (!version) throw new NotFoundException("Version not found");
+    if (!version) throw new NotFoundException({ code: ErrorCode.TEXT_VERSION_NOT_FOUND, message: "Version not found" });
 
     // Per-page stats
     const [tokensByPage, wordsByPage, pages] = await Promise.all([
@@ -1078,9 +1079,9 @@ export class AdminTextService {
     const version = await this.prisma.textProcessingVersion.findFirst({
       where: { id: versionId, textId },
     });
-    if (!version) throw new NotFoundException("Version not found");
+    if (!version) throw new NotFoundException({ code: ErrorCode.TEXT_VERSION_NOT_FOUND, message: "Version not found" });
     if (version.status !== "COMPLETED") {
-      throw new BadRequestException("Only completed versions can be restored");
+      throw new BadRequestException({ code: ErrorCode.TEXT_VERSION_NOT_COMPLETED, message: "Only completed versions can be restored" });
     }
     if (version.isCurrent) return { versionId, restored: true };
 
@@ -1109,7 +1110,7 @@ export class AdminTextService {
         initiator: { select: { id: true, name: true, surname: true } },
       },
     });
-    if (!version) throw new NotFoundException("Version not found");
+    if (!version) throw new NotFoundException({ code: ErrorCode.TEXT_VERSION_NOT_FOUND, message: "Version not found" });
 
     const [tokens, pages] = await Promise.all([
       this.prisma.textToken.findMany({
@@ -1153,7 +1154,7 @@ export class AdminTextService {
 
   async getUnknownWordsForText(textId: string) {
     const text = await this.prisma.text.findUnique({ where: { id: textId } });
-    if (!text) throw new NotFoundException("Text not found");
+    if (!text) throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
 
     const latestVersion = await this.prisma.textProcessingVersion.findFirst({
       where: { textId },
@@ -1278,7 +1279,7 @@ export class AdminTextService {
 
   async publishOne(textId: string) {
     const text = await this.prisma.text.findUnique({ where: { id: textId } });
-    if (!text) throw new NotFoundException("Text not found");
+    if (!text) throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
     await this.prisma.text.update({
       where: { id: textId },
       data: { publishedAt: new Date(), archivedAt: null },
@@ -1288,7 +1289,7 @@ export class AdminTextService {
 
   async unpublishOne(textId: string) {
     const text = await this.prisma.text.findUnique({ where: { id: textId } });
-    if (!text) throw new NotFoundException("Text not found");
+    if (!text) throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
     await this.prisma.text.update({
       where: { id: textId },
       data: { publishedAt: null },

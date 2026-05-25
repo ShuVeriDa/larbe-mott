@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma, TokenStatus, UnknownWordStatus } from "@prisma/client";
+import { ErrorCode } from "src/common/errors/error-codes";
 import { CreateEntryDto } from "src/admin/dictionary/dto/create-entry.dto";
 import { DictionaryService } from "src/markup-engine/dictionary/dictionary.service";
 import { normalizeToken } from "src/markup-engine/tokenizer/tokenizer.utils";
@@ -159,7 +160,7 @@ export class AdminUnknownWordsService {
 
   async getUnknownWordById(id: string) {
     const unknown = await this.prisma.unknownWord.findUnique({ where: { id } });
-    if (!unknown) throw new NotFoundException("Unknown word not found");
+    if (!unknown) throw new NotFoundException({ code: ErrorCode.UNKNOWN_WORD_NOT_FOUND, message: "Unknown word not found" });
 
     const texts = await this.getTextsForNormalizedList([unknown.normalized]);
     return { ...unknown, texts: texts.get(unknown.normalized) ?? [] };
@@ -169,7 +170,7 @@ export class AdminUnknownWordsService {
 
   async getContexts(id: string) {
     const unknown = await this.prisma.unknownWord.findUnique({ where: { id } });
-    if (!unknown) throw new NotFoundException("Unknown word not found");
+    if (!unknown) throw new NotFoundException({ code: ErrorCode.UNKNOWN_WORD_NOT_FOUND, message: "Unknown word not found" });
 
     const tokens = await this.prisma.textToken.findMany({
       where: { normalized: unknown.normalized },
@@ -222,7 +223,7 @@ export class AdminUnknownWordsService {
     userId: string,
   ) {
     const unknown = await this.prisma.unknownWord.findUnique({ where: { id } });
-    if (!unknown) throw new NotFoundException("Unknown word not found");
+    if (!unknown) throw new NotFoundException({ code: ErrorCode.UNKNOWN_WORD_NOT_FOUND, message: "Unknown word not found" });
 
     const headword = dto.headword?.trim() || unknown.word;
 
@@ -254,10 +255,10 @@ export class AdminUnknownWordsService {
 
   async linkToLemma(id: string, lemmaId: string) {
     const unknown = await this.prisma.unknownWord.findUnique({ where: { id } });
-    if (!unknown) throw new NotFoundException("Unknown word not found");
+    if (!unknown) throw new NotFoundException({ code: ErrorCode.UNKNOWN_WORD_NOT_FOUND, message: "Unknown word not found" });
 
     const lemma = await this.prisma.lemma.findUnique({ where: { id: lemmaId } });
-    if (!lemma) throw new NotFoundException("Lemma not found");
+    if (!lemma) throw new NotFoundException({ code: ErrorCode.LEMMA_NOT_FOUND, message: "Lemma not found" });
 
     const normalized = normalizeToken(unknown.word);
     await this.prisma.morphForm.upsert({
@@ -281,7 +282,7 @@ export class AdminUnknownWordsService {
 
   async remove(id: string) {
     const unknown = await this.prisma.unknownWord.findUnique({ where: { id } });
-    if (!unknown) throw new NotFoundException("Unknown word not found");
+    if (!unknown) throw new NotFoundException({ code: ErrorCode.UNKNOWN_WORD_NOT_FOUND, message: "Unknown word not found" });
 
     await this.prisma.unknownWord.update({
       where: { id },

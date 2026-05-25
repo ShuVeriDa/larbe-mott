@@ -5,6 +5,7 @@ import {
 } from "@nestjs/common";
 import { Prisma, SuggestionStatus } from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
+import { ErrorCode } from "src/common/errors/error-codes";
 
 const EDITABLE_FIELDS = [
   "rawWord",
@@ -27,9 +28,7 @@ export class SuggestionsService {
     comment?: string,
   ) {
     if (!EDITABLE_FIELDS.includes(field as (typeof EDITABLE_FIELDS)[number])) {
-      throw new BadRequestException(
-        `Поле "${field}" недоступно для редактирования. Допустимые: ${EDITABLE_FIELDS.join(", ")}`,
-      );
+      throw new BadRequestException({ code: ErrorCode.SUGGESTION_FIELD_NOT_EDITABLE, message: `Field "${field}" is not editable. Allowed: ${EDITABLE_FIELDS.join(", ")}` });
     }
 
     // Upsert DictionaryEntry by rawWord so suggestions always have a target entry
@@ -43,7 +42,7 @@ export class SuggestionsService {
       where: { userId, entryId: entry.id, field, status: SuggestionStatus.PENDING },
       select: { id: true },
     });
-    if (existing) throw new BadRequestException("У вас уже есть ожидающее предложение для этого поля");
+    if (existing) throw new BadRequestException({ code: ErrorCode.SUGGESTION_PENDING_EXISTS, message: "You already have a pending suggestion for this field" });
 
     const rawVal = entry[field as keyof typeof entry];
     const oldValue = rawVal != null ? JSON.stringify(rawVal) : null;
@@ -128,7 +127,7 @@ export class SuggestionsService {
         entry: { select: { id: true, rawWord: true } },
       },
     });
-    if (!s) throw new NotFoundException(`Предложение #${id} не найдено`);
+    if (!s) throw new NotFoundException({ code: ErrorCode.SUGGESTION_NOT_FOUND, message: `Suggestion #${id} not found` });
     return s;
   }
 
@@ -137,7 +136,7 @@ export class SuggestionsService {
       where: { id },
       select: { createdAt: true },
     });
-    if (!current) throw new NotFoundException(`Предложение #${id} не найдено`);
+    if (!current) throw new NotFoundException({ code: ErrorCode.SUGGESTION_NOT_FOUND, message: `Suggestion #${id} not found` });
 
     const statusFilter = status ? { status } : {};
 
@@ -170,9 +169,9 @@ export class SuggestionsService {
       where: { id: suggestionId },
     });
     if (!suggestion)
-      throw new NotFoundException(`Предложение #${suggestionId} не найдено`);
+      throw new NotFoundException({ code: ErrorCode.SUGGESTION_NOT_FOUND, message: `Suggestion #${suggestionId} not found` });
     if (suggestion.status !== SuggestionStatus.PENDING)
-      throw new BadRequestException("Предложение уже рассмотрено");
+      throw new BadRequestException({ code: ErrorCode.SUGGESTION_ALREADY_REVIEWED, message: "Suggestion has already been reviewed" });
 
     const newStatus =
       decision === "approve" ? SuggestionStatus.APPROVED : SuggestionStatus.REJECTED;

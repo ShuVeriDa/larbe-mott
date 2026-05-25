@@ -1,4 +1,5 @@
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { ErrorCode } from "src/common/errors/error-codes";
 import {
   FeedbackAuthorType,
   FeedbackContextType,
@@ -347,7 +348,7 @@ export class TextService {
         tags: { include: { tag: { select: { id: true, name: true } } } },
       },
     });
-    if (!text) throw new NotFoundException("Text not found");
+    if (!text) throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
 
     const cachedTotalPages = await this.redis.get(totalPagesCacheKey(textId));
     const [page, latestVersion, freshTotalPages] = await Promise.all([
@@ -370,7 +371,7 @@ export class TextService {
         TEXT_STATS_CACHE_TTL_S,
       );
     }
-    if (!page) throw new NotFoundException("Page not found");
+    if (!page) throw new NotFoundException({ code: ErrorCode.PAGE_NOT_FOUND, message: "Page not found" });
 
     // Bump reading position (monotonic forward) and read it back together with the
     // bookmark flag in a single Promise.all to keep this hot path tight.
@@ -547,7 +548,7 @@ export class TextService {
       },
     });
 
-    if (!text) throw new NotFoundException("Text not found");
+    if (!text) throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
 
     // Версия + wordCount
     const latestVersion = await this.prisma.textProcessingVersion.findFirst({
@@ -668,7 +669,7 @@ export class TextService {
       where: { id: textId },
       select: { id: true },
     });
-    if (!text) throw new NotFoundException("Text not found");
+    if (!text) throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
 
     await this.prisma.userTextProgress.deleteMany({ where: { userId, textId } });
     return { ok: true };
@@ -764,7 +765,7 @@ export class TextService {
         tags: { select: { tagId: true } },
       },
     });
-    if (!text) throw new NotFoundException("Text not found");
+    if (!text) throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
 
     const tagIds = text.tags.map((t) => t.tagId);
 
@@ -850,7 +851,7 @@ export class TextService {
       where: { id: textId },
       select: { id: true, title: true },
     });
-    if (!text) throw new NotFoundException("Text not found");
+    if (!text) throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
 
     // Не даём пользователю плодить открытые жалобы на один и тот же текст.
     const existing = await this.prisma.feedbackThread.findFirst({
@@ -864,6 +865,7 @@ export class TextService {
     });
     if (existing) {
       throw new ConflictException({
+        code: ErrorCode.ALREADY_REPORTED_TEXT,
         message: "У вас уже есть открытая жалоба на этот текст",
         threadId: existing.id,
         ticketNumber: existing.ticketNumber,
@@ -918,7 +920,7 @@ export class TextService {
       where: { textId, pageNumber },
       select: { id: true },
     });
-    if (!page) throw new NotFoundException("Text page not found");
+    if (!page) throw new NotFoundException({ code: ErrorCode.TEXT_PAGE_NOT_FOUND, message: "Text page not found" });
 
     return this.prisma.textPhraseOccurrence.findMany({
       where: { textId, pageNumber },

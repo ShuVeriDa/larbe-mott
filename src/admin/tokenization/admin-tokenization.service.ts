@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { AnalysisSource, Level, Prisma, ProcessingTrigger, TokenStatus } from "@prisma/client";
+import { ErrorCode } from "src/common/errors/error-codes";
 import { PrismaService } from "src/prisma.service";
 import { BulkTokenizationDto } from "./dto/bulk.dto";
 import {
@@ -331,7 +332,7 @@ export class AdminTokenizationService {
       },
     });
 
-    if (!text) throw new NotFoundException("Text not found");
+    if (!text) throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
 
     const currentVersion = text.processingVersions[0] ?? null;
     let tokenStats = { total: 0, analyzed: 0, ambiguous: 0, notFound: 0 };
@@ -409,7 +410,7 @@ export class AdminTokenizationService {
       select: { id: true },
     });
 
-    if (!currentVersion) throw new NotFoundException("Нет текущей версии токенизации для этого текста");
+    if (!currentVersion) throw new NotFoundException({ code: ErrorCode.TEXT_NOT_TOKENIZED, message: "No current tokenization version for this text" });
 
     const statusFilter: TokenStatus[] = query.status
       ? [query.status as TokenStatus]
@@ -503,7 +504,7 @@ export class AdminTokenizationService {
       where: { id: textId },
       select: { id: true },
     });
-    if (!text) throw new NotFoundException("Text not found");
+    if (!text) throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
 
     await this.queue.enqueue([textId], { trigger: ProcessingTrigger.MANUAL, initiatorId: userId });
     return { textId, started: true };
@@ -514,7 +515,7 @@ export class AdminTokenizationService {
       where: { id: textId },
       select: { id: true },
     });
-    if (!text) throw new NotFoundException("Text not found");
+    if (!text) throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
 
     await this.queue.cancel(textId);
     return { textId, cancelled: true };
@@ -525,7 +526,7 @@ export class AdminTokenizationService {
       where: { id: textId },
       select: { id: true },
     });
-    if (!text) throw new NotFoundException("Text not found");
+    if (!text) throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
 
     await this.prisma.textProcessingVersion.deleteMany({ where: { textId } });
     await this.prisma.text.update({

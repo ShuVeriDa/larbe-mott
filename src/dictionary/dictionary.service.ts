@@ -9,6 +9,7 @@ import { normalizeToken } from "src/markup-engine/tokenizer/tokenizer.utils";
 import { PrismaService } from "src/prisma.service";
 import { TokenService } from "src/token/token.service";
 import { WordProgressService } from "src/progress/word-progress/word-progress.service";
+import { ErrorCode } from "src/common/errors/error-codes";
 import { CreateDictionaryEntryDto } from "./dto/create-dictionary-entry.dto";
 import { DictionarySort, GetDictionaryEntriesDto } from "./dto/get-dictionary-entries.dto";
 import { UpdateDictionaryEntryDto } from "./dto/update-dictionary-entry.dto";
@@ -208,7 +209,7 @@ export class DictionaryService {
       where: { id },
     });
     if (!entry || entry.userId !== userId) {
-      throw new NotFoundException("Dictionary entry not found");
+      throw new NotFoundException({ code: ErrorCode.DICTIONARY_ENTRY_NOT_FOUND, message: "Dictionary entry not found" });
     }
     return entry;
   }
@@ -296,7 +297,7 @@ export class DictionaryService {
     });
 
     if (!entry || entry.userId !== userId) {
-      throw new NotFoundException("Dictionary entry not found");
+      throw new NotFoundException({ code: ErrorCode.DICTIONARY_ENTRY_NOT_FOUND, message: "Dictionary entry not found" });
     }
 
     // SM-2 progress
@@ -445,7 +446,7 @@ export class DictionaryService {
       select: { id: true, userId: true },
     });
     if (!current || current.userId !== userId) {
-      throw new NotFoundException("Dictionary entry not found");
+      throw new NotFoundException({ code: ErrorCode.DICTIONARY_ENTRY_NOT_FOUND, message: "Dictionary entry not found" });
     }
 
     const { status, cefrLevel, folderId, noFolder, sort = DictionarySort.ADDED, search } = query;
@@ -577,9 +578,7 @@ export class DictionaryService {
     const planLimits = subscription?.plan?.limits as Record<string, number> | null;
     const wordsInDictionary = planLimits?.wordsInDictionary ?? 500;
     if (wordsInDictionary !== -1 && currentCount >= wordsInDictionary) {
-      throw new ForbiddenException(
-        `Vocabulary limit of ${wordsInDictionary} words reached. Upgrade your plan to add more.`,
-      );
+      throw new ForbiddenException({ code: ErrorCode.VOCABULARY_LIMIT_REACHED, message: `Vocabulary limit of ${wordsInDictionary} words reached. Upgrade your plan to add more.` });
     }
 
     const { tokenId, word, translation, folderId, cefrLevel } = dto;
@@ -596,16 +595,14 @@ export class DictionaryService {
       lemmaId = tokenInfo.lemmaId ?? null;
       textId = tokenInfo.textId ?? null;
       if (!resolvedWord || !resolvedTranslation) {
-        throw new BadRequestException(
-          "Token has no word or translation; provide word and translation in body",
-        );
+        throw new BadRequestException({ code: ErrorCode.TOKEN_MISSING_WORD_OR_TRANSLATION, message: "Token has no word or translation; provide word and translation in body" });
       }
     } else {
       if (!word?.trim()) {
-        throw new BadRequestException("Word or tokenId is required");
+        throw new BadRequestException({ code: ErrorCode.WORD_OR_TOKEN_REQUIRED, message: "Word or tokenId is required" });
       }
       if (!translation?.trim()) {
-        throw new BadRequestException("Translation or tokenId is required");
+        throw new BadRequestException({ code: ErrorCode.TRANSLATION_OR_TOKEN_REQUIRED, message: "Translation or tokenId is required" });
       }
     }
 
@@ -614,7 +611,7 @@ export class DictionaryService {
         where: { id: folderId, userId },
       });
       if (!folder) {
-        throw new BadRequestException("Folder not found or access denied");
+        throw new BadRequestException({ code: ErrorCode.FOLDER_NOT_FOUND, message: "Folder not found or access denied" });
       }
     }
 
@@ -672,7 +669,7 @@ export class DictionaryService {
         where: { id: folderId, userId },
       });
       if (!folder) {
-        throw new BadRequestException("Folder not found or access denied");
+        throw new BadRequestException({ code: ErrorCode.FOLDER_NOT_FOUND, message: "Folder not found or access denied" });
       }
     }
 
@@ -751,14 +748,10 @@ export class DictionaryService {
     ]);
 
     if (ownedEntries.length !== entryIds.length) {
-      throw new BadRequestException(
-        "Some dictionary entries do not belong to user or do not exist",
-      );
+      throw new BadRequestException({ code: ErrorCode.ENTRIES_NOT_BELONG_TO_USER, message: "Some dictionary entries do not belong to user or do not exist" });
     }
     if (ownedFolders.length !== uniqueFolderIds.length) {
-      throw new BadRequestException(
-        "Some folders do not belong to user or do not exist",
-      );
+      throw new BadRequestException({ code: ErrorCode.FOLDERS_NOT_BELONG_TO_USER, message: "Some folders do not belong to user or do not exist" });
     }
 
     await this.prismaService.$transaction(

@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { PassportStrategy } from "@nestjs/passport";
 import { ExtractJwt, Strategy } from "passport-jwt";
+import { ErrorCode } from "src/common/errors/error-codes";
 import { RedisService } from "src/redis/redis.service";
 import { UserService } from "../../user/user.service";
 
@@ -22,7 +23,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate({ id, iat, sid }: { id: string; iat: number; sid?: string }) {
     const blacklistTs = await this.redis.get(`session:blacklist:${id}`);
     if (blacklistTs && iat * 1000 < Number(blacklistTs)) {
-      throw new UnauthorizedException("Token revoked");
+      throw new UnauthorizedException({ code: ErrorCode.TOKEN_REVOKED, message: "Token revoked" });
     }
     const user = await this.userService.getUserById(id);
     return { ...user, sessionId: sid };

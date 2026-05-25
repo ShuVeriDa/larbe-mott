@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Language, MorphRuleType, Prisma } from "@prisma/client";
+import { ErrorCode } from "src/common/errors/error-codes";
 import { normalizeToken } from "src/markup-engine/tokenizer/tokenizer.utils";
 import { MorphologyRuleEngine } from "src/markup-engine/morphology/rule-engine.service";
 import { MorphologyService } from "src/markup-engine/morphology/morphology.service";
@@ -66,7 +67,7 @@ export class AdminMorphologyService {
       where: { id },
       include: { morphForms: { orderBy: { form: "asc" } } },
     });
-    if (!lemma) throw new NotFoundException("Lemma not found");
+    if (!lemma) throw new NotFoundException({ code: ErrorCode.LEMMA_NOT_FOUND, message: "Lemma not found" });
     return lemma;
   }
 
@@ -135,7 +136,7 @@ export class AdminMorphologyService {
     const form = await this.prisma.morphForm.findUnique({
       where: { id: formId },
     });
-    if (!form) throw new NotFoundException("Morph form not found");
+    if (!form) throw new NotFoundException({ code: ErrorCode.MORPH_FORM_NOT_FOUND, message: "Morph form not found" });
 
     const data: Prisma.MorphFormUpdateInput = {};
     if (dto.form !== undefined) {
@@ -148,7 +149,7 @@ export class AdminMorphologyService {
       return await this.prisma.morphForm.update({ where: { id: formId }, data });
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-        throw new ConflictException("A form with this normalized value already exists for this lemma");
+        throw new ConflictException({ code: ErrorCode.MORPH_FORM_ALREADY_EXISTS, message: "A form with this normalized value already exists for this lemma" });
       }
       throw e;
     }
@@ -158,7 +159,7 @@ export class AdminMorphologyService {
     const form = await this.prisma.morphForm.findUnique({
       where: { id: formId },
     });
-    if (!form) throw new NotFoundException("Morph form not found");
+    if (!form) throw new NotFoundException({ code: ErrorCode.MORPH_FORM_NOT_FOUND, message: "Morph form not found" });
     await this.prisma.morphForm.delete({ where: { id: formId } });
   }
 
@@ -271,7 +272,7 @@ export class AdminMorphologyService {
 
   async updateRule(id: string, dto: UpdateMorphologyRuleDto) {
     const rule = await this.prisma.morphologyRule.findUnique({ where: { id } });
-    if (!rule) throw new NotFoundException("Rule not found");
+    if (!rule) throw new NotFoundException({ code: ErrorCode.MORPHOLOGY_RULE_NOT_FOUND, message: "Rule not found" });
 
     const data: Prisma.MorphologyRuleUpdateInput = { ...dto };
     if (dto.type === MorphRuleType.REGEX) data.isRegex = true;
@@ -283,7 +284,7 @@ export class AdminMorphologyService {
 
   async deleteRule(id: string) {
     const rule = await this.prisma.morphologyRule.findUnique({ where: { id } });
-    if (!rule) throw new NotFoundException("Rule not found");
+    if (!rule) throw new NotFoundException({ code: ErrorCode.MORPHOLOGY_RULE_NOT_FOUND, message: "Rule not found" });
     await this.prisma.morphologyRule.delete({ where: { id } });
     await this.ruleEngine.reloadRules();
   }
@@ -323,7 +324,7 @@ export class AdminMorphologyService {
     overwrite: boolean,
     defaultLanguage: Language = Language.CHE,
   ) {
-    if (!file?.buffer) throw new BadRequestException("File is required");
+    if (!file?.buffer) throw new BadRequestException({ code: ErrorCode.FILE_REQUIRED, message: "File is required" });
 
     const content = file.buffer.toString("utf-8");
     let rows: Array<Record<string, string>> = [];
@@ -336,7 +337,7 @@ export class AdminMorphologyService {
       rows = JSON.parse(content);
     } else {
       const lines = content.split(/\r?\n/).filter((l) => l.trim());
-      if (lines.length < 2) throw new BadRequestException("CSV file is empty or has no data rows");
+      if (lines.length < 2) throw new BadRequestException({ code: ErrorCode.CSV_EMPTY, message: "CSV file is empty or has no data rows" });
       const headers = lines[0].split(",").map((h) => h.trim());
       for (let i = 1; i < lines.length; i++) {
         const vals = lines[i].split(",").map((v) => v.trim());

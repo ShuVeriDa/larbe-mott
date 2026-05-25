@@ -24,6 +24,7 @@ import { CreateUserDto } from "src/user/dto/create-user.dto";
 import { LoginDto } from "src/user/dto/login.dto";
 import { UserService } from "src/user/user.service";
 import { RedisService } from "src/redis/redis.service";
+import { ErrorCode } from "src/common/errors/error-codes";
 
 @Injectable()
 export class AuthService {
@@ -68,16 +69,16 @@ export class AuthService {
     const existingUserByEmail = await this.userService.getByEmail(dto.email);
 
     if (existingUserByUsername)
-      throw new ConflictException("User with this username already exists");
+      throw new ConflictException({ code: ErrorCode.USERNAME_TAKEN, message: "User with this username already exists" });
     if (existingUserByEmail)
-      throw new ConflictException("User with this email already exists");
+      throw new ConflictException({ code: ErrorCode.EMAIL_TAKEN, message: "User with this email already exists" });
 
     let createdUser: Awaited<ReturnType<typeof this.userService.create>>;
     try {
       createdUser = await this.userService.create(dto);
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-        throw new ConflictException("User with this email or username already exists");
+        throw new ConflictException({ code: ErrorCode.USER_ALREADY_EXISTS, message: "User with this email or username already exists" });
       }
       throw e;
     }
@@ -167,26 +168,26 @@ export class AuthService {
       secret: this.configService.getOrThrow("JWT_REFRESH_SECRET"),
     });
 
-    if (!result) throw new UnauthorizedException("Invalid refresh token");
+    if (!result) throw new UnauthorizedException({ code: ErrorCode.INVALID_REFRESH_TOKEN, message: "Invalid refresh token" });
 
     if (result.type !== "refresh")
-      throw new UnauthorizedException("Invalid token type");
+      throw new UnauthorizedException({ code: ErrorCode.INVALID_TOKEN_TYPE, message: "Invalid token type" });
 
     const user = await this.prisma.user.findUnique({
       where: { id: result.id },
     });
 
-    if (!user) throw new NotFoundException("The user not found");
+    if (!user) throw new NotFoundException({ code: ErrorCode.USER_NOT_FOUND, message: "The user not found" });
 
     if (user.status === UserStatus.DELETED) {
-      throw new ForbiddenException("Account scheduled for deletion");
+      throw new ForbiddenException({ code: ErrorCode.ACCOUNT_SCHEDULED_FOR_DELETION, message: "Account scheduled for deletion" });
     }
     if (user.status === UserStatus.BLOCKED) {
-      throw new ForbiddenException("Account is blocked");
+      throw new ForbiddenException({ code: ErrorCode.ACCOUNT_BLOCKED, message: "Account is blocked" });
     }
 
     if (!user.hashedRefreshToken)
-      throw new UnauthorizedException("Refresh token revoked");
+      throw new UnauthorizedException({ code: ErrorCode.REFRESH_TOKEN_REVOKED, message: "Refresh token revoked" });
 
     const isRefreshTokenValid = await verify(
       user.hashedRefreshToken,
@@ -194,7 +195,7 @@ export class AuthService {
     );
 
     if (!isRefreshTokenValid)
-      throw new UnauthorizedException("Invalid refresh token");
+      throw new UnauthorizedException({ code: ErrorCode.INVALID_REFRESH_TOKEN, message: "Invalid refresh token" });
 
     // Если в старом refresh была привязана сессия — проверяем, что она ещё активна,
     // и переиспользуем её id в новом access/refresh.
@@ -205,7 +206,7 @@ export class AuthService {
         select: { id: true },
       });
       if (!session) {
-        throw new UnauthorizedException("Session revoked");
+        throw new UnauthorizedException({ code: ErrorCode.SESSION_REVOKED, message: "Session revoked" });
       }
       sessionId = session.id;
       await this.prisma.userSession.update({
@@ -276,8 +277,8 @@ export class AuthService {
       where: { id: sessionId, userId },
     });
 
-    if (!session) throw new NotFoundException("Session not found");
-    if (session.revokedAt) throw new BadRequestException("Session already revoked");
+    if (!session) throw new NotFoundException({ code: ErrorCode.SESSION_NOT_FOUND, message: "Session not found" });
+    if (session.revokedAt) throw new BadRequestException({ code: ErrorCode.SESSION_ALREADY_REVOKED, message: "Session already revoked" });
 
     await this.prisma.userSession.update({
       where: { id: sessionId },
@@ -342,19 +343,17 @@ export class AuthService {
       },
     });
 
-    if (!user) throw new NotFoundException("The user not found");
+    if (!user) throw new NotFoundException({ code: ErrorCode.USER_NOT_FOUND, message: "The user not found" });
 
     const isValid = await verify(user.password, dto.password);
 
-    if (!isValid) throw new UnauthorizedException("Invalid password");
+    if (!isValid) throw new UnauthorizedException({ code: ErrorCode.INVALID_PASSWORD, message: "Invalid password" });
 
     if (user.status === UserStatus.DELETED) {
-      throw new ForbiddenException(
-        "Account scheduled for deletion. Contact support to restore.",
-      );
+      throw new ForbiddenException({ code: ErrorCode.ACCOUNT_SCHEDULED_FOR_DELETION, message: "Account scheduled for deletion. Contact support to restore." });
     }
     if (user.status === UserStatus.BLOCKED) {
-      throw new ForbiddenException("Account is blocked");
+      throw new ForbiddenException({ code: ErrorCode.ACCOUNT_BLOCKED, message: "Account is blocked" });
     }
 
     const {
@@ -549,20 +548,20 @@ export class AuthService {
     const record = await this.findPasswordResetToken(rawToken);
 
     if (!record) {
-      throw new NotFoundException({ error: "token_invalid" });
+      throw new NotFoundException({ code: ErrorCode.TOKEN_INVALID, message: "Token not found or invalid" });
     }
     if (record.usedAt) {
-      throw new ConflictException({ error: "token_used" });
+      throw new ConflictException({ code: ErrorCode.TOKEN_USED, message: "Token already used" });
     }
     if (record.expiresAt.getTime() <= Date.now()) {
       // 410 Gone — фронт переключится на view-expired
-      throw new BadRequestException({ error: "token_expired" });
+      throw new BadRequestException({ code: ErrorCode.TOKEN_EXPIRED, message: "Token expired" });
     }
     if (
       record.user.status === UserStatus.DELETED ||
       record.user.status === UserStatus.BLOCKED
     ) {
-      throw new ForbiddenException({ error: "account_unavailable" });
+      throw new ForbiddenException({ code: ErrorCode.ACCOUNT_UNAVAILABLE, message: "Account unavailable" });
     }
 
     const passwordHash = await hash(newPassword);
@@ -693,17 +692,17 @@ export class AuthService {
       where: { id: userId },
       select: { id: true, email: true, password: true, status: true },
     });
-    if (!user) throw new NotFoundException("The user not found");
+    if (!user) throw new NotFoundException({ code: ErrorCode.USER_NOT_FOUND, message: "The user not found" });
 
     if (user.status === UserStatus.DELETED || user.status === UserStatus.BLOCKED) {
-      throw new ForbiddenException({ error: "account_unavailable" });
+      throw new ForbiddenException({ code: ErrorCode.ACCOUNT_UNAVAILABLE, message: "Account unavailable" });
     }
 
     const ok = await verify(user.password, currentPassword);
-    if (!ok) throw new UnauthorizedException({ error: "invalid_current_password" });
+    if (!ok) throw new UnauthorizedException({ code: ErrorCode.INVALID_CURRENT_PASSWORD, message: "Invalid current password" });
 
     if (currentPassword === newPassword) {
-      throw new BadRequestException({ error: "same_password" });
+      throw new BadRequestException({ code: ErrorCode.SAME_PASSWORD, message: "New password must differ from current" });
     }
 
     const passwordHash = await hash(newPassword);
@@ -763,19 +762,19 @@ export class AuthService {
       where: { id: userId },
       select: { id: true, email: true, password: true, status: true },
     });
-    if (!user) throw new NotFoundException("The user not found");
+    if (!user) throw new NotFoundException({ code: ErrorCode.USER_NOT_FOUND, message: "The user not found" });
 
     if (user.status === UserStatus.DELETED || user.status === UserStatus.BLOCKED) {
-      throw new ForbiddenException({ error: "account_unavailable" });
+      throw new ForbiddenException({ code: ErrorCode.ACCOUNT_UNAVAILABLE, message: "Account unavailable" });
     }
 
     const ok = await verify(user.password, currentPassword);
-    if (!ok) throw new UnauthorizedException({ error: "invalid_current_password" });
+    if (!ok) throw new UnauthorizedException({ code: ErrorCode.INVALID_CURRENT_PASSWORD, message: "Invalid current password" });
 
     const normalized = newEmail.trim().toLowerCase();
 
     if (normalized === user.email.trim().toLowerCase()) {
-      throw new BadRequestException({ error: "same_email" });
+      throw new BadRequestException({ code: ErrorCode.SAME_EMAIL, message: "New email must differ from current" });
     }
 
     // Чтобы не палить занятость email чужого аккаунта — НЕ возвращаем 409 здесь.
@@ -788,7 +787,7 @@ export class AuthService {
       select: { id: true },
     });
     if (taken) {
-      throw new ConflictException({ error: "email_taken" });
+      throw new ConflictException({ code: ErrorCode.EMAIL_TAKEN, message: "This email is already taken" });
     }
 
     await this.prisma.emailChangeToken.updateMany({
@@ -850,16 +849,16 @@ export class AuthService {
   ): Promise<{ ok: true; email: string }> {
     const record = await this.findEmailChangeToken(rawToken);
 
-    if (!record) throw new NotFoundException({ error: "token_invalid" });
-    if (record.usedAt) throw new ConflictException({ error: "token_used" });
+    if (!record) throw new NotFoundException({ code: ErrorCode.TOKEN_INVALID, message: "Token not found or invalid" });
+    if (record.usedAt) throw new ConflictException({ code: ErrorCode.TOKEN_USED, message: "Token already used" });
     if (record.expiresAt.getTime() <= Date.now()) {
-      throw new BadRequestException({ error: "token_expired" });
+      throw new BadRequestException({ code: ErrorCode.TOKEN_EXPIRED, message: "Token expired" });
     }
     if (
       record.user.status === UserStatus.DELETED ||
       record.user.status === UserStatus.BLOCKED
     ) {
-      throw new ForbiddenException({ error: "account_unavailable" });
+      throw new ForbiddenException({ code: ErrorCode.ACCOUNT_UNAVAILABLE, message: "Account unavailable" });
     }
 
     const oldEmail = record.user.email;
@@ -901,7 +900,7 @@ export class AuthService {
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
         // Кто-то занял email между request и confirm.
-        throw new ConflictException({ error: "email_taken" });
+        throw new ConflictException({ code: ErrorCode.EMAIL_TAKEN, message: "This email is already taken" });
       }
       throw e;
     }

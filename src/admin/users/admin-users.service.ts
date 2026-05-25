@@ -11,6 +11,7 @@ import {
   SubscriptionStatus,
   UserStatus,
 } from "@prisma/client";
+import { ErrorCode } from "src/common/errors/error-codes";
 import { PrismaService } from "src/prisma.service";
 import { AdminUserDetailsDto } from "./dto/admin-user-details.dto";
 import { AdminUserListItemDto } from "./dto/admin-user-list-item.dto";
@@ -308,7 +309,7 @@ export class AdminUsersService {
       },
     });
 
-    if (!user) throw new NotFoundException("User not found");
+    if (!user) throw new NotFoundException({ code: ErrorCode.USER_NOT_FOUND, message: "User not found" });
 
     const { roles, subscriptions, ...rest } = user;
 
@@ -413,7 +414,7 @@ export class AdminUsersService {
     dto: AdminUserStatusDto,
   ): Promise<AdminUserDetailsDto> {
     const existing = await this.prisma.user.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException("User not found");
+    if (!existing) throw new NotFoundException({ code: ErrorCode.USER_NOT_FOUND, message: "User not found" });
 
     await this.prisma.user.update({
       where: { id },
@@ -427,7 +428,7 @@ export class AdminUsersService {
     dto: AdminUserStatusDto,
   ): Promise<AdminUserDetailsDto> {
     const existing = await this.prisma.user.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException("User not found");
+    if (!existing) throw new NotFoundException({ code: ErrorCode.USER_NOT_FOUND, message: "User not found" });
 
     await this.prisma.user.update({
       where: { id },
@@ -471,7 +472,7 @@ export class AdminUsersService {
 
   async logoutAllSessions(id: string): Promise<void> {
     const existing = await this.prisma.user.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException("User not found");
+    if (!existing) throw new NotFoundException({ code: ErrorCode.USER_NOT_FOUND, message: "User not found" });
 
     const now = new Date();
     await this.prisma.$transaction([
@@ -501,18 +502,18 @@ export class AdminUsersService {
 
   async assignRole(userId: string, role: RoleName, assignedBy?: string) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user) throw new NotFoundException("User not found");
+    if (!user) throw new NotFoundException({ code: ErrorCode.USER_NOT_FOUND, message: "User not found" });
 
     const roleRow = await this.prisma.role.findUnique({
       where: { name: role },
       select: { id: true },
     });
-    if (!roleRow) throw new NotFoundException("Role not found");
+    if (!roleRow) throw new NotFoundException({ code: ErrorCode.ROLE_NOT_FOUND, message: "Role not found" });
 
     const existing = await this.prisma.userRoleAssignment.findUnique({
       where: { userId_roleId: { userId, roleId: roleRow.id } },
     });
-    if (existing) throw new ConflictException("User already has this role");
+    if (existing) throw new ConflictException({ code: ErrorCode.USER_ROLE_ALREADY_ASSIGNED, message: "User already has this role" });
 
     await this.prisma.userRoleAssignment.create({
       data: { userId, roleId: roleRow.id, assignedBy: assignedBy ?? null },
@@ -526,7 +527,7 @@ export class AdminUsersService {
       where: { userId_roleId: { userId, roleId } },
       include: { role: { select: { name: true } } },
     });
-    if (!existing) throw new NotFoundException("Role assignment not found");
+    if (!existing) throw new NotFoundException({ code: ErrorCode.ROLE_ASSIGNMENT_NOT_FOUND, message: "Role assignment not found" });
 
     if (existing.role.name === RoleName.LEARNER) {
       throw new BadRequestException(
@@ -631,7 +632,7 @@ export class AdminUsersService {
 
   async getUserSessions(userId: string) {
     const existing = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!existing) throw new NotFoundException("User not found");
+    if (!existing) throw new NotFoundException({ code: ErrorCode.USER_NOT_FOUND, message: "User not found" });
 
     const sessions = await this.prisma.userSession.findMany({
       where: { userId },
@@ -666,7 +667,7 @@ export class AdminUsersService {
 
   async getUserSubscription(userId: string) {
     const existing = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!existing) throw new NotFoundException("User not found");
+    if (!existing) throw new NotFoundException({ code: ErrorCode.USER_NOT_FOUND, message: "User not found" });
 
     const [currentSub, payments] = await Promise.all([
       this.prisma.subscription.findFirst({
@@ -743,9 +744,9 @@ export class AdminUsersService {
     const sub = await this.prisma.subscription.findFirst({
       where: { id: subscriptionId, userId },
     });
-    if (!sub) throw new NotFoundException("Subscription not found");
+    if (!sub) throw new NotFoundException({ code: ErrorCode.SUBSCRIPTION_NOT_FOUND, message: "Subscription not found" });
     if (sub.status === SubscriptionStatus.CANCELED) {
-      throw new ConflictException("Subscription is already canceled");
+      throw new ConflictException({ code: ErrorCode.SUBSCRIPTION_ALREADY_CANCELED, message: "Subscription is already canceled" });
     }
 
     await this.prisma.subscription.update({
@@ -764,7 +765,7 @@ export class AdminUsersService {
     const sub = await this.prisma.subscription.findFirst({
       where: { id: subscriptionId, userId },
     });
-    if (!sub) throw new NotFoundException("Subscription not found");
+    if (!sub) throw new NotFoundException({ code: ErrorCode.SUBSCRIPTION_NOT_FOUND, message: "Subscription not found" });
 
     const base = sub.endDate ?? new Date();
     const newEndDate = new Date(base.getTime() + dto.days * 24 * 60 * 60 * 1000);
@@ -781,7 +782,7 @@ export class AdminUsersService {
 
   async getUserFeatureFlags(userId: string) {
     const existing = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!existing) throw new NotFoundException("User not found");
+    if (!existing) throw new NotFoundException({ code: ErrorCode.USER_NOT_FOUND, message: "User not found" });
 
     const [allFlags, userOverrides] = await Promise.all([
       this.prisma.featureFlag.findMany({
@@ -815,10 +816,10 @@ export class AdminUsersService {
     dto: SetFeatureFlagOverrideDto,
   ) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user) throw new NotFoundException("User not found");
+    if (!user) throw new NotFoundException({ code: ErrorCode.USER_NOT_FOUND, message: "User not found" });
 
     const flag = await this.prisma.featureFlag.findUnique({ where: { id: flagId } });
-    if (!flag || flag.deletedAt) throw new NotFoundException("Feature flag not found");
+    if (!flag || flag.deletedAt) throw new NotFoundException({ code: ErrorCode.FEATURE_FLAG_NOT_FOUND, message: "Feature flag not found" });
 
     await this.prisma.userFeatureFlag.upsert({
       where: { userId_featureFlagId: { userId, featureFlagId: flagId } },
@@ -833,7 +834,7 @@ export class AdminUsersService {
     const override = await this.prisma.userFeatureFlag.findUnique({
       where: { userId_featureFlagId: { userId, featureFlagId: flagId } },
     });
-    if (!override) throw new NotFoundException("Override not found");
+    if (!override) throw new NotFoundException({ code: ErrorCode.FEATURE_FLAG_OVERRIDE_NOT_FOUND, message: "Override not found" });
 
     await this.prisma.userFeatureFlag.delete({
       where: { userId_featureFlagId: { userId, featureFlagId: flagId } },
@@ -846,27 +847,27 @@ export class AdminUsersService {
 
   async applyCoupon(userId: string, dto: ApplyCouponDto) {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user) throw new NotFoundException("User not found");
+    if (!user) throw new NotFoundException({ code: ErrorCode.USER_NOT_FOUND, message: "User not found" });
 
     const coupon = await this.prisma.coupon.findUnique({ where: { code: dto.code } });
-    if (!coupon) throw new NotFoundException("Coupon not found");
-    if (!coupon.isActive) throw new BadRequestException("Coupon is not active");
+    if (!coupon) throw new NotFoundException({ code: ErrorCode.COUPON_NOT_FOUND, message: "Coupon not found" });
+    if (!coupon.isActive) throw new BadRequestException({ code: ErrorCode.COUPON_NOT_ACTIVE, message: "Coupon is not active" });
 
     const now = new Date();
     if (coupon.validFrom && coupon.validFrom > now) {
-      throw new BadRequestException("Coupon is not yet valid");
+      throw new BadRequestException({ code: ErrorCode.COUPON_NOT_ACTIVE_YET, message: "Coupon is not yet valid" });
     }
     if (coupon.validUntil && coupon.validUntil < now) {
-      throw new BadRequestException("Coupon has expired");
+      throw new BadRequestException({ code: ErrorCode.COUPON_EXPIRED, message: "Coupon has expired" });
     }
     if (coupon.maxRedemptions !== null && coupon.redeemedCount >= coupon.maxRedemptions) {
-      throw new BadRequestException("Coupon redemption limit reached");
+      throw new BadRequestException({ code: ErrorCode.COUPON_LIMIT_REACHED, message: "Coupon redemption limit reached" });
     }
 
     const existing = await this.prisma.couponRedemption.findFirst({
       where: { couponId: coupon.id, userId },
     });
-    if (existing) throw new ConflictException("User has already redeemed this coupon");
+    if (existing) throw new ConflictException({ code: ErrorCode.COUPON_ALREADY_REDEEMED, message: "User has already redeemed this coupon" });
 
     await this.prisma.$transaction([
       this.prisma.couponRedemption.create({

@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
+import { ErrorCode } from "src/common/errors/error-codes";
 import { PrismaService } from "src/prisma.service";
 
 export const SUPPORTED_LANGS = ["ru", "che", "en", "ar"] as const;
@@ -35,7 +36,7 @@ export class LegalService {
       if (fallback) return this.toPublic(fallback);
     }
 
-    throw new NotFoundException(`Legal document "${slug}" not found`);
+    throw new NotFoundException({ code: ErrorCode.LEGAL_DOCUMENT_NOT_FOUND, message: `Legal document "${slug}" not found` });
   }
 
   private toPublic(doc: {

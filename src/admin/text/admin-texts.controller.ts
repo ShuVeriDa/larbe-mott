@@ -33,6 +33,7 @@ import {
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
 import { PermissionCode } from "@prisma/client";
+import { ErrorCode } from "src/common/errors/error-codes";
 import { diskStorage } from "multer";
 import { extname, join } from "path";
 import * as fs from "fs";
@@ -472,7 +473,7 @@ export class AdminTextsController {
     @Param("id") textId: string,
     @UploadedFile() file: Express.Multer.File,
   ) {
-    if (!file) throw new BadRequestException("File is required");
+    if (!file) throw new BadRequestException({ code: ErrorCode.FILE_REQUIRED, message: "File is required" });
     return this.adminTextService.uploadCover(textId, file);
   }
 

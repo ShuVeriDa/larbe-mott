@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { Language } from "@prisma/client";
+import { ErrorCode } from "src/common/errors/error-codes";
 import { PrismaService } from "src/prisma.service";
 import { SuggestPhraseDto } from "./dto/suggest-phrase.dto";
 
@@ -120,7 +121,7 @@ export class PhrasebookService {
     const phrase = await this.prisma.phrasebookPhrase.findUnique({
       where: { id: phraseId },
     });
-    if (!phrase) throw new NotFoundException("Phrase not found");
+    if (!phrase) throw new NotFoundException({ code: ErrorCode.PHRASE_NOT_FOUND, message: "Phrase not found" });
 
     const existing = await this.prisma.userPhrasebookSave.findUnique({
       where: { userId_phraseId: { userId, phraseId } },

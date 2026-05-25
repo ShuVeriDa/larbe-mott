@@ -16,6 +16,7 @@ import {
   UserEventType,
 } from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
+import { ErrorCode } from "src/common/errors/error-codes";
 
 @Injectable()
 export class SubscriptionService {
@@ -119,13 +120,13 @@ export class SubscriptionService {
 
     // Пункт 2: подписка на FREE через этот эндпоинт запрещена
     if (plan.type === PlanType.FREE) {
-      throw new BadRequestException("Use DELETE /subscription to downgrade to free");
+      throw new BadRequestException({ code: ErrorCode.USE_DELETE_TO_DOWNGRADE, message: "Use DELETE /subscription to downgrade to free" });
     }
 
     // Пункт 1: уже подписан на этот план
     const current = await this.getMySubscription(userId);
     if (current?.planId === planId) {
-      throw new ConflictException("Already subscribed to this plan");
+      throw new ConflictException({ code: ErrorCode.ALREADY_SUBSCRIBED, message: "Already subscribed to this plan" });
     }
 
     // Пункт 3: понижение плана — сохраняем текущий endDate
@@ -268,7 +269,7 @@ export class SubscriptionService {
       orderBy: { startDate: "desc" },
     });
 
-    if (!subscription) throw new NotFoundException("No active subscription found");
+    if (!subscription) throw new NotFoundException({ code: ErrorCode.NO_ACTIVE_SUBSCRIPTION, message: "No active subscription found" });
 
     return this.prisma.$transaction(async (tx) => {
       const canceled = await tx.subscription.update({
@@ -291,20 +292,20 @@ export class SubscriptionService {
     const coupon = await this.prisma.coupon.findUnique({ where: { code } });
 
     if (!coupon || !coupon.isActive)
-      throw new NotFoundException("Promo code not found or inactive");
+      throw new NotFoundException({ code: ErrorCode.PROMO_NOT_FOUND, message: "Promo code not found or inactive" });
 
     const now = new Date();
     if (coupon.validFrom && coupon.validFrom > now)
-      throw new BadRequestException("Promo code is not yet valid");
+      throw new BadRequestException({ code: ErrorCode.PROMO_NOT_YET_VALID, message: "Promo code is not yet valid" });
     if (coupon.validUntil && coupon.validUntil < now)
-      throw new BadRequestException("Promo code has expired");
+      throw new BadRequestException({ code: ErrorCode.PROMO_EXPIRED, message: "Promo code has expired" });
     if (coupon.maxRedemptions !== null && coupon.redeemedCount >= coupon.maxRedemptions)
-      throw new BadRequestException("Promo code redemption limit reached");
+      throw new BadRequestException({ code: ErrorCode.PROMO_LIMIT_REACHED, message: "Promo code redemption limit reached" });
 
     const existing = await this.prisma.couponRedemption.findFirst({
       where: { couponId: coupon.id, userId },
     });
-    if (existing) throw new ConflictException("Promo code already redeemed");
+    if (existing) throw new ConflictException({ code: ErrorCode.PROMO_ALREADY_REDEEMED, message: "Promo code already redeemed" });
 
     return this.prisma.$transaction(async (tx) => {
       const updateResult = await tx.coupon.updateMany({
@@ -318,7 +319,7 @@ export class SubscriptionService {
         data: { redeemedCount: { increment: 1 } },
       });
       if (updateResult.count === 0) {
-        throw new BadRequestException("Promo code redemption limit reached");
+        throw new BadRequestException({ code: ErrorCode.PROMO_LIMIT_REACHED, message: "Promo code redemption limit reached" });
       }
       try {
         await tx.couponRedemption.create({
@@ -326,7 +327,7 @@ export class SubscriptionService {
         });
       } catch (e) {
         if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-          throw new ConflictException("Promo code already redeemed");
+          throw new ConflictException({ code: ErrorCode.PROMO_ALREADY_REDEEMED, message: "Promo code already redeemed" });
         }
         throw e;
       }
@@ -350,18 +351,16 @@ export class SubscriptionService {
     const plan = await this.resolvePlan(ref);
     const planId = plan.id;
     if (plan.type === PlanType.FREE) {
-      throw new BadRequestException("Trial is not applicable to FREE plan");
+      throw new BadRequestException({ code: ErrorCode.TRIAL_NOT_APPLICABLE, message: "Trial is not applicable to FREE plan" });
     }
     if (plan.trialDays <= 0) {
-      throw new BadRequestException("Trial is not available for this plan");
+      throw new BadRequestException({ code: ErrorCode.TRIAL_NOT_AVAILABLE, message: "Trial is not available for this plan" });
     }
 
     // Уже есть активная/триальная подписка
     const current = await this.getMySubscription(userId);
     if (current) {
-      throw new ConflictException(
-        "You already have an active subscription. Cancel it before starting a trial.",
-      );
+      throw new ConflictException({ code: ErrorCode.ALREADY_HAS_ACTIVE_SUBSCRIPTION, message: "You already have an active subscription. Cancel it before starting a trial." });
     }
 
     // Триал даётся один раз — проверяем по любому событию TRIAL_STARTED у этого пользователя
@@ -373,7 +372,7 @@ export class SubscriptionService {
       select: { id: true },
     });
     if (trialStartedBefore) {
-      throw new ConflictException("Trial has already been used");
+      throw new ConflictException({ code: ErrorCode.TRIAL_ALREADY_USED, message: "Trial has already been used" });
     }
 
     const now = new Date();
@@ -407,16 +406,16 @@ export class SubscriptionService {
   private async resolvePlan(ref: { planId?: string; planCode?: string }) {
     const { planId, planCode } = ref;
     if (!planId && !planCode) {
-      throw new BadRequestException("Either planId or planCode must be provided");
+      throw new BadRequestException({ code: ErrorCode.PLAN_ID_OR_CODE_REQUIRED, message: "Either planId or planCode must be provided" });
     }
     if (planId && planCode) {
-      throw new BadRequestException("Provide only one of planId or planCode, not both");
+      throw new BadRequestException({ code: ErrorCode.PLAN_ID_AND_CODE_CONFLICT, message: "Provide only one of planId or planCode, not both" });
     }
     const plan = planId
       ? await this.prisma.plan.findUnique({ where: { id: planId } })
       : await this.prisma.plan.findUnique({ where: { code: planCode! } });
     if (!plan || !plan.isActive) {
-      throw new NotFoundException("Plan not found or inactive");
+      throw new NotFoundException({ code: ErrorCode.PLAN_NOT_FOUND, message: "Plan not found or inactive" });
     }
     return plan;
   }
@@ -434,9 +433,7 @@ export class SubscriptionService {
       billingProvider === PaymentProvider.MANUAL &&
       !allowManualInProd
     ) {
-      throw new BadRequestException(
-        "Manual billing is disabled in production. Configure payment provider integration first.",
-      );
+      throw new BadRequestException({ code: ErrorCode.MANUAL_BILLING_DISABLED, message: "Manual billing is disabled in production. Configure payment provider integration first." });
     }
   }
 }

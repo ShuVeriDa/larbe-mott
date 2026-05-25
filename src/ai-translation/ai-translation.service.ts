@@ -14,6 +14,7 @@ import { TranslateWordDto } from "./dto/translate-word.dto";
 import { VoteType } from "./dto/vote-cache.dto";
 import { decryptApiKey, encryptApiKey } from "./encryption.util";
 import { geminiUrl } from "./gemini.util";
+import { ErrorCode } from "src/common/errors/error-codes";
 
 const AUTO_APPROVE_MIN_REQUESTS = 10;
 const AUTO_APPROVE_MIN_THUMBS_UP = 3;
@@ -115,7 +116,7 @@ export class AiTranslationService {
     // 2. Call Gemini
     const apiKey = await this.getDecryptedKey(userId);
     if (!apiKey) {
-      throw new BadRequestException("Gemini API key not configured");
+      throw new BadRequestException({ code: ErrorCode.GEMINI_KEY_NOT_CONFIGURED, message: "Gemini API key not configured" });
     }
 
     const prompt = this.buildWordPrompt(dto.word, dto.contextSentence);
@@ -126,10 +127,10 @@ export class AiTranslationService {
 
     const parsed = this.parseWordResponse(raw);
     if (!parsed) {
-      throw new BadRequestException("Could not parse Gemini response");
+      throw new BadRequestException({ code: ErrorCode.GEMINI_PARSE_ERROR, message: "Could not parse Gemini response" });
     }
     if (parsed.notChechen) {
-      throw new BadRequestException("not_chechen");
+      throw new BadRequestException({ code: ErrorCode.NOT_CHECHEN, message: "not_chechen" });
     }
 
     // 3. Save to cache (upsert on lemma+cacheType)
@@ -159,7 +160,7 @@ export class AiTranslationService {
   async translatePhrase(userId: string, dto: TranslatePhraseDto) {
     const apiKey = await this.getDecryptedKey(userId);
     if (!apiKey) {
-      throw new BadRequestException("Gemini API key not configured");
+      throw new BadRequestException({ code: ErrorCode.GEMINI_KEY_NOT_CONFIGURED, message: "Gemini API key not configured" });
     }
 
     const prompt = this.buildPhrasePrompt(dto.phrase, dto.contextSentence);
@@ -170,7 +171,7 @@ export class AiTranslationService {
 
     const parsed = this.parsePhraseResponse(raw);
     if (!parsed) {
-      throw new BadRequestException("Could not parse Gemini response");
+      throw new BadRequestException({ code: ErrorCode.GEMINI_PARSE_ERROR, message: "Could not parse Gemini response" });
     }
     return parsed;
   }
@@ -178,7 +179,7 @@ export class AiTranslationService {
   async refinePhrase(userId: string, dto: RefinePhraseDto) {
     const apiKey = await this.getDecryptedKey(userId);
     if (!apiKey) {
-      throw new BadRequestException("Gemini API key not configured");
+      throw new BadRequestException({ code: ErrorCode.GEMINI_KEY_NOT_CONFIGURED, message: "Gemini API key not configured" });
     }
 
     const prompt = this.buildRefinePrompt(
@@ -193,7 +194,7 @@ export class AiTranslationService {
 
     const parsed = this.parsePhraseResponse(raw);
     if (!parsed) {
-      throw new BadRequestException("Could not parse Gemini response");
+      throw new BadRequestException({ code: ErrorCode.GEMINI_PARSE_ERROR, message: "Could not parse Gemini response" });
     }
     return parsed;
   }
@@ -206,7 +207,7 @@ export class AiTranslationService {
   ): Promise<Record<string, string>> {
     const apiKey = await this.getDecryptedKey(userId);
     if (!apiKey) {
-      throw new BadRequestException("Gemini API key not configured");
+      throw new BadRequestException({ code: ErrorCode.GEMINI_KEY_NOT_CONFIGURED, message: "Gemini API key not configured" });
     }
 
     const deduped = [
@@ -305,7 +306,7 @@ export class AiTranslationService {
     const entry = await this.prisma.aiTranslationCache.findUnique({
       where: { id: cacheId },
     });
-    if (!entry) throw new NotFoundException("Cache entry not found");
+    if (!entry) throw new NotFoundException({ code: ErrorCode.AI_CACHE_ENTRY_NOT_FOUND, message: "Cache entry not found" });
 
     const updated = await this.prisma.aiTranslationCache.update({
       where: { id: cacheId },
@@ -485,9 +486,9 @@ Return only valid JSON, no markdown.`;
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.includes("User location is not supported")) {
-        throw new BadRequestException("location_not_supported");
+        throw new BadRequestException({ code: ErrorCode.LOCATION_NOT_SUPPORTED, message: "location_not_supported" });
       }
-      throw new InternalServerErrorException("gemini_error");
+      throw new InternalServerErrorException({ code: ErrorCode.GEMINI_ERROR, message: "gemini_error" });
     }
   }
 

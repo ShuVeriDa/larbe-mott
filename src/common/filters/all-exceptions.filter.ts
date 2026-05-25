@@ -11,6 +11,7 @@ import type { Request, Response } from "express";
 import { WINSTON_MODULE_NEST_PROVIDER } from "nest-winston";
 import type { CorrelationRequest } from "../middleware/correlation-id.middleware";
 import { ObservabilityService } from "../observability/observability.service";
+import { ErrorCode } from "../errors/error-codes";
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
@@ -37,6 +38,21 @@ export class AllExceptionsFilter implements ExceptionFilter {
         ? exception.message
         : "Internal server error";
 
+    const responseBody =
+      exception instanceof HttpException
+        ? exception.getResponse()
+        : null;
+
+    const code: string =
+      responseBody !== null &&
+      typeof responseBody === "object" &&
+      "code" in responseBody &&
+      typeof (responseBody as Record<string, unknown>).code === "string"
+        ? (responseBody as Record<string, unknown>).code as string
+        : status >= 500
+          ? ErrorCode.INTERNAL_SERVER_ERROR
+          : message;
+
     if (status >= 500) {
       this.logger.error(
         `[${correlationId}] ${req.method} ${req.url} ${status} — ${message}`,
@@ -53,6 +69,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     res.status(status).json({
       statusCode: status,
+      code,
       message,
       timestamp: new Date().toISOString(),
       path: req.url,

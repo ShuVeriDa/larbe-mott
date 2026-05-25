@@ -8,6 +8,7 @@ import {
   FeedbackMessageType,
   FeedbackStatus,
 } from "@prisma/client";
+import { ErrorCode } from "src/common/errors/error-codes";
 import { PrismaService } from "src/prisma.service";
 import { AddMessageDto } from "./dto/add-message.dto";
 import { CreateFeedbackDto } from "./dto/create-feedback.dto";
@@ -103,7 +104,7 @@ export class FeedbackService {
         },
       },
     });
-    if (!thread) throw new NotFoundException("Thread not found");
+    if (!thread) throw new NotFoundException({ code: ErrorCode.THREAD_NOT_FOUND, message: "Thread not found" });
 
     // Mark unread admin messages as read
     const unreadAdminMsgIds = thread.messages
@@ -138,7 +139,7 @@ export class FeedbackService {
     const thread = await this.prisma.feedbackThread.findFirst({
       where: { id: threadId, userId },
     });
-    if (!thread) throw new NotFoundException("Thread not found");
+    if (!thread) throw new NotFoundException({ code: ErrorCode.THREAD_NOT_FOUND, message: "Thread not found" });
 
     await this.prisma.feedbackMessage.updateMany({
       where: {
@@ -169,7 +170,7 @@ export class FeedbackService {
     const thread = await this.prisma.feedbackThread.findFirst({
       where: { id: threadId, userId },
     });
-    if (!thread) throw new NotFoundException("Thread not found");
+    if (!thread) throw new NotFoundException({ code: ErrorCode.THREAD_NOT_FOUND, message: "Thread not found" });
 
     return this.prisma.$transaction(async (tx) => {
       const message = await tx.feedbackMessage.create({
@@ -201,7 +202,7 @@ export class FeedbackService {
 
   async createReaction(userId: string, dto: CreateReactionDto) {
     if (!dto.lemmaId && !dto.textId) {
-      throw new BadRequestException("Provide lemmaId or textId");
+      throw new BadRequestException({ code: ErrorCode.FEEDBACK_PROVIDE_LEMMA_OR_TEXT, message: "Provide lemmaId or textId" });
     }
 
     // Toggle: delete if same reaction already exists
@@ -235,7 +236,7 @@ export class FeedbackService {
     const reaction = await this.prisma.feedbackReaction.findFirst({
       where: { id: reactionId, userId },
     });
-    if (!reaction) throw new NotFoundException("Reaction not found");
+    if (!reaction) throw new NotFoundException({ code: ErrorCode.REACTION_NOT_FOUND, message: "Reaction not found" });
     await this.prisma.feedbackReaction.delete({ where: { id: reactionId } });
   }
 }
