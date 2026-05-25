@@ -16828,6 +16828,86 @@
         ]
       }
     },
+    "/api/deck/repeat/{lemmaId}": {
+      "post": {
+        "description": "Moves a card from its current deck to the Repeat deck for daily review, saving its origin. Requires Premium.",
+        "operationId": "DeckController_addToRepeat",
+        "parameters": [
+          {
+            "name": "lemmaId",
+            "required": true,
+            "in": "path",
+            "description": "Lemma ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated deck card."
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "SUBSCRIPTION_REQUIRED — no Premium subscription, or SUBSCRIPTION_EXPIRED — subscription lapsed"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Move card to Repeat deck",
+        "tags": [
+          "deck"
+        ]
+      }
+    },
+    "/api/deck/repeat/{lemmaId}/return": {
+      "post": {
+        "description": "Returns a card from Repeat back to its original deck (stored in originDeckType/originDeckNumber). Requires Premium.",
+        "operationId": "DeckController_returnFromRepeat",
+        "parameters": [
+          {
+            "name": "lemmaId",
+            "required": true,
+            "in": "path",
+            "description": "Lemma ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated deck card."
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "SUBSCRIPTION_REQUIRED — no Premium subscription, or SUBSCRIPTION_EXPIRED — subscription lapsed"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Return card from Repeat deck",
+        "tags": [
+          "deck"
+        ]
+      }
+    },
     "/api/deck/daily": {
       "get": {
         "description": "Returns N words from the user's dictionary not yet in any deck. N = dailyWordCount setting. Requires Premium.",
@@ -21158,7 +21238,7 @@
           },
           "hasFlashcards": {
             "type": "boolean",
-            "description": "Деки зазубривания (флэш-карточки)",
+            "description": "Эсалар (флэш-карточки)",
             "example": false
           },
           "wordContexts": {
@@ -21458,7 +21538,7 @@
           },
           "hasFlashcards": {
             "type": "boolean",
-            "description": "Деки зазубривания (флэш-карточки)",
+            "description": "Эсалар (флэш-карточки)",
             "example": false
           },
           "wordContexts": {
@@ -22862,6 +22942,13 @@
             "minimum": 10,
             "maximum": 500,
             "example": 90
+          },
+          "dailyNumberedDecks": {
+            "type": "number",
+            "description": "How many numbered decks to review per day (1–5)",
+            "minimum": 1,
+            "maximum": 5,
+            "example": 1
           }
         }
       },

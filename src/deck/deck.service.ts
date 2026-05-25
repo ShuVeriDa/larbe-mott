@@ -6,21 +6,27 @@ import { attachLatestContexts } from "src/progress/latest-context.helper";
 
 const DEFAULT_DECK_LIMIT = 90;
 
-const lemmaSelect = {
-  id: true,
-  baseForm: true,
-  partOfSpeech: true,
-  headwords: {
-    take: 3,
-    orderBy: { order: "asc" },
-    include: { entry: { select: { rawTranslate: true } } },
-  },
-  morphForms: {
-    take: 8,
-    orderBy: [{ gramCase: "asc" }, { gramNumber: "asc" }],
-    select: { form: true, grammarTag: true, gramCase: true, gramNumber: true },
-  },
-} satisfies Prisma.LemmaSelect;
+const lemmaSelect = (userId: string) =>
+  ({
+    id: true,
+    baseForm: true,
+    partOfSpeech: true,
+    headwords: {
+      take: 3,
+      orderBy: { order: "asc" },
+      include: { entry: { select: { rawTranslate: true } } },
+    },
+    morphForms: {
+      take: 8,
+      orderBy: [{ gramCase: "asc" }, { gramNumber: "asc" }],
+      select: { form: true, grammarTag: true, gramCase: true, gramNumber: true },
+    },
+    userDictionaryEntries: {
+      where: { userId },
+      select: { translation: true },
+      take: 1,
+    },
+  }) satisfies Prisma.LemmaSelect;
 
 @Injectable()
 export class DeckService {
@@ -34,14 +40,27 @@ export class DeckService {
       isEnabled: state?.isEnabled ?? true,
       dailyWordCount: state?.dailyWordCount ?? 5,
       deckMaxSize: state?.deckMaxSize ?? DEFAULT_DECK_LIMIT,
+      dailyNumberedDecks: state?.dailyNumberedDecks ?? 1,
     };
   }
 
-  async updateSettings(userId: string, isEnabled?: boolean, dailyWordCount?: number, deckMaxSize?: number) {
-    const data: { isEnabled?: boolean; dailyWordCount?: number; deckMaxSize?: number } = {};
+  async updateSettings(
+    userId: string,
+    isEnabled?: boolean,
+    dailyWordCount?: number,
+    deckMaxSize?: number,
+    dailyNumberedDecks?: number,
+  ) {
+    const data: {
+      isEnabled?: boolean;
+      dailyWordCount?: number;
+      deckMaxSize?: number;
+      dailyNumberedDecks?: number;
+    } = {};
     if (isEnabled !== undefined) data.isEnabled = isEnabled;
     if (dailyWordCount !== undefined) data.dailyWordCount = dailyWordCount;
     if (deckMaxSize !== undefined) data.deckMaxSize = deckMaxSize;
+    if (dailyNumberedDecks !== undefined) data.dailyNumberedDecks = dailyNumberedDecks;
 
     return this.prisma.userDeckState.upsert({
       where: { userId },
@@ -52,6 +71,7 @@ export class DeckService {
         isEnabled: isEnabled ?? true,
         dailyWordCount: dailyWordCount ?? 5,
         deckMaxSize: deckMaxSize ?? DEFAULT_DECK_LIMIT,
+        dailyNumberedDecks: dailyNumberedDecks ?? 1,
       },
     });
   }
@@ -120,17 +140,22 @@ export class DeckService {
   async getDailyWords(userId: string) {
     const settings = await this.getSettings(userId);
 
+    // Exclude already-decked lemmas at the database level to avoid loading all rows into memory.
     const inDeck = await this.prisma.userDeckCard.findMany({
       where: { userId },
       select: { lemmaId: true },
     });
-    const inDeckLemmaIds = new Set(
-      inDeck.map((c) => c.lemmaId).filter((id): id is string => id !== null),
-    );
+    const inDeckLemmaIds = inDeck
+      .map((c) => c.lemmaId)
+      .filter((id): id is string => id !== null);
 
-    const entries = await this.prisma.userDictionaryEntry.findMany({
-      where: { userId, lemmaId: { not: null } },
+    return this.prisma.userDictionaryEntry.findMany({
+      where: {
+        userId,
+        lemmaId: { not: null, notIn: inDeckLemmaIds },
+      },
       orderBy: { addedAt: "asc" },
+      take: settings.dailyWordCount,
       select: {
         id: true,
         word: true,
@@ -142,29 +167,32 @@ export class DeckService {
         },
       },
     });
-
-    return entries
-      .filter((e) => e.lemmaId && !inDeckLemmaIds.has(e.lemmaId))
-      .slice(0, settings.dailyWordCount);
   }
 
   // ─── due cards ───────────────────────────────────────────────────────────────
 
   async getDueCards(userId: string) {
-    const [newCards, oldCards, retiredCards] = await Promise.all([
+    const settings = await this.getSettings(userId);
+
+    const [newCards, oldCards, retiredCards, repeatCards] = await Promise.all([
       this.prisma.userDeckCard.findMany({
         where: { userId, deckType: DeckType.NEW },
-        include: { lemma: { select: lemmaSelect } },
+        include: { lemma: { select: lemmaSelect(userId) } },
         orderBy: { movedAt: "asc" },
       }),
       this.prisma.userDeckCard.findMany({
         where: { userId, deckType: DeckType.OLD },
-        include: { lemma: { select: lemmaSelect } },
+        include: { lemma: { select: lemmaSelect(userId) } },
         orderBy: { movedAt: "asc" },
       }),
       this.prisma.userDeckCard.findMany({
         where: { userId, deckType: DeckType.RETIRED },
-        include: { lemma: { select: lemmaSelect } },
+        include: { lemma: { select: lemmaSelect(userId) } },
+        orderBy: { movedAt: "asc" },
+      }),
+      this.prisma.userDeckCard.findMany({
+        where: { userId, deckType: DeckType.REPEAT },
+        include: { lemma: { select: lemmaSelect(userId) } },
         orderBy: { movedAt: "asc" },
       }),
     ]);
@@ -175,35 +203,43 @@ export class DeckService {
     });
     const maxDeck = maxResult._max.deckNumber ?? 0;
 
+    // Collect cards for N numbered decks (dailyNumberedDecks setting)
     let numberedCards: typeof newCards = [];
     let currentNumberedDeck: number | null = null;
+    const dailyN = settings.dailyNumberedDecks;
 
     if (maxDeck > 0) {
       currentNumberedDeck = await this.getCurrentNumberedDeck(userId, maxDeck);
+
+      // Build list of N consecutive deck numbers (wrapping around maxDeck)
+      const deckNumbers: number[] = [];
+      for (let i = 0; i < dailyN; i++) {
+        deckNumbers.push(((currentNumberedDeck - 1 + i) % maxDeck) + 1);
+      }
+      const uniqueDeckNumbers = [...new Set(deckNumbers)];
+
       numberedCards = await this.prisma.userDeckCard.findMany({
-        where: { userId, deckType: DeckType.NUMBERED, deckNumber: currentNumberedDeck },
-        include: { lemma: { select: lemmaSelect } },
-        orderBy: { movedAt: "asc" },
+        where: { userId, deckType: DeckType.NUMBERED, deckNumber: { in: uniqueDeckNumbers } },
+        include: { lemma: { select: lemmaSelect(userId) } },
+        orderBy: [{ deckNumber: "asc" }, { movedAt: "asc" }],
       });
     }
 
-    const [
-      newWithCtx,
-      oldWithCtx,
-      retiredWithCtx,
-      numberedWithCtx,
-    ] = await Promise.all([
-      attachLatestContexts(this.prisma, userId, newCards),
-      attachLatestContexts(this.prisma, userId, oldCards),
-      attachLatestContexts(this.prisma, userId, retiredCards),
-      attachLatestContexts(this.prisma, userId, numberedCards),
-    ]);
+    const [newWithCtx, oldWithCtx, retiredWithCtx, numberedWithCtx, repeatWithCtx] =
+      await Promise.all([
+        attachLatestContexts(this.prisma, userId, newCards),
+        attachLatestContexts(this.prisma, userId, oldCards),
+        attachLatestContexts(this.prisma, userId, retiredCards),
+        attachLatestContexts(this.prisma, userId, numberedCards),
+        attachLatestContexts(this.prisma, userId, repeatCards),
+      ]);
 
     return {
       new: newWithCtx,
       old: oldWithCtx,
       retired: retiredWithCtx,
       numbered: numberedWithCtx,
+      repeat: repeatWithCtx,
       currentNumberedDeck,
       maxNumberedDeck: maxDeck,
     };
@@ -212,40 +248,103 @@ export class DeckService {
   // ─── stats ───────────────────────────────────────────────────────────────────
 
   async getStats(userId: string) {
-    const settings = await this.getSettings(userId);
+    // Fetch settings and all card counts in parallel.
+    const [state, newCount, oldCount, retiredCount, repeatCount, numberedGroups] =
+      await Promise.all([
+        this.prisma.userDeckState.findUnique({ where: { userId } }),
+        this.prisma.userDeckCard.count({ where: { userId, deckType: DeckType.NEW } }),
+        this.prisma.userDeckCard.count({ where: { userId, deckType: DeckType.OLD } }),
+        this.prisma.userDeckCard.count({ where: { userId, deckType: DeckType.RETIRED } }),
+        this.prisma.userDeckCard.count({ where: { userId, deckType: DeckType.REPEAT } }),
+        this.prisma.userDeckCard.groupBy({
+          by: ["deckNumber"],
+          where: { userId, deckType: DeckType.NUMBERED },
+          _count: { id: true },
+          orderBy: { deckNumber: "asc" },
+        }),
+      ]);
 
-    const [newCount, oldCount, retiredCount, numberedGroups, maxResult] = await Promise.all([
-      this.prisma.userDeckCard.count({ where: { userId, deckType: DeckType.NEW } }),
-      this.prisma.userDeckCard.count({ where: { userId, deckType: DeckType.OLD } }),
-      this.prisma.userDeckCard.count({ where: { userId, deckType: DeckType.RETIRED } }),
-      this.prisma.userDeckCard.groupBy({
-        by: ["deckNumber"],
-        where: { userId, deckType: DeckType.NUMBERED },
-        _count: { id: true },
-        orderBy: { deckNumber: "asc" },
-      }),
-      this.prisma.userDeckCard.aggregate({
-        where: { userId, deckType: DeckType.NUMBERED },
-        _max: { deckNumber: true },
-      }),
-    ]);
+    const settings = {
+      isEnabled: state?.isEnabled ?? true,
+      dailyWordCount: state?.dailyWordCount ?? 5,
+      deckMaxSize: state?.deckMaxSize ?? DEFAULT_DECK_LIMIT,
+      dailyNumberedDecks: state?.dailyNumberedDecks ?? 1,
+    };
 
     const numberedTotal = numberedGroups.reduce((sum, g) => sum + g._count.id, 0);
-    const maxNumberedDeck = maxResult._max.deckNumber ?? 0;
+    // Max numbered deck derived from groupBy result — no separate aggregate needed.
+    const maxNumberedDeck =
+      numberedGroups.length > 0
+        ? Math.max(...numberedGroups.map((g) => g.deckNumber ?? 0))
+        : 0;
+    // Pass the already-fetched state to avoid an extra DB round-trip inside getCurrentNumberedDeck.
     const currentNumberedDeck =
-      maxNumberedDeck > 0 ? await this.getCurrentNumberedDeck(userId, maxNumberedDeck) : null;
+      maxNumberedDeck > 0 ? await this.getCurrentNumberedDeck(userId, maxNumberedDeck, state) : null;
 
     return {
       new: newCount,
       old: oldCount,
       retired: retiredCount,
+      repeat: repeatCount,
       numbered: numberedGroups.map((g) => ({ deckNumber: g.deckNumber, count: g._count.id })),
-      total: newCount + oldCount + retiredCount + numberedTotal,
+      total: newCount + oldCount + retiredCount + repeatCount + numberedTotal,
       currentNumberedDeck,
       maxNumberedDeck,
       deckMaxSize: settings.deckMaxSize,
       dailyWordCount: settings.dailyWordCount,
+      dailyNumberedDecks: settings.dailyNumberedDecks,
     };
+  }
+
+  // ─── repeat deck ─────────────────────────────────────────────────────────────
+
+  /**
+   * Переместить карточку в REPEAT-колоду, запомнив откуда она пришла.
+   * Карточка будет повторяться каждый день вместе с NEW/OLD/RETIRED.
+   */
+  async addToRepeat(userId: string, lemmaId: string) {
+    const card = await this.prisma.userDeckCard.findUnique({
+      where: { userId_lemmaId: { userId, lemmaId } },
+    });
+    if (!card) throw new NotFoundException({ code: ErrorCode.CARD_NOT_FOUND, message: "Card not found" });
+    if (card.deckType === DeckType.REPEAT) return { ...card, shouldRefreshDeck: false };
+
+    const updated = await this.prisma.userDeckCard.update({
+      where: { userId_lemmaId: { userId, lemmaId } },
+      data: {
+        deckType: DeckType.REPEAT,
+        originDeckType: card.deckType,
+        originDeckNumber: card.deckNumber,
+        movedAt: new Date(),
+      },
+    });
+    return { ...updated, shouldRefreshDeck: true };
+  }
+
+  /**
+   * Вернуть карточку из REPEAT обратно в исходную колоду.
+   */
+  async returnFromRepeat(userId: string, lemmaId: string) {
+    const card = await this.prisma.userDeckCard.findUnique({
+      where: { userId_lemmaId: { userId, lemmaId } },
+    });
+    if (!card) throw new NotFoundException({ code: ErrorCode.CARD_NOT_FOUND, message: "Card not found" });
+    if (card.deckType !== DeckType.REPEAT) return { ...card, shouldRefreshDeck: false };
+
+    const targetType = card.originDeckType ?? DeckType.NEW;
+    const targetNumber = card.originDeckNumber ?? null;
+
+    const updated = await this.prisma.userDeckCard.update({
+      where: { userId_lemmaId: { userId, lemmaId } },
+      data: {
+        deckType: targetType,
+        deckNumber: targetNumber,
+        originDeckType: null,
+        originDeckNumber: null,
+        movedAt: new Date(),
+      },
+    });
+    return { ...updated, shouldRefreshDeck: true };
   }
 
   // ─── rebalance ────────────────────────────────────────────────────────────────
@@ -330,11 +429,15 @@ export class DeckService {
 
   // ─── numbered deck rotation ───────────────────────────────────────────────────
 
-  private async getCurrentNumberedDeck(userId: string, max: number): Promise<number> {
+  private async getCurrentNumberedDeck(
+    userId: string,
+    max: number,
+    prefetchedState?: { currentNumberedDeck: number; lastRotatedAt: Date | null } | null,
+  ): Promise<number> {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const state = await this.prisma.userDeckState.findUnique({ where: { userId } });
+    const state = prefetchedState ?? await this.prisma.userDeckState.findUnique({ where: { userId } });
 
     if (!state) {
       await this.prisma.userDeckState.create({

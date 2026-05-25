@@ -97,7 +97,7 @@ export class PlanLimits {
   spaceRepetition: boolean;
 
   @ApiProperty({
-    description: "Деки зазубривания (флэш-карточки)",
+    description: "Эсалар (флэш-карточки)",
     example: false,
   })
   @IsBoolean()

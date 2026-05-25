@@ -255,6 +255,11 @@ export class WordProgressService {
                 gramNumber: true,
               },
             },
+            userDictionaryEntries: {
+              where: { userId },
+              select: { translation: true },
+              take: 1,
+            },
           },
         },
       },
@@ -684,16 +689,35 @@ export class WordProgressService {
     const { lemmaId, word, normalized, translation, cefrLevel } = opts;
 
     // Проверяем существующую запись: по lemmaId если есть, иначе по userId+normalized
-    const existing = lemmaId
-      ? await this.prisma.userDictionaryEntry.findFirst({
-          where: { userId, lemmaId },
-          select: { id: true },
-        })
-      : await this.prisma.userDictionaryEntry.findFirst({
-          where: { userId, normalized },
+    if (lemmaId) {
+      const byLemma = await this.prisma.userDictionaryEntry.findFirst({
+        where: { userId, lemmaId },
+        select: { id: true },
+      });
+      if (byLemma) return;
+
+      // Запись могла быть создана раньше без lemmaId (через normalized).
+      // Если нашли — проставляем lemmaId, чтобы join по lemma работал.
+      if (normalized) {
+        const byNormalized = await this.prisma.userDictionaryEntry.findFirst({
+          where: { userId, normalized, lemmaId: null },
           select: { id: true },
         });
-    if (existing) return;
+        if (byNormalized) {
+          await this.prisma.userDictionaryEntry.update({
+            where: { id: byNormalized.id },
+            data: { lemmaId },
+          });
+          return;
+        }
+      }
+    } else {
+      const existing = await this.prisma.userDictionaryEntry.findFirst({
+        where: { userId, normalized },
+        select: { id: true },
+      });
+      if (existing) return;
+    }
 
     // Если есть лемма — пробуем взять перевод из headwords / DictionaryCache
     let resolvedTranslation = translation;

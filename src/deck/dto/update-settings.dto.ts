@@ -28,4 +28,16 @@ export class UpdateDeckSettingsDto {
   @Min(10)
   @Max(500)
   deckMaxSize?: number;
+
+  @ApiPropertyOptional({
+    description: "How many numbered decks to review per day (1–5)",
+    minimum: 1,
+    maximum: 5,
+    example: 1,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(5)
+  dailyNumberedDecks?: number;
 }

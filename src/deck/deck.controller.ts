@@ -44,7 +44,13 @@ export class DeckController {
     @User("id") userId: string,
     @Body() dto: UpdateDeckSettingsDto,
   ) {
-    return this.deck.updateSettings(userId, dto.isEnabled, dto.dailyWordCount, dto.deckMaxSize);
+    return this.deck.updateSettings(
+      userId,
+      dto.isEnabled,
+      dto.dailyWordCount,
+      dto.deckMaxSize,
+      dto.dailyNumberedDecks,
+    );
   }
 
   // ─── add / remove ────────────────────────────────────────────────────────────
@@ -96,6 +102,38 @@ export class DeckController {
     @Body() dto: RateCardDto,
   ) {
     return this.deck.rateCard(userId, lemmaId, dto.result);
+  }
+
+  // ─── repeat deck ─────────────────────────────────────────────────────────────
+
+  @RequiresPremium()
+  @Post("repeat/:lemmaId")
+  @ApiOperation({
+    summary: "Move card to Repeat deck",
+    description: "Moves a card from its current deck to the Repeat deck for daily review, saving its origin. Requires Premium.",
+  })
+  @ApiParam({ name: "lemmaId", description: "Lemma ID" })
+  @ApiOkResponse({ description: "Updated deck card." })
+  async addToRepeat(
+    @Param("lemmaId", ParseUUIDPipe) lemmaId: string,
+    @User("id") userId: string,
+  ) {
+    return this.deck.addToRepeat(userId, lemmaId);
+  }
+
+  @RequiresPremium()
+  @Post("repeat/:lemmaId/return")
+  @ApiOperation({
+    summary: "Return card from Repeat deck",
+    description: "Returns a card from Repeat back to its original deck (stored in originDeckType/originDeckNumber). Requires Premium.",
+  })
+  @ApiParam({ name: "lemmaId", description: "Lemma ID" })
+  @ApiOkResponse({ description: "Updated deck card." })
+  async returnFromRepeat(
+    @Param("lemmaId", ParseUUIDPipe) lemmaId: string,
+    @User("id") userId: string,
+  ) {
+    return this.deck.returnFromRepeat(userId, lemmaId);
   }
 
   // ─── daily words ─────────────────────────────────────────────────────────────

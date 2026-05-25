@@ -803,6 +803,7 @@ model UserWordProgress {
   @@unique([userId, lemmaId])
   @@index([userId])
   @@index([userId, nextReview])
+  @@index([userId, status, nextReview])
   @@index([lemmaId])
   @@map("user_word_progress")
 }
@@ -821,6 +822,7 @@ model WordContext {
 
   @@unique([userId, lemmaId, textId])
   @@index([userId, lemmaId])
+  @@index([userId, lemmaId, seenAt])
   @@map("word_context")
 }
 
@@ -870,14 +872,16 @@ model UserPageBookmark {
 }
 
 model UserDeckCard {
-  id         String   @id @default(cuid())
-  userId     String
-  lemmaId    String
-  deckType   DeckType
-  deckNumber Int?
-  movedAt    DateTime @default(now())
-  lemma      Lemma    @relation("LemmaDeckCards", fields: [lemmaId], references: [id], onDelete: Cascade)
-  user       User     @relation("UserDeckCards", fields: [userId], references: [id], onDelete: Cascade)
+  id                String    @id @default(cuid())
+  userId            String
+  lemmaId           String
+  deckType          DeckType
+  deckNumber        Int?
+  movedAt           DateTime  @default(now())
+  originDeckType    DeckType?
+  originDeckNumber  Int?
+  lemma             Lemma     @relation("LemmaDeckCards", fields: [lemmaId], references: [id], onDelete: Cascade)
+  user              User      @relation("UserDeckCards", fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, lemmaId])
   @@index([userId, deckType])
@@ -886,13 +890,14 @@ model UserDeckCard {
 }
 
 model UserDeckState {
-  userId              String    @id
-  isEnabled           Boolean   @default(true)
-  currentNumberedDeck Int       @default(1)
-  lastRotatedAt       DateTime?
-  dailyWordCount      Int       @default(5)
-  deckMaxSize         Int       @default(90)
-  user                User      @relation("UserDeckState", fields: [userId], references: [id], onDelete: Cascade)
+  userId               String    @id
+  isEnabled            Boolean   @default(true)
+  currentNumberedDeck  Int       @default(1)
+  lastRotatedAt        DateTime?
+  dailyWordCount       Int       @default(5)
+  deckMaxSize          Int       @default(90)
+  dailyNumberedDecks   Int       @default(1)
+  user                 User      @relation("UserDeckState", fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_deck_state")
 }
@@ -1450,6 +1455,7 @@ enum DeckType {
   OLD
   RETIRED
   NUMBERED
+  REPEAT
 }
 
 enum WordRelationType {

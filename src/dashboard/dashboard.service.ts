@@ -16,12 +16,13 @@ export class DashboardService {
   ) {}
 
   async getDashboard(userId: string) {
-    const [stats, continueReading, dictionaryStats, plan, user, subscription] =
+    // Fetch subscription once and share it across plan snapshot and the response.
+    const [stats, continueReading, dictionaryStats, translationsToday, user, subscription] =
       await Promise.all([
         this.analyticsService.getUserAnalytics(userId),
         this.textService.getContinueReading(userId),
         this.getDictionaryStats(userId),
-        this.getPlanSnapshot(userId),
+        this.getTranslationsToday(userId),
         this.userService.getUserById(userId),
         this.subscriptionService.getMySubscription(userId),
       ]);
@@ -39,7 +40,7 @@ export class DashboardService {
         words: stats.words,
       },
       continueReading,
-      plan,
+      plan: this.buildPlanSnapshot(subscription, translationsToday),
     };
   }
 
@@ -51,16 +52,19 @@ export class DashboardService {
     return { total: agg._count };
   }
 
-  /**
-   * Минимально достаточный для сайдбарной плашки тарифа снимок:
-   * текущий план + дневное использование переводов и его лимит.
-   * Позволяет фронту нарисовать главную одним запросом.
-   */
-  private async getPlanSnapshot(userId: string) {
-    const usage = await this.subscriptionService.getUsage(userId);
-    const subscription = await this.subscriptionService.getMySubscription(userId);
+  private async getTranslationsToday(userId: string): Promise<number> {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    return this.prisma.userEvent.count({
+      where: { userId, type: "CLICK_WORD", createdAt: { gte: todayStart } },
+    });
+  }
 
-    const limits = (usage.limits ?? {}) as Record<string, unknown>;
+  private buildPlanSnapshot(
+    subscription: Awaited<ReturnType<SubscriptionService["getMySubscription"]>>,
+    translationsToday: number,
+  ) {
+    const limits = (subscription?.plan?.limits ?? {}) as Record<string, unknown>;
     const translationsLimit =
       typeof limits.translationsPerDay === "number"
         ? (limits.translationsPerDay as number)
@@ -72,7 +76,7 @@ export class DashboardService {
       type: subscription?.plan?.type ?? "FREE",
       status: subscription?.status ?? null,
       isPremium: !!subscription && subscription.plan?.type !== "FREE",
-      translationsToday: usage.translationsToday,
+      translationsToday,
       translationsLimit,
     };
   }
