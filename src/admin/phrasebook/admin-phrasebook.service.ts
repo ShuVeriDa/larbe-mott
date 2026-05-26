@@ -50,16 +50,46 @@ export class AdminPhrasebookService {
 
   // ── Phrases ──────────────────────────────────────────────────────────────
 
-  async getPhrases(categoryId?: string) {
-    return this.prisma.phrasebookPhrase.findMany({
-      where: categoryId ? { categoryId } : undefined,
-      orderBy: { sortOrder: "asc" },
-      include: {
-        words: { orderBy: { position: "asc" } },
-        examples: true,
-        _count: { select: { saves: true } },
-      },
-    });
+  async getPhrases(opts: {
+    categoryId?: string;
+    search?: string;
+    page: number;
+    limit: number;
+  }) {
+    const { categoryId, search, page, limit } = opts;
+    const safeLimit = Math.min(Math.max(limit, 1), 100);
+    const safePage = Math.max(page, 1);
+    const skip = (safePage - 1) * safeLimit;
+
+    const where = {
+      ...(categoryId ? { categoryId } : {}),
+      ...(search
+        ? {
+            OR: [
+              { original: { contains: search, mode: "insensitive" as const } },
+              { translation: { contains: search, mode: "insensitive" as const } },
+              { transliteration: { contains: search, mode: "insensitive" as const } },
+            ],
+          }
+        : {}),
+    };
+
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.phrasebookPhrase.findMany({
+        where,
+        orderBy: { sortOrder: "asc" },
+        skip,
+        take: safeLimit,
+        include: {
+          words: { orderBy: { position: "asc" } },
+          examples: true,
+          _count: { select: { saves: true } },
+        },
+      }),
+      this.prisma.phrasebookPhrase.count({ where }),
+    ]);
+
+    return { items, total, page: safePage, limit: safeLimit };
   }
 
   async createPhrase(dto: CreatePhrasebookPhraseDto) {
@@ -163,20 +193,33 @@ export class AdminPhrasebookService {
 
   // ── Suggestions ──────────────────────────────────────────────────────────
 
-  async getSuggestions() {
-    return this.prisma.phrasebookSuggestion.findMany({
-      orderBy: { createdAt: "desc" },
-      include: {
-        user: { select: { id: true, username: true, email: true } },
-        category: { select: { id: true, name: true } },
-      },
-    });
+  async getSuggestions(page = 1, limit = 50) {
+    const safeLimit = Math.min(Math.max(limit, 1), 100);
+    const safePage = Math.max(page, 1);
+    const skip = (safePage - 1) * safeLimit;
+
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.phrasebookSuggestion.findMany({
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: safeLimit,
+        include: {
+          user: { select: { id: true, username: true, email: true } },
+          category: { select: { id: true, name: true } },
+        },
+      }),
+      this.prisma.phrasebookSuggestion.count(),
+    ]);
+
+    return { items, total, page: safePage, limit: safeLimit };
   }
 
   async deleteSuggestion(id: string) {
-    const s = await this.prisma.phrasebookSuggestion.findUnique({ where: { id } });
-    if (!s) throw new NotFoundException({ code: ErrorCode.PHRASE_SUGGESTION_NOT_FOUND, message: "Suggestion not found" });
-    await this.prisma.phrasebookSuggestion.delete({ where: { id } });
+    try {
+      await this.prisma.phrasebookSuggestion.delete({ where: { id } });
+    } catch {
+      throw new NotFoundException({ code: ErrorCode.PHRASE_SUGGESTION_NOT_FOUND, message: "Suggestion not found" });
+    }
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────

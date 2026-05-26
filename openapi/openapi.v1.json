@@ -12857,11 +12857,35 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "Array of phrases with words and examples."
+            "description": "Paginated phrases with words and examples."
           },
           "401": {
             "description": "Missing or invalid bearer token"
@@ -13006,10 +13030,27 @@
     "/api/admin/phrasebook/suggestions": {
       "get": {
         "operationId": "AdminPhrasebookController_getSuggestions",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Array of suggestions with user and category info."
+            "description": "Paginated suggestions with user and category info."
           },
           "401": {
             "description": "Missing or invalid bearer token"

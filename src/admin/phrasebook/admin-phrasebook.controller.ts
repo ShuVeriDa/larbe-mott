@@ -1,11 +1,13 @@
 import {
   Body,
   Controller,
+  DefaultValuePipe,
   Delete,
   Get,
   HttpCode,
   HttpStatus,
   Param,
+  ParseIntPipe,
   Patch,
   Post,
   Query,
@@ -95,9 +97,17 @@ export class AdminPhrasebookController {
   @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
   @ApiOperation({ summary: "List phrasebook phrases" })
   @ApiQuery({ name: "categoryId", required: false })
-  @ApiOkResponse({ description: "Array of phrases with words and examples." })
-  async getPhrases(@Query("categoryId") categoryId?: string) {
-    return this.service.getPhrases(categoryId);
+  @ApiQuery({ name: "search", required: false })
+  @ApiQuery({ name: "page", required: false, type: Number })
+  @ApiQuery({ name: "limit", required: false, type: Number })
+  @ApiOkResponse({ description: "Paginated phrases with words and examples." })
+  async getPhrases(
+    @Query("categoryId") categoryId?: string,
+    @Query("search") search?: string,
+    @Query("page", new DefaultValuePipe(1), ParseIntPipe) page = 1,
+    @Query("limit", new DefaultValuePipe(30), ParseIntPipe) limit = 30,
+  ) {
+    return this.service.getPhrases({ categoryId, search, page, limit });
   }
 
   @Post("phrases")
@@ -132,9 +142,14 @@ export class AdminPhrasebookController {
   @Get("suggestions")
   @AdminPermission(PermissionCode.CAN_EDIT_TEXTS)
   @ApiOperation({ summary: "List phrase suggestions from users" })
-  @ApiOkResponse({ description: "Array of suggestions with user and category info." })
-  async getSuggestions() {
-    return this.service.getSuggestions();
+  @ApiQuery({ name: "page", required: false, type: Number })
+  @ApiQuery({ name: "limit", required: false, type: Number })
+  @ApiOkResponse({ description: "Paginated suggestions with user and category info." })
+  async getSuggestions(
+    @Query("page", new DefaultValuePipe(1), ParseIntPipe) page = 1,
+    @Query("limit", new DefaultValuePipe(50), ParseIntPipe) limit = 50,
+  ) {
+    return this.service.getSuggestions(page, limit);
   }
 
   @Delete("suggestions/:id")
