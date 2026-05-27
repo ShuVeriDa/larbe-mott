@@ -39,12 +39,13 @@ export class AuthService {
 
   async login(dto: LoginDto, meta?: { ip?: string; userAgent?: string }) {
     const user = await this.validateUser(dto);
+    const rememberMe = dto.rememberMe ?? false;
 
     // Создаём UserSession ПЕРЕД issueTokens, чтобы вшить sessionId в JWT-пейлоад.
     // Это позволяет /auth/sessions помечать "текущую" и DELETE /auth/sessions исключать её.
     const session = await this.recordSession(user.id, meta?.ip, meta?.userAgent);
 
-    const tokens = await this.issueTokens(user.id, session.id);
+    const tokens = await this.issueTokens(user.id, session.id, rememberMe);
 
     await this.updateRefreshTokenHash(user.id, tokens.refreshToken);
 
@@ -58,6 +59,7 @@ export class AuthService {
     return {
       user,
       ...tokens,
+      rememberMe,
     };
   }
 
@@ -124,11 +126,15 @@ export class AuthService {
     });
   }
 
-  addRefreshTokenResponse(res: Response, refreshToken: string) {
+  addRefreshTokenResponse(res: Response, refreshToken: string, rememberMe = false) {
     const expiresIn = new Date();
-    const expireDays = Number(
+    const defaultDays = Number(
       this.configService.get("EXPIRE_DAY_REFRESH_TOKEN") ?? 7,
     );
+    const rememberDays = Number(
+      this.configService.get("EXPIRE_DAY_REFRESH_TOKEN_REMEMBER") ?? 30,
+    );
+    const expireDays = rememberMe ? rememberDays : defaultDays;
 
     expiresIn.setDate(expiresIn.getDate() + expireDays);
 
@@ -215,7 +221,8 @@ export class AuthService {
       });
     }
 
-    const tokens = await this.issueTokens(user.id, sessionId);
+    const rememberMe = result.rem === true;
+    const tokens = await this.issueTokens(user.id, sessionId, rememberMe);
 
     await this.updateRefreshTokenHash(user.id, tokens.refreshToken);
 
@@ -230,6 +237,7 @@ export class AuthService {
     return {
       user: safeUser,
       ...tokens,
+      rememberMe,
     };
   }
 
@@ -398,12 +406,13 @@ export class AuthService {
     );
   }
 
-  private async issueTokens(userId: string, sessionId?: string) {
-    const payload: { sub: string; id: string; sid?: string } = {
+  private async issueTokens(userId: string, sessionId?: string, rememberMe = false) {
+    const payload: { sub: string; id: string; sid?: string; rem?: boolean } = {
       sub: userId,
       id: userId,
     };
     if (sessionId) payload.sid = sessionId;
+    if (rememberMe) payload.rem = true;
 
     const accessToken = await this.jwt.signAsync(
       { ...payload, type: "access" },
@@ -413,11 +422,15 @@ export class AuthService {
       },
     );
 
+    const refreshExpiresIn = rememberMe
+      ? (this.configService.get("REFRESH_TOKEN_EXPIRES_IN_REMEMBER") ?? "30d")
+      : this.configService.getOrThrow("REFRESH_TOKEN_EXPIRES_IN");
+
     const refreshToken = await this.jwt.signAsync(
       { ...payload, type: "refresh" },
       {
         secret: this.configService.getOrThrow("JWT_REFRESH_SECRET"),
-        expiresIn: this.configService.getOrThrow("REFRESH_TOKEN_EXPIRES_IN"),
+        expiresIn: refreshExpiresIn,
       },
     );
 

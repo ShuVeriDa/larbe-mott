@@ -62,12 +62,12 @@ export class AuthController {
     @Req() req: express.Request,
     @Res({ passthrough: true }) res: express.Response,
   ) {
-    const { refreshToken, ...response } = await this.authService.login(dto, {
+    const { refreshToken, rememberMe, ...response } = await this.authService.login(dto, {
       ip: req.ip,
       userAgent: req.headers["user-agent"],
     });
 
-    this.authService.addRefreshTokenResponse(res, refreshToken);
+    this.authService.addRefreshTokenResponse(res, refreshToken, rememberMe);
 
     return response;
   }
@@ -118,11 +118,11 @@ export class AuthController {
       throw new UnauthorizedException({ code: ErrorCode.REFRESH_TOKEN_NOT_PASSED, message: "Refresh token not passed" });
     }
 
-    const { refreshToken, ...response } = await this.authService.getNewTokens(
+    const { refreshToken, rememberMe, ...response } = await this.authService.getNewTokens(
       refreshTokenFromCookies,
     );
 
-    this.authService.addRefreshTokenResponse(res, refreshToken);
+    this.authService.addRefreshTokenResponse(res, refreshToken, rememberMe);
 
     return response;
   }
