@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import {
   CouponType,
+  PaymentProvider,
   PaymentStatus,
   PlanType,
   Prisma,
@@ -312,7 +313,7 @@ export class AdminBillingService {
 
   async getPlanRevenue() {
     const payments = await this.prisma.payment.findMany({
-      where: { status: PaymentStatus.SUCCEEDED },
+      where: { status: PaymentStatus.SUCCEEDED, provider: { not: PaymentProvider.MANUAL } },
       select: {
         amountCents: true,
         refundedCents: true,
@@ -769,6 +770,7 @@ export class AdminBillingService {
       this.prisma.payment.findMany({
         where: {
           createdAt: { gte: startOfMonth },
+          provider: { not: PaymentProvider.MANUAL },
           status: {
             in: [PaymentStatus.SUCCEEDED, PaymentStatus.REFUNDED, PaymentStatus.FAILED],
           },
@@ -778,6 +780,7 @@ export class AdminBillingService {
       this.prisma.payment.findMany({
         where: {
           createdAt: { gte: startOfLastMonth, lte: endOfLastMonth },
+          provider: { not: PaymentProvider.MANUAL },
           status: {
             in: [PaymentStatus.SUCCEEDED, PaymentStatus.REFUNDED, PaymentStatus.FAILED],
           },
@@ -855,6 +858,7 @@ export class AdminBillingService {
     const payments = await this.prisma.payment.findMany({
       where: {
         createdAt: { gte: from, lte: to },
+        provider: { not: PaymentProvider.MANUAL },
         status: { in: [PaymentStatus.SUCCEEDED, PaymentStatus.REFUNDED] },
       },
       select: { amountCents: true, refundedCents: true, status: true, createdAt: true },
@@ -883,7 +887,7 @@ export class AdminBillingService {
 
   async getPaymentsByProvider() {
     const payments = await this.prisma.payment.findMany({
-      where: { status: PaymentStatus.SUCCEEDED },
+      where: { status: PaymentStatus.SUCCEEDED, provider: { not: PaymentProvider.MANUAL } },
       select: { amountCents: true, refundedCents: true, provider: true },
     });
 

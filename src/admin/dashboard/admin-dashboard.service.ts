@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import {
   FeedbackStatus,
+  PaymentProvider,
   PaymentStatus,
   PlanType,
   SubscriptionStatus,
@@ -184,16 +185,16 @@ export class AdminDashboardService {
         where: { ...paidPlanFilter, createdAt: { gte: prevFrom, lte: prevTo } },
       }),
       this.prisma.payment.aggregate({
-        where: { status: PaymentStatus.SUCCEEDED, createdAt: { gte: from, lte: to } },
+        where: { status: PaymentStatus.SUCCEEDED, provider: { not: PaymentProvider.MANUAL }, createdAt: { gte: from, lte: to } },
         _sum: { amountCents: true, refundedCents: true },
       }),
       this.prisma.payment.aggregate({
-        where: { status: PaymentStatus.SUCCEEDED, createdAt: { gte: prevFrom, lte: prevTo } },
+        where: { status: PaymentStatus.SUCCEEDED, provider: { not: PaymentProvider.MANUAL }, createdAt: { gte: prevFrom, lte: prevTo } },
         _sum: { amountCents: true, refundedCents: true },
       }),
       this.prisma.payment.groupBy({
         by: ["currency"],
-        where: { status: PaymentStatus.SUCCEEDED, createdAt: { gte: from, lte: to } },
+        where: { status: PaymentStatus.SUCCEEDED, provider: { not: PaymentProvider.MANUAL }, createdAt: { gte: from, lte: to } },
         _sum: { amountCents: true },
       }),
     ]);
