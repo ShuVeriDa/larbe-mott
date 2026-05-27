@@ -67,6 +67,7 @@ model User {
   wordProgress             UserWordProgress[]
   wordContexts             WordContext[]
 
+  @@index([username])
   @@index([status])
   @@index([language])
   @@index([level])
@@ -147,6 +148,7 @@ model UserSession {
   user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([userId, revokedAt])
   @@index([createdAt])
   @@index([lastActiveAt])
   @@map("user_session")
@@ -166,6 +168,7 @@ model PasswordResetToken {
 
   @@index([userId])
   @@index([expiresAt])
+  @@index([userId, expiresAt, usedAt])
   @@map("password_reset_tokens")
 }
 
@@ -184,6 +187,7 @@ model EmailChangeToken {
 
   @@index([userId])
   @@index([expiresAt])
+  @@index([userId, expiresAt, usedAt])
   @@map("email_change_tokens")
 }
 

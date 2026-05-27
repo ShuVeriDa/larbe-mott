@@ -22,7 +22,6 @@ import {
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
-  ApiQuery,
   ApiTags,
   ApiUnauthorizedResponse,
   ApiBadRequestResponse,
@@ -41,6 +40,7 @@ import { ConfirmEmailChangeDto } from "./dto/confirm-email-change.dto";
 import { ConfirmPasswordResetDto } from "./dto/confirm-password-reset.dto";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import { RequestEmailChangeDto } from "./dto/request-email-change.dto";
+import { ValidatePasswordResetDto } from "./dto/validate-password-reset.dto";
 
 @ApiTags("auth")
 @Controller("auth")
@@ -201,19 +201,19 @@ export class AuthController {
     return { ok: true };
   }
 
-  @Throttle({ default: { limit: 30, ttl: 60_000 } })
-  @Get("password-reset/validate")
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @HttpCode(200)
+  @Post("password-reset/validate")
   @ApiOperation({
     summary:
       "Validate a password reset token (for the badge on the /reset-password page)",
   })
-  @ApiQuery({ name: "token", required: true })
   @ApiOkResponse({
     description:
       "{ valid: true, expiresAt, email: 'u***@example.com' } | { valid: false, reason }",
   })
-  async validatePasswordReset(@Query("token") token: string) {
-    return this.authService.validatePasswordResetToken(token ?? "");
+  async validatePasswordReset(@Body() dto: ValidatePasswordResetDto) {
+    return this.authService.validatePasswordResetToken(dto.token);
   }
 
   @Throttle({ default: { limit: 5, ttl: 60_000 } })

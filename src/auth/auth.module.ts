@@ -10,6 +10,7 @@ import { JwtStrategy } from "./strategies/jwt.strategy";
 import { PermissionGuard } from "./permissions/permission.guard";
 import { PermissionsService } from "./permissions/permissions.service";
 import { PasswordResetCleanupTask } from "./password-reset-cleanup.task";
+import { EmailChangeCleanupTask } from "./email-change-cleanup.task";
 
 @Module({
   controllers: [AuthController],
@@ -23,6 +24,7 @@ import { PasswordResetCleanupTask } from "./password-reset-cleanup.task";
     JwtService,
     ConfigService,
     PasswordResetCleanupTask,
+    EmailChangeCleanupTask,
   ],
   exports: [PermissionsService],
   imports: [

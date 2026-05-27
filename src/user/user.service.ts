@@ -5,25 +5,46 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Prisma, UserStatus } from "@prisma/client";
-import { hash } from "argon2";
+import { hash, argon2id } from "argon2";
+
+const ARGON2_OPTIONS = {
+  type: argon2id,
+  memoryCost: 19456,
+  timeCost: 2,
+  parallelism: 1,
+} as const;
+
 import { PermissionsService } from "src/auth/permissions/permissions.service";
 import { PrismaService } from "../prisma.service";
+import { RedisService } from "src/redis/redis.service";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { DeleteAccountDto } from "./dto/delete-account.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
 import { ErrorCode } from "src/common/errors/error-codes";
 
-// Конфликт с username — единственно возможный для PATCH /users теперь, когда
-// email/password убраны в auth-flow.
+const USER_CACHE_TTL = 60;
 
 @Injectable()
 export class UserService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly permissionsService: PermissionsService,
+    private readonly redis: RedisService,
   ) {}
 
+  private userCacheKey = (id: string) => `user:profile:${id}`;
+
+  private async invalidateUserCache(id: string) {
+    await this.redis.del(this.userCacheKey(id));
+  }
+
   async getUserById(id: string) {
+    const cacheKey = this.userCacheKey(id);
+    const cached = await this.redis.get(cacheKey);
+    if (cached) {
+      return JSON.parse(cached) as ReturnType<typeof this.getUserById> extends Promise<infer T> ? T : never;
+    }
+
     const user = await this.prisma.user.findUnique({
       where: { id },
     });
@@ -40,10 +61,14 @@ export class UserService {
 
     const permissionsSet = await this.permissionsService.getUserPermissions(id);
 
-    return {
+    const result = {
       ...safeUser,
       permissions: [...permissionsSet],
     };
+
+    await this.redis.setex(cacheKey, USER_CACHE_TTL, JSON.stringify(result));
+
+    return result;
   }
 
   async getByEmail(email: string) {
@@ -101,6 +126,8 @@ export class UserService {
       data: { revokedAt: new Date() },
     });
 
+    await this.invalidateUserCache(userId);
+
     return {
       success: true,
       message:
@@ -142,13 +169,14 @@ export class UserService {
       throw e;
     }
 
+    await this.invalidateUserCache(userId);
     return this.getUserById(userId);
   }
 
   private userObj = async (dto: CreateUserDto) => {
     const user = {
       email: dto.email,
-      password: await hash(dto.password),
+      password: await hash(dto.password, ARGON2_OPTIONS),
       name: dto.name,
       surname: dto.surname,
       username: dto.username,

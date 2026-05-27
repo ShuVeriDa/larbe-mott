@@ -318,18 +318,19 @@
       }
     },
     "/api/auth/password-reset/validate": {
-      "get": {
+      "post": {
         "operationId": "AuthController_validatePasswordReset",
-        "parameters": [
-          {
-            "name": "token",
-            "required": true,
-            "in": "query",
-            "schema": {
-              "type": "string"
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidatePasswordResetDto"
+              }
             }
           }
-        ],
+        },
         "responses": {
           "200": {
             "description": "{ valid: true, expiresAt, email: 'u***@example.com' } | { valid: false, reason }"
@@ -19366,6 +19367,18 @@
         },
         "required": [
           "email"
+        ]
+      },
+      "ValidatePasswordResetDto": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Raw reset token from the link in the email"
+          }
+        },
+        "required": [
+          "token"
         ]
       },
       "ConfirmPasswordResetDto": {

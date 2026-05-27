@@ -9,7 +9,14 @@ import {
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import { Prisma, UserEventType, UserStatus } from "@prisma/client";
-import { hash, verify } from "argon2";
+import { hash, verify, argon2id } from "argon2";
+
+const ARGON2_OPTIONS = {
+  type: argon2id,
+  memoryCost: 19456,
+  timeCost: 2,
+  parallelism: 1,
+} as const;
 import { randomBytes } from "crypto";
 import { Response } from "express";
 import {
@@ -438,7 +445,7 @@ export class AuthService {
   }
 
   private async updateRefreshTokenHash(userId: string, refreshToken: string) {
-    const hashedRefreshToken = await hash(refreshToken);
+    const hashedRefreshToken = await hash(refreshToken, ARGON2_OPTIONS);
 
     await this.prisma.user.update({
       where: { id: userId },
@@ -491,7 +498,7 @@ export class AuthService {
 
     // Сырой токен: 32 байта URL-safe base64. В письме — он, в БД — argon2-хеш.
     const rawToken = randomBytes(32).toString("base64url");
-    const tokenHash = await hash(rawToken);
+    const tokenHash = await hash(rawToken, ARGON2_OPTIONS);
 
     await this.prisma.passwordResetToken.create({
       data: {
@@ -577,7 +584,7 @@ export class AuthService {
       throw new ForbiddenException({ code: ErrorCode.ACCOUNT_UNAVAILABLE, message: "Account unavailable" });
     }
 
-    const passwordHash = await hash(newPassword);
+    const passwordHash = await hash(newPassword, ARGON2_OPTIONS);
     const now = new Date();
 
     await this.prisma.$transaction([
@@ -627,6 +634,7 @@ export class AuthService {
       "EX",
       accessTtl,
     );
+    await this.redis.del(`user:profile:${record.userId}`);
 
     // Уведомительное письмо — best effort, ошибки не пробрасываем
     void this.mail
@@ -718,7 +726,7 @@ export class AuthService {
       throw new BadRequestException({ code: ErrorCode.SAME_PASSWORD, message: "New password must differ from current" });
     }
 
-    const passwordHash = await hash(newPassword);
+    const passwordHash = await hash(newPassword, ARGON2_OPTIONS);
     const now = new Date();
 
     await this.prisma.$transaction([
@@ -748,6 +756,7 @@ export class AuthService {
       "EX",
       accessTtl,
     );
+    await this.redis.del(`user:profile:${user.id}`);
 
     void this.mail
       .sendPasswordChangedEmail({ to: user.email, lang: meta?.lang ?? "ru" })
@@ -814,7 +823,7 @@ export class AuthService {
     const expiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000);
 
     const rawToken = randomBytes(32).toString("base64url");
-    const tokenHash = await hash(rawToken);
+    const tokenHash = await hash(rawToken, ARGON2_OPTIONS);
 
     await this.prisma.emailChangeToken.create({
       data: {
@@ -927,6 +936,7 @@ export class AuthService {
       "EX",
       accessTtl,
     );
+    await this.redis.del(`user:profile:${record.userId}`);
 
     // Уведомление шлём на СТАРЫЙ адрес — чтобы юзер успел отреагировать на угон.
     void this.mail
