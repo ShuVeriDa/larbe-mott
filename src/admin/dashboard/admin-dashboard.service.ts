@@ -317,6 +317,8 @@ export class AdminDashboardService {
       dictionaryWordsCount,
       readingsInPeriod,
       textsByLevel,
+      totalPhrases,
+      totalPhraseCategories,
     ] = await Promise.all([
       this.prisma.text.count(),
       this.prisma.text.count({ where: { publishedAt: { not: null } } }),
@@ -330,6 +332,8 @@ export class AdminDashboardService {
         _count: { id: true },
         where: { level: { not: null } },
       }),
+      this.prisma.phrasebookPhrase.count(),
+      this.prisma.phrasebookCategory.count(),
     ]);
 
     return {
@@ -341,6 +345,8 @@ export class AdminDashboardService {
       dictionaryWordsCount,
       readingsInPeriod,
       textsByLevel: textsByLevel.map((r) => ({ level: r.level, count: r._count.id })),
+      totalPhrases,
+      totalPhraseCategories,
     };
   }
 

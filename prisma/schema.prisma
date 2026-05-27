@@ -56,6 +56,8 @@ model User {
   goals                    UserGoals?
   notifications            UserNotificationPreferences?
   phrasebookSaves          UserPhrasebookSave[]
+  phrasebookProgress       UserPhrasebookProgress[]
+  phrasebookReviewLogs     UserPhrasebookReviewLog[]
   preferences              UserPreferences?
   reviewLogs               UserReviewLog[]              @relation("UserReviewLogs")
   roles                    UserRoleAssignment[]
@@ -933,19 +935,22 @@ model PhrasebookCategory {
 }
 
 model PhrasebookPhrase {
-  id              String                    @id @default(uuid())
+  id              String                      @id @default(uuid())
   categoryId      String
   original        String
   transliteration String?
   translation     String
   lang            Language
-  sortOrder       Int                       @default(0)
-  createdAt       DateTime                  @default(now())
-  updatedAt       DateTime                  @updatedAt
-  category        PhrasebookCategory        @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  audioUrl        String?
+  sortOrder       Int                         @default(0)
+  createdAt       DateTime                    @default(now())
+  updatedAt       DateTime                    @updatedAt
+  category        PhrasebookCategory          @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   examples        PhrasebookPhraseExample[]
   words           PhrasebookPhraseWord[]
   saves           UserPhrasebookSave[]
+  progress        UserPhrasebookProgress[]
+  reviewLogs      UserPhrasebookReviewLog[]
 
   @@index([categoryId])
   @@index([lang])
@@ -1003,6 +1008,44 @@ model UserPhrasebookSave {
   @@unique([userId, phraseId])
   @@index([userId])
   @@map("user_phrasebook_save")
+}
+
+model UserPhrasebookProgress {
+  id          String        @id @default(cuid())
+  userId      String
+  phraseId    String
+  status      PhraseStatus  @default(NEW)
+  repetitions Int           @default(0)
+  lastSeen    DateTime?
+  nextReview  DateTime?
+  easeFactor  Float         @default(2.5)
+  interval    Int           @default(0)
+  phrase      PhrasebookPhrase @relation(fields: [phraseId], references: [id], onDelete: Cascade)
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, phraseId])
+  @@index([userId])
+  @@index([userId, nextReview])
+  @@index([userId, status, nextReview])
+  @@index([phraseId])
+  @@map("user_phrasebook_progress")
+}
+
+model UserPhrasebookReviewLog {
+  id             String   @id @default(cuid())
+  userId         String
+  phraseId       String
+  quality        Int
+  correct        Boolean
+  intervalBefore Int?
+  intervalAfter  Int?
+  createdAt      DateTime @default(now())
+  phrase         PhrasebookPhrase @relation(fields: [phraseId], references: [id], onDelete: Cascade)
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId])
+  @@map("user_phrasebook_review_log")
 }
 
 model TextPhrase {
@@ -1444,6 +1487,12 @@ enum Level {
 }
 
 enum WordStatus {
+  NEW
+  LEARNING
+  KNOWN
+}
+
+enum PhraseStatus {
   NEW
   LEARNING
   KNOWN

@@ -83,6 +83,7 @@ export class AdminAnalyticsService {
       topUnknownWords,
       readingFunnel,
       sm2Stats,
+      phraseStats,
       difficultTexts,
       popularTexts,
       insight,
@@ -95,6 +96,7 @@ export class AdminAnalyticsService {
       this.getTopUnknownWords(failEvents, query.topUnknownWordsLimit ?? 8),
       this.getReadingFunnel(bounds, openEvents),
       this.getSm2Stats(bounds),
+      this.getPhraseStats(bounds),
       this.getDifficultTexts(
         bounds,
         query.difficultBy ?? DifficultTextsTab.FAIL,
@@ -130,6 +132,7 @@ export class AdminAnalyticsService {
       topUnknownWords,
       readingFunnel,
       sm2Stats,
+      phraseStats,
     };
   }
 
@@ -713,6 +716,51 @@ export class AdminAnalyticsService {
       retentionRatePercent,
       avgIntervalDays: Number((avgIntervalDays ?? 0).toFixed(1)),
       avgEaseFactor: Number((avgEaseFactor ?? 0).toFixed(2)),
+    };
+  }
+
+  private async getPhraseStats(bounds: PeriodBounds) {
+    const [
+      totalPhrases,
+      totalCategories,
+      totalReviewsNow,
+      totalReviewsPrev,
+      learningCount,
+      knownCount,
+      avgQuality,
+      correctNow,
+    ] = await Promise.all([
+      this.prisma.phrasebookPhrase.count(),
+      this.prisma.phrasebookCategory.count(),
+      this.prisma.userPhrasebookReviewLog.count({
+        where: { createdAt: { gte: bounds.from, lte: bounds.to } },
+      }),
+      this.prisma.userPhrasebookReviewLog.count({
+        where: { createdAt: { gte: bounds.prevFrom, lte: bounds.prevTo } },
+      }),
+      this.prisma.userPhrasebookProgress.count({ where: { status: "LEARNING" } }),
+      this.prisma.userPhrasebookProgress.count({ where: { status: "KNOWN" } }),
+      this.prisma.userPhrasebookReviewLog.aggregate({
+        where: { createdAt: { gte: bounds.from, lte: bounds.to } },
+        _avg: { quality: true },
+      }),
+      this.prisma.userPhrasebookReviewLog.count({
+        where: { createdAt: { gte: bounds.from, lte: bounds.to }, correct: true },
+      }),
+    ]);
+
+    const retentionRatePercent =
+      totalReviewsNow > 0 ? Math.round((correctNow / totalReviewsNow) * 100) : 0;
+
+    return {
+      totalPhrases,
+      totalCategories,
+      totalReviews: totalReviewsNow,
+      totalReviewsChangePercent: this.percentChange(totalReviewsNow, totalReviewsPrev),
+      learningCount,
+      knownCount,
+      avgGrade: Number((avgQuality._avg.quality ?? 0).toFixed(1)),
+      retentionRatePercent,
     };
   }
 

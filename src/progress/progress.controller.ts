@@ -49,6 +49,22 @@ export class ProgressController {
   }
 
   @Auth()
+  @Post("text/:id/complete")
+  @ApiOperation({
+    summary: "Mark text as completed",
+    description: "Manually marks a text as fully read. Sets progressPercent = 100 and stamps completedAt (once).",
+  })
+  @ApiParam({ name: "id", description: "Text ID (UUID)" })
+  @ApiOkResponse({ description: "{ ok: true }" })
+  async markTextComplete(
+    @Param("id", ParseUUIDPipe) textId: string,
+    @User("id") userId: string,
+  ) {
+    await this.textProgress.markCompleted(userId, textId);
+    return { ok: true };
+  }
+
+  @Auth()
   @Patch("text/:id/position")
   @ApiOperation({
     summary: "Save reading position",
@@ -82,7 +98,7 @@ export class ProgressController {
   async getReviewStats(@User("id") userId: string) {
     const now = new Date();
 
-    const [dueCount, learningCount, streakDetails] = await Promise.all([
+    const [dueCount, learningCount, knownCount, streakDetails] = await Promise.all([
       this.prisma.userWordProgress.count({
         where: {
           userId,
@@ -93,9 +109,12 @@ export class ProgressController {
       this.prisma.userWordProgress.count({
         where: { userId, status: "LEARNING" },
       }),
+      this.prisma.userWordProgress.count({
+        where: { userId, status: "KNOWN" },
+      }),
       this.analyticsService.getStreakDetails(userId),
     ]);
-    return { dueCount, learningCount, streak: streakDetails.current };
+    return { dueCount, learningCount, knownCount, streak: streakDetails.current };
   }
 
   // ─── review — static route ABOVE the parameterized one ────────────────────────

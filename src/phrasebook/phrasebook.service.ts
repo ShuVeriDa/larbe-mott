@@ -87,6 +87,7 @@ export class PhrasebookService {
       transliteration: p.transliteration,
       translation: p.translation,
       lang: p.lang,
+      audioUrl: p.audioUrl,
       saved: p.saves.length > 0,
       words: p.words.map((w) => ({
         id: w.id,

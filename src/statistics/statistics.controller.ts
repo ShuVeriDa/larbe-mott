@@ -73,7 +73,7 @@ export class StatisticsController {
     @User("id") userId: string,
     @Body() dto: LogReadingDto,
   ) {
-    await this.statisticsService.logReadingSession(userId, dto.textId, dto.durationSeconds);
+    await this.statisticsService.logReadingSession(userId, dto.textId, dto.durationSeconds, dto.wordsRead);
     return { ok: true };
   }
 

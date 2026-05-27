@@ -1965,6 +1965,40 @@
         ]
       }
     },
+    "/api/progress/text/{id}/complete": {
+      "post": {
+        "description": "Manually marks a text as fully read. Sets progressPercent = 100 and stamps completedAt (once).",
+        "operationId": "ProgressController_markTextComplete",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Text ID (UUID)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ ok: true }"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Mark text as completed",
+        "tags": [
+          "progress"
+        ]
+      }
+    },
     "/api/progress/text/{id}/position": {
       "patch": {
         "description": "Records the page the user is currently on. Position is monotonic — moves forward only, so revisiting earlier pages does not rewind the saved position. Used by 'Continue reading'.",
@@ -17777,6 +17811,141 @@
         ]
       }
     },
+    "/api/phrasebook/review/stats": {
+      "get": {
+        "description": "Returns due count, streak, learning/known counts, and today's review count.",
+        "operationId": "PhrasebookController_getReviewStats",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Review stats"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get phrase review stats",
+        "tags": [
+          "phrasebook"
+        ]
+      }
+    },
+    "/api/phrasebook/review/due": {
+      "get": {
+        "description": "Returns phrases due today (or never reviewed). Optionally filtered by category or saved-only.",
+        "operationId": "PhrasebookController_getDueReview",
+        "parameters": [
+          {
+            "name": "categoryId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "savedOnly",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of phrases due for review"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get phrases due for review",
+        "tags": [
+          "phrasebook"
+        ]
+      }
+    },
+    "/api/phrasebook/review/categories": {
+      "get": {
+        "description": "Returns each category with known/learning counts and progress percent.",
+        "operationId": "PhrasebookController_getCategoryProgress",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Category progress list"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get per-category progress",
+        "tags": [
+          "phrasebook"
+        ]
+      }
+    },
+    "/api/phrasebook/progress/{phraseId}/rate": {
+      "post": {
+        "description": "Apply SM-2 algorithm for the given phrase. Quality 0-5.",
+        "operationId": "PhrasebookController_ratePhrase",
+        "parameters": [
+          {
+            "name": "phraseId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RatePhraseDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated progress record"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "404": {
+            "description": "Phrase not found"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Submit phrase review rating",
+        "tags": [
+          "phrasebook"
+        ]
+      }
+    },
     "/api/settings": {
       "get": {
         "operationId": "SettingsController_getAll",
@@ -23233,6 +23402,21 @@
           "lang"
         ]
       },
+      "RatePhraseDto": {
+        "type": "object",
+        "properties": {
+          "quality": {
+            "type": "number",
+            "description": "Quality of recall: 0-2 = failed, 3 = correct with difficulty, 4 = correct, 5 = perfect",
+            "minimum": 0,
+            "maximum": 5,
+            "example": 4
+          }
+        },
+        "required": [
+          "quality"
+        ]
+      },
       "UpdatePreferencesDto": {
         "type": "object",
         "properties": {
@@ -23440,6 +23624,10 @@
           "durationSeconds": {
             "type": "number",
             "description": "Duration spent reading in seconds"
+          },
+          "wordsRead": {
+            "type": "number",
+            "description": "Number of words on the page(s) read"
           }
         },
         "required": [

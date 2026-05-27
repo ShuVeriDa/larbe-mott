@@ -19,16 +19,11 @@ export class TextProgressService {
   ) {}
 
   /**
-   * Persists `progressPercent` for a (user, text) and stamps `completedAt`
-   * the first time progress reaches 100%. Optionally bumps `lastOpened`.
-   * Stamping is conditional on `completedAt IS NULL` so re-reads don't
-   * overwrite the original completion timestamp used by statistics.
+   * Persists page-based `progressPercent` = lastPageNumber / totalPages * 100.
+   * Stamps `completedAt` the first time progress reaches 100%.
+   * Optionally bumps `lastOpened`.
    *
-   * Dirty-check: when the row already exists and the stored progressPercent
-   * is within 0.01 % of the new value, we skip writing progressPercent
-   * (saves a write on every page turn when no new words were encountered).
-   * `lastOpened` is still updated if `touchLastOpened` is set, so the
-   * "continue reading" list always reflects the real last-seen timestamp.
+   * Dirty-check: skips writing progressPercent when within 0.01% of stored value.
    */
   async persistProgress(
     userId: string,
@@ -60,17 +55,39 @@ export class TextProgressService {
       return;
     }
 
-    // Build update payload only with what actually changed
     const updateData: Record<string, unknown> = {};
     if (progressChanged) updateData.progressPercent = progressPercent;
     if (opts.touchLastOpened) updateData.lastOpened = now;
     if (needsCompletionStamp) updateData.completedAt = now;
 
-    if (Object.keys(updateData).length === 0) return; // nothing to write
+    if (Object.keys(updateData).length === 0) return;
 
     await this.prisma.userTextProgress.update({
       where: { userId_textId: { userId, textId } },
       data: updateData,
+    });
+  }
+
+  /**
+   * Marks a text as manually completed by the user.
+   * Sets progressPercent = 100 and stamps completedAt (once).
+   */
+  async markCompleted(userId: string, textId: string): Promise<void> {
+    const now = new Date();
+    await this.prisma.userTextProgress.upsert({
+      where: { userId_textId: { userId, textId } },
+      create: { userId, textId, progressPercent: 100, completedAt: now, lastOpened: now },
+      update: {
+        progressPercent: 100,
+        lastOpened: now,
+        // Only stamp completedAt once — don't overwrite original completion date
+        completedAt: undefined,
+      },
+    });
+    // Ensure completedAt is set if missing (upsert update can't conditionally set it)
+    await this.prisma.userTextProgress.updateMany({
+      where: { userId, textId, completedAt: null },
+      data: { completedAt: now },
     });
   }
 

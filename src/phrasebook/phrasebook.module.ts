@@ -3,10 +3,11 @@ import { PrismaService } from "src/prisma.service";
 import { TokenModule } from "src/token/token.module";
 import { PhrasebookController } from "./phrasebook.controller";
 import { PhrasebookService } from "./phrasebook.service";
+import { PhraseProgressService } from "./phrase-progress.service";
 
 @Module({
   imports: [TokenModule],
   controllers: [PhrasebookController],
-  providers: [PhrasebookService, PrismaService],
+  providers: [PhrasebookService, PhraseProgressService, PrismaService],
 })
 export class PhrasebookModule {}

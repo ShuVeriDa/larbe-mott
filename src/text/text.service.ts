@@ -133,10 +133,10 @@ export class TextService {
     const [completedCount, inProgressCount] = userId
       ? await Promise.all([
           this.prisma.userTextProgress.count({
-            where: { userId, progressPercent: 100, text: where },
+            where: { userId, completedAt: { not: null }, text: where },
           }),
           this.prisma.userTextProgress.count({
-            where: { userId, progressPercent: { gt: 0, lt: 100 }, text: where },
+            where: { userId, completedAt: null, lastPageNumber: { gt: 0 }, text: where },
           }),
         ])
       : [0, 0];
@@ -248,7 +248,8 @@ export class TextService {
     const progressRows = await this.prisma.userTextProgress.findMany({
       where: {
         userId,
-        progressPercent: { gt: 0, lt: 100 },
+        completedAt: null,
+        lastPageNumber: { gt: 0 },
       },
       orderBy: { lastOpened: "desc" },
       select: {
@@ -481,14 +482,12 @@ export class TextService {
     );
     const uniqueLemmaIds = [...new Set(lemmaIdByTokenId.values())];
 
-    // Run all three independent user-specific operations in parallel:
+    // Run all independent user-specific operations in parallel:
     //   1. registerSeenWords  — write-only, result not needed
     //   2. userWordProgress   — read word statuses for token rendering
-    //   3. calculateProgress  — cached 5 min; result needed for the response
-    // userEvent is fire-and-forget. persistProgress depends on calculateProgress
-    // but is itself fire-and-forget — we don't await it so it doesn't add to
-    // response latency.
-    const [progressRows, progress] = await Promise.all([
+    // persistProgress is fire-and-forget — page-based percent computed from
+    // lastPageNumber (already set by setPosition above) / totalPages.
+    const [progressRows, existingProgress] = await Promise.all([
       userId && uniqueLemmaIds.length
         ? this.prisma.userWordProgress.findMany({
             where: { userId, lemmaId: { in: uniqueLemmaIds } },
@@ -496,14 +495,26 @@ export class TextService {
           })
         : Promise.resolve([] as { lemmaId: string; status: string }[]),
       userId
-        ? this.textProgress.calculateProgress(userId, textId)
-        : Promise.resolve(0),
+        ? this.prisma.userTextProgress.findUnique({
+            where: { userId_textId: { userId, textId } },
+            select: { progressPercent: true, completedAt: true },
+          })
+        : Promise.resolve(null),
       userId && uniqueLemmaIds.length
         ? this.wordProgress.registerSeenWords(userId, uniqueLemmaIds)
         : Promise.resolve(),
     ]);
 
     const userStatusByLemmaId = new Map(progressRows.map((r) => [r.lemmaId, r.status]));
+
+    // Page-based progress: how far the user has read through the text
+    const pageProgress = totalPages > 0
+      ? Math.round((lastPageNumber / totalPages) * 100)
+      : 0;
+    // Use existing if already marked completed (100) to avoid going backwards
+    const progress = existingProgress?.completedAt
+      ? 100
+      : pageProgress;
 
     if (userId) {
       void this.prisma.userEvent.create({
@@ -628,9 +639,18 @@ export class TextService {
       });
     }
 
-    const progress = userId
-      ? await this.textProgress.calculateProgress(userId, textId)
-      : 0;
+    const userTextProgress = userId
+      ? await this.prisma.userTextProgress.findUnique({
+          where: { userId_textId: { userId, textId } },
+          select: { progressPercent: true, completedAt: true, lastPageNumber: true },
+        })
+      : null;
+
+    const progress = userTextProgress?.completedAt
+      ? 100
+      : totalPages > 0 && userTextProgress?.lastPageNumber
+        ? Math.round((userTextProgress.lastPageNumber / totalPages) * 100)
+        : 0;
 
     if (userId) {
       await this.textProgress.persistProgress(userId, textId, progress, { touchLastOpened: true });
