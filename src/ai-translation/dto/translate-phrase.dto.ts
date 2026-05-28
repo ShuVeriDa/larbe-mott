@@ -1,5 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsOptional, IsString, MaxLength, MinLength } from "class-validator";
+import { IsIn, IsOptional, IsString, MaxLength, MinLength } from "class-validator";
+import { SUPPORTED_TRANSLATION_LANGUAGES } from "./translation-language";
+import type { TranslationLanguage } from "./translation-language";
 
 export class TranslatePhraseDto {
   @ApiProperty({ description: "The Chechen phrase to translate" })
@@ -13,4 +15,14 @@ export class TranslatePhraseDto {
   @IsString()
   @MaxLength(2000)
   contextSentence?: string;
+
+  @ApiPropertyOptional({
+    description: "Target language for translation",
+    enum: SUPPORTED_TRANSLATION_LANGUAGES,
+    default: "ru",
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(SUPPORTED_TRANSLATION_LANGUAGES)
+  targetLanguage?: TranslationLanguage;
 }

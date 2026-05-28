@@ -6,6 +6,7 @@ import { ErrorCode } from "src/common/errors/error-codes";
 export interface FetchAiCacheQuery {
   status?: AiCacheStatus;
   q?: string;
+  targetLanguage?: string;
   page?: number;
   limit?: number;
 }
@@ -65,6 +66,7 @@ export class AdminAiCacheService {
       ...(query.q
         ? { lemma: { contains: query.q, mode: "insensitive" as const } }
         : {}),
+      ...(query.targetLanguage ? { targetLanguage: query.targetLanguage } : {}),
     };
 
     const [items, total] = await this.prisma.$transaction([
@@ -77,7 +79,9 @@ export class AdminAiCacheService {
           id: true,
           lemma: true,
           cacheType: true,
+          targetLanguage: true,
           translation: true,
+          russianGloss: true,
           transliteration: true,
           partOfSpeech: true,
           example: true,

@@ -51,12 +51,14 @@ export class AdminAiCacheController {
   list(
     @Query("status") status?: AiCacheStatus,
     @Query("q") q?: string,
+    @Query("targetLanguage") targetLanguage?: string,
     @Query("page") page?: string,
     @Query("limit") limit?: string,
   ) {
     return this.adminAiCacheService.list({
       status,
       q,
+      targetLanguage,
       page: page ? Number(page) : undefined,
       limit: limit ? Number(limit) : undefined,
     });

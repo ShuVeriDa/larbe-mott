@@ -610,21 +610,20 @@ export class TextService {
     const currentPage =
       totalPages > 0 ? Math.min(userProgress?.lastPageNumber ?? 1, totalPages) : 0;
 
-    // Статистика слов из текста по статусам пользователя
+    // Статистика слов из текста по статусам пользователя (из личного словаря)
     let wordStats = { total: lemmaIds.length, known: 0, learning: 0, new: 0 };
     if (userId && lemmaIds.length) {
-      const grouped = await this.prisma.userWordProgress.groupBy({
-        by: ["status"],
+      const grouped = await this.prisma.userDictionaryEntry.groupBy({
+        by: ["learningLevel"],
         where: { userId, lemmaId: { in: lemmaIds } },
-        _count: { status: true },
+        _count: { learningLevel: true },
       });
-      const map = Object.fromEntries(grouped.map((g) => [g.status, g._count.status]));
-      const tracked = (map["KNOWN"] ?? 0) + (map["LEARNING"] ?? 0) + (map["NEW"] ?? 0);
+      const map = Object.fromEntries(grouped.map((g) => [g.learningLevel, g._count.learningLevel]));
       wordStats = {
         total: lemmaIds.length,
         known: map["KNOWN"] ?? 0,
         learning: map["LEARNING"] ?? 0,
-        new: lemmaIds.length - tracked,
+        new: map["NEW"] ?? 0,
       };
     }
 

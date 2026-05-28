@@ -1268,7 +1268,9 @@ model AiTranslationCache {
   lemma           String
   contextSentence String?
   cacheType       AiCacheType   @default(WORD_ONLY)
+  targetLanguage  String        @default("ru")
   translation     String
+  russianGloss    String?
   transliteration String?
   partOfSpeech    String?
   example         String?
@@ -1281,12 +1283,14 @@ model AiTranslationCache {
   updatedAt       DateTime      @updatedAt
   exportedAt      DateTime?
 
-  @@unique([lemma, cacheType])
+  @@unique([lemma, cacheType, targetLanguage])
   @@index([status])
   @@index([requestCount])
   @@index([lemma])
+  @@index([targetLanguage])
   @@index([exportedAt])
   @@index([status, exportedAt])
+  @@index([lemma, targetLanguage])
   @@map("ai_translation_cache")
 }
 

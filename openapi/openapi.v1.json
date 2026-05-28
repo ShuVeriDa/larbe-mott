@@ -16187,6 +16187,14 @@
             }
           },
           {
+            "name": "targetLanguage",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "page",
             "required": true,
             "in": "query",
@@ -23692,6 +23700,19 @@
           "contextSentence": {
             "type": "string",
             "description": "Context sentence containing the word"
+          },
+          "targetLanguage": {
+            "type": "string",
+            "description": "Target language for translation",
+            "enum": [
+              "ru",
+              "en",
+              "ar",
+              "de",
+              "fr",
+              "tr"
+            ],
+            "default": "ru"
           }
         },
         "required": [
@@ -23708,6 +23729,19 @@
           "contextSentence": {
             "type": "string",
             "description": "Surrounding sentence for context"
+          },
+          "targetLanguage": {
+            "type": "string",
+            "description": "Target language for translation",
+            "enum": [
+              "ru",
+              "en",
+              "ar",
+              "de",
+              "fr",
+              "tr"
+            ],
+            "default": "ru"
           }
         },
         "required": [
@@ -23743,6 +23777,19 @@
           "hint": {
             "type": "string",
             "description": "User hint about the correct meaning"
+          },
+          "targetLanguage": {
+            "type": "string",
+            "description": "Target language for the refined translation",
+            "enum": [
+              "ru",
+              "en",
+              "ar",
+              "de",
+              "fr",
+              "tr"
+            ],
+            "default": "ru"
           }
         },
         "required": [

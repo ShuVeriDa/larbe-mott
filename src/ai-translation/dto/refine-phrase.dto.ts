@@ -1,5 +1,7 @@
-import { ApiProperty } from "@nestjs/swagger";
-import { IsString, MaxLength, MinLength } from "class-validator";
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { IsIn, IsOptional, IsString, MaxLength, MinLength } from "class-validator";
+import { SUPPORTED_TRANSLATION_LANGUAGES } from "./translation-language";
+import type { TranslationLanguage } from "./translation-language";
 
 export class RefinePhraseDto {
   @ApiProperty({ description: "The original Chechen phrase" })
@@ -19,4 +21,14 @@ export class RefinePhraseDto {
   @MinLength(2)
   @MaxLength(500)
   hint: string;
+
+  @ApiPropertyOptional({
+    description: "Target language for the refined translation",
+    enum: SUPPORTED_TRANSLATION_LANGUAGES,
+    default: "ru",
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(SUPPORTED_TRANSLATION_LANGUAGES)
+  targetLanguage?: TranslationLanguage;
 }

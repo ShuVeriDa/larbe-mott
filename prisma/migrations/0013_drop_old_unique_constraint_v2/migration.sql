@@ -1,0 +1,1 @@
+-- No-op: old unique index was already dropped in 0012.

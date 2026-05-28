@@ -1,4 +1,6 @@
-import { IsOptional, IsString, MaxLength, MinLength } from "class-validator";
+import { IsIn, IsOptional, IsString, MaxLength, MinLength } from "class-validator";
+import { SUPPORTED_TRANSLATION_LANGUAGES } from "./translation-language";
+import type { TranslationLanguage } from "./translation-language";
 
 export class SaveRefinementDto {
   @IsString()
@@ -15,4 +17,9 @@ export class SaveRefinementDto {
   @IsString()
   @MaxLength(2000)
   contextSentence?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(SUPPORTED_TRANSLATION_LANGUAGES)
+  targetLanguage?: TranslationLanguage;
 }
