@@ -24,6 +24,7 @@ import { AiTranslationService } from "./ai-translation.service";
 import { BatchTranslateDto } from "./dto/batch-translate.dto";
 import { RefinePhraseDto } from "./dto/refine-phrase.dto";
 import { SaveGeminiKeyDto } from "./dto/save-gemini-key.dto";
+import { SaveGeminiModelDto } from "./dto/save-gemini-model.dto";
 import { SaveRefinementDto } from "./dto/save-refinement.dto";
 import { TranslatePhraseDto } from "./dto/translate-phrase.dto";
 import { TranslateWordDto } from "./dto/translate-word.dto";
@@ -62,6 +63,15 @@ export class AiTranslationController {
   @ApiOkResponse({ description: "{ hasKey: false }" })
   deleteKey(@User("id") userId: string) {
     return this.aiTranslationService.saveGeminiKey(userId, null);
+  }
+
+  @Patch("model")
+  @Auth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Save preferred Gemini model for translations" })
+  @ApiOkResponse({ description: "{ model: string }" })
+  saveModel(@User("id") userId: string, @Body() dto: SaveGeminiModelDto) {
+    return this.aiTranslationService.saveGeminiModel(userId, dto.model);
   }
 
   @Throttle({ default: { limit: 3, ttl: 60_000 } })

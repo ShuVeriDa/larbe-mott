@@ -14,8 +14,19 @@ import { TranslateWordDto } from "./dto/translate-word.dto";
 import { TranslationLanguage } from "./dto/translation-language";
 import { VoteType } from "./dto/vote-cache.dto";
 import { decryptApiKey, encryptApiKey } from "./encryption.util";
-import { geminiUrl } from "./gemini.util";
+import { parseGeminiError, type FallbackReason } from "./gemini-error";
+import { DEFAULT_GEMINI_MODEL, geminiUrl, SUPPORTED_GEMINI_MODELS, type GeminiModel } from "./gemini.util";
+import { quarantine } from "./model-quarantine";
 import { ErrorCode } from "src/common/errors/error-codes";
+
+class GeminiRateLimitError extends Error {
+  constructor(
+    public readonly reason: FallbackReason,
+    public readonly retryAfterMs: number,
+  ) {
+    super("gemini_rate_limit");
+  }
+}
 
 const AUTO_APPROVE_MIN_REQUESTS = 10;
 const AUTO_APPROVE_MIN_THUMBS_UP = 3;
@@ -54,25 +65,39 @@ export class AiTranslationService {
     return { hasKey: true };
   }
 
-  async getKeyStatus(userId: string): Promise<{ hasKey: boolean }> {
+  async getKeyStatus(userId: string): Promise<{ hasKey: boolean; model: GeminiModel }> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { geminiApiKeyEncrypted: true },
+      select: { geminiApiKeyEncrypted: true, geminiModel: true },
     });
-    return { hasKey: Boolean(user?.geminiApiKeyEncrypted) };
+    const model = this.resolveModel(user?.geminiModel);
+    return { hasKey: Boolean(user?.geminiApiKeyEncrypted), model };
+  }
+
+  async saveGeminiModel(
+    userId: string,
+    model: GeminiModel,
+  ): Promise<{ model: GeminiModel }> {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { geminiModel: model },
+    });
+    return { model };
   }
 
   async verifyGeminiKey(
     userId: string,
   ): Promise<{ valid: boolean; error?: string }> {
-    const apiKey = await this.getDecryptedKey(userId);
-    if (!apiKey) {
+    const keyAndModel = await this.getUserKeyAndModel(userId);
+    if (!keyAndModel) {
       return { valid: false, error: "no_key" };
     }
     try {
-      const result = await this.callGemini(apiKey, {
-        contents: [{ parts: [{ text: "Ping. Reply with: OK" }] }],
-      });
+      const result = await this.callGemini(
+        keyAndModel.apiKey,
+        { contents: [{ parts: [{ text: "Ping. Reply with: OK" }] }] },
+        keyAndModel.model,
+      );
       return { valid: Boolean(result) };
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -127,16 +152,18 @@ export class AiTranslationService {
     }
 
     // 2. Call Gemini
-    const apiKey = await this.getDecryptedKey(userId);
-    if (!apiKey) {
+    const keyAndModel = await this.getUserKeyAndModel(userId);
+    if (!keyAndModel) {
       throw new BadRequestException({ code: ErrorCode.GEMINI_KEY_NOT_CONFIGURED, message: "Gemini API key not configured" });
     }
 
     const prompt = this.buildWordPrompt(dto.word, targetLanguage, dto.contextSentence);
-    const raw = await this.callGeminiSafe(apiKey, {
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: "application/json" },
-    });
+    const { text: raw, fallbackUsed, fallbackReason, retryAfterSeconds } = await this.callGeminiSafe(
+      userId,
+      keyAndModel.apiKey,
+      { contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json" } },
+      keyAndModel.model,
+    );
 
     const parsed = this.parseWordResponse(raw);
     if (!parsed) {
@@ -173,34 +200,36 @@ export class AiTranslationService {
       },
     });
 
-    return { ...entry, fromCache: false };
+    return { ...entry, fromCache: false, fallbackUsed, fallbackReason, retryAfterSeconds };
   }
 
   // ─── Phrase Translation ──────────────────────────────────────────────────────
 
   async translatePhrase(userId: string, dto: TranslatePhraseDto) {
-    const apiKey = await this.getDecryptedKey(userId);
-    if (!apiKey) {
+    const keyAndModel = await this.getUserKeyAndModel(userId);
+    if (!keyAndModel) {
       throw new BadRequestException({ code: ErrorCode.GEMINI_KEY_NOT_CONFIGURED, message: "Gemini API key not configured" });
     }
 
     const targetLanguage: TranslationLanguage = dto.targetLanguage ?? "ru";
     const prompt = this.buildPhrasePrompt(dto.phrase, targetLanguage, dto.contextSentence);
-    const raw = await this.callGeminiSafe(apiKey, {
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: "application/json" },
-    });
+    const { text: raw, fallbackUsed, fallbackReason, retryAfterSeconds } = await this.callGeminiSafe(
+      userId,
+      keyAndModel.apiKey,
+      { contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json" } },
+      keyAndModel.model,
+    );
 
     const parsed = this.parsePhraseResponse(raw);
     if (!parsed) {
       throw new BadRequestException({ code: ErrorCode.GEMINI_PARSE_ERROR, message: "Could not parse Gemini response" });
     }
-    return parsed;
+    return { ...parsed, fallbackUsed, fallbackReason, retryAfterSeconds };
   }
 
   async refinePhrase(userId: string, dto: RefinePhraseDto) {
-    const apiKey = await this.getDecryptedKey(userId);
-    if (!apiKey) {
+    const keyAndModel = await this.getUserKeyAndModel(userId);
+    if (!keyAndModel) {
       throw new BadRequestException({ code: ErrorCode.GEMINI_KEY_NOT_CONFIGURED, message: "Gemini API key not configured" });
     }
 
@@ -211,16 +240,18 @@ export class AiTranslationService {
       dto.hint,
       targetLanguage,
     );
-    const raw = await this.callGeminiSafe(apiKey, {
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: "application/json" },
-    });
+    const { text: raw, fallbackUsed, fallbackReason, retryAfterSeconds } = await this.callGeminiSafe(
+      userId,
+      keyAndModel.apiKey,
+      { contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json" } },
+      keyAndModel.model,
+    );
 
     const parsed = this.parsePhraseResponse(raw);
     if (!parsed) {
       throw new BadRequestException({ code: ErrorCode.GEMINI_PARSE_ERROR, message: "Could not parse Gemini response" });
     }
-    return parsed;
+    return { ...parsed, fallbackUsed, fallbackReason, retryAfterSeconds };
   }
 
   // ─── Batch Translation ───────────────────────────────────────────────────────
@@ -229,8 +260,8 @@ export class AiTranslationService {
     userId: string,
     dto: BatchTranslateDto,
   ): Promise<Record<string, string>> {
-    const apiKey = await this.getDecryptedKey(userId);
-    if (!apiKey) {
+    const keyAndModel = await this.getUserKeyAndModel(userId);
+    if (!keyAndModel) {
       throw new BadRequestException({ code: ErrorCode.GEMINI_KEY_NOT_CONFIGURED, message: "Gemini API key not configured" });
     }
 
@@ -257,10 +288,12 @@ export class AiTranslationService {
 
     if (uncached.length > 0) {
       const prompt = this.buildBatchPrompt(uncached);
-      const raw = await this.callGemini(apiKey, {
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: "application/json" },
-      });
+      const { text: raw } = await this.callGeminiSafe(
+        userId,
+        keyAndModel.apiKey,
+        { contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: "application/json" } },
+        keyAndModel.model,
+      );
       const parsed = this.parseBatchResponse(raw);
       if (parsed) {
         for (const [word, translation] of Object.entries(parsed)) {
@@ -367,6 +400,13 @@ export class AiTranslationService {
 
   // ─── Private ─────────────────────────────────────────────────────────────────
 
+  private resolveModel(raw: string | null | undefined): GeminiModel {
+    if (raw && (SUPPORTED_GEMINI_MODELS as readonly string[]).includes(raw)) {
+      return raw as GeminiModel;
+    }
+    return DEFAULT_GEMINI_MODEL as GeminiModel;
+  }
+
   private async getDecryptedKey(userId: string): Promise<string | null> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -375,6 +415,21 @@ export class AiTranslationService {
     if (!user?.geminiApiKeyEncrypted) return null;
     try {
       return decryptApiKey(user.geminiApiKeyEncrypted);
+    } catch {
+      return null;
+    }
+  }
+
+  private async getUserKeyAndModel(userId: string): Promise<{ apiKey: string; model: GeminiModel } | null> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { geminiApiKeyEncrypted: true, geminiModel: true },
+    });
+    if (!user?.geminiApiKeyEncrypted) return null;
+    try {
+      const apiKey = decryptApiKey(user.geminiApiKeyEncrypted);
+      const model = this.resolveModel(user.geminiModel);
+      return { apiKey, model };
     } catch {
       return null;
     }
@@ -527,9 +582,10 @@ Return only valid JSON, no markdown. Example: {"дуьне": "мир", "стаг
   private async callGemini(
     apiKey: string,
     body: Record<string, unknown>,
-    retries = 3,
+    model?: string,
+    retries = 2,
   ): Promise<string> {
-    const url = geminiUrl(apiKey);
+    const url = geminiUrl(apiKey, model);
     for (let attempt = 0; attempt <= retries; attempt++) {
       const res = await fetch(url, {
         method: "POST",
@@ -542,8 +598,14 @@ Return only valid JSON, no markdown. Example: {"дуьне": "мир", "стаг
         };
         return data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
       }
-      const isRetryable = res.status === 503 || res.status === 429;
-      if (!isRetryable || attempt === retries) {
+      // 429 is handled by fallback — do not retry here
+      if (res.status === 429) {
+        const errBody = await res.text();
+        const retryAfter = res.headers.get("Retry-After");
+        const info = parseGeminiError(res.status, errBody, retryAfter);
+        throw new GeminiRateLimitError(info.fallbackReason, info.retryAfterMs);
+      }
+      if (res.status !== 503 || attempt === retries) {
         const err = await res.text();
         throw new Error(`Gemini API error ${res.status}: ${err}`);
       }
@@ -552,12 +614,54 @@ Return only valid JSON, no markdown. Example: {"дуьне": "мир", "стаг
     throw new Error("Gemini API: exhausted retries");
   }
 
-  private async callGeminiSafe(
+  private async callGeminiWithFallback(
+    userId: string,
     apiKey: string,
     body: Record<string, unknown>,
-  ): Promise<string> {
+    model: string,
+  ): Promise<{ text: string; fallbackUsed: boolean; fallbackReason?: FallbackReason; retryAfterSeconds?: number }> {
+    const isFallbackModel = model === DEFAULT_GEMINI_MODEL;
+
+    const callFallback = async (): Promise<string> => {
+      try {
+        return await this.callGemini(apiKey, body, DEFAULT_GEMINI_MODEL);
+      } catch {
+        throw new Error("gemini_fallback_failed");
+      }
+    };
+
+    // Check quarantine — skip primary model if it's cooling down
+    if (!isFallbackModel && quarantine.isActive(userId, model)) {
+      const text = await callFallback();
+      return { text, fallbackUsed: true, fallbackReason: "rate_limit" };
+    }
+
     try {
-      return await this.callGemini(apiKey, body);
+      const text = await this.callGemini(apiKey, body, model);
+      return { text, fallbackUsed: false };
+    } catch (e) {
+      if (e instanceof GeminiRateLimitError && !isFallbackModel) {
+        quarantine.set(userId, model, e.retryAfterMs);
+        const text = await callFallback();
+        return {
+          text,
+          fallbackUsed: true,
+          fallbackReason: e.reason,
+          retryAfterSeconds: Math.ceil(e.retryAfterMs / 1000),
+        };
+      }
+      throw e;
+    }
+  }
+
+  private async callGeminiSafe(
+    userId: string,
+    apiKey: string,
+    body: Record<string, unknown>,
+    model: string,
+  ): Promise<{ text: string; fallbackUsed: boolean; fallbackReason?: FallbackReason; retryAfterSeconds?: number }> {
+    try {
+      return await this.callGeminiWithFallback(userId, apiKey, body, model);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.includes("User location is not supported")) {

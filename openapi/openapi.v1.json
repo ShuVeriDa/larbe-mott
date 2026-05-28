@@ -18608,6 +18608,39 @@
         ]
       }
     },
+    "/api/ai-translation/model": {
+      "patch": {
+        "operationId": "AiTranslationController_saveModel",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveGeminiModelDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "{ model: string }"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Save preferred Gemini model for translations",
+        "tags": [
+          "ai-translation"
+        ]
+      }
+    },
     "/api/ai-translation/key/verify": {
       "post": {
         "operationId": "AiTranslationController_verifyKey",
@@ -23689,6 +23722,23 @@
             "description": "Gemini API key. Send empty string or null to delete."
           }
         }
+      },
+      "SaveGeminiModelDto": {
+        "type": "object",
+        "properties": {
+          "model": {
+            "type": "string",
+            "description": "Gemini model to use for translations",
+            "enum": [
+              "gemini-3.1-flash-lite",
+              "gemini-3.5-flash",
+              "gemini-3.1-pro"
+            ]
+          }
+        },
+        "required": [
+          "model"
+        ]
       },
       "TranslateWordDto": {
         "type": "object",

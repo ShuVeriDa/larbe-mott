@@ -26,6 +26,7 @@ model User {
   updatedAt                DateTime                     @updatedAt
   deletedAt                DateTime?
   geminiApiKeyEncrypted    String?
+  geminiModel              String?   @default("gemini-3.1-flash-lite")
   couponRedemptions        CouponRedemption[]
   dictionaryEntries        DictionaryEntry[]            @relation("DictionaryEntryCreator")
   emailChangeTokens        EmailChangeToken[]
