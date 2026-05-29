@@ -1,4 +1,4 @@
-import { ValidationPipe, VersioningType } from "@nestjs/common";
+import { ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
 import { NestExpressApplication } from "@nestjs/platform-express";
@@ -33,6 +33,7 @@ async function bootstrap() {
   const port = configService.get<number>("PORT") ?? 9555;
   const frontendUrl =
     configService.get<string>("FRONTEND_URL") ?? "http://localhost:3000";
+  const frontendMobileUrl = configService.get<string>("FRONTEND_MOBILE_URL");
   const nodeEnv = configService.get<string>("NODE_ENV") ?? "development";
 
   app.use(helmet());
@@ -46,7 +47,7 @@ async function bootstrap() {
   // });
   app.use(cookieParser());
   app.enableCors({
-    origin: [frontendUrl],
+    origin: [frontendUrl, ...(frontendMobileUrl ? [frontendMobileUrl] : [])],
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: [
@@ -74,7 +75,10 @@ async function bootstrap() {
       stopAtFirstError: true,
       transform: true,
       exceptionFactory: (errors) => {
-        console.error("[ValidationPipe] errors:", JSON.stringify(errors, null, 2));
+        console.error(
+          "[ValidationPipe] errors:",
+          JSON.stringify(errors, null, 2),
+        );
         const { BadRequestException } = require("@nestjs/common");
         return new BadRequestException(errors);
       },
