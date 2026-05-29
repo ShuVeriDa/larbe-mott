@@ -25,7 +25,6 @@ import { User } from "src/user/decorators/user.decorator";
 import { AnalyzePosDto } from "./dto/analyze-pos.dto";
 import { WordLookupByWordDto } from "./dto/lookup-by-word.dto";
 import { WordLookupDto } from "./dto/lookup.dto";
-import { WordExamplesService } from "./word-examples.service";
 import { WordLookupByWordService } from "./word-lookup-by-word.service";
 import type { AnalyzePosResult } from "./word-pos.service";
 import { WordPosService } from "./word-pos.service";
@@ -39,7 +38,6 @@ export class WordsController {
   constructor(
     private readonly wordsService: WordsService,
     private readonly wordLookupByWordService: WordLookupByWordService,
-    private readonly wordExamplesService: WordExamplesService,
     private readonly wordPosService: WordPosService,
   ) {}
 
@@ -60,19 +58,6 @@ export class WordsController {
     @User("id") userId: string | undefined,
   ) {
     return this.wordsService.lookup(dto.tokenId, userId);
-  }
-
-  @Auth()
-  @Get(":lemmaId/examples")
-  @ApiOperation({
-    summary: "Corpus usage examples for a word",
-    description:
-      "Returns up to 10 snippets from different texts in the database where this lemma appears. Independent of user history.",
-  })
-  @ApiParam({ name: "lemmaId", description: "Lemma ID" })
-  @ApiOkResponse({ description: "List of snippets with source information." })
-  async getExamples(@Param("lemmaId", ParseUUIDPipe) lemmaId: string) {
-    return this.wordExamplesService.getExamples(lemmaId);
   }
 
   @Auth()

@@ -2367,40 +2367,6 @@
         ]
       }
     },
-    "/api/words/{lemmaId}/examples": {
-      "get": {
-        "description": "Returns up to 10 snippets from different texts in the database where this lemma appears. Independent of user history.",
-        "operationId": "WordsController_getExamples",
-        "parameters": [
-          {
-            "name": "lemmaId",
-            "required": true,
-            "in": "path",
-            "description": "Lemma ID",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "List of snippets with source information."
-          },
-          "401": {
-            "description": "Missing or invalid bearer token"
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "Corpus usage examples for a word",
-        "tags": [
-          "words"
-        ]
-      }
-    },
     "/api/words/{lemmaId}/related": {
       "get": {
         "description": "Returns all WordRelations for the given lemma (in both directions), grouped by type. Used in the word card under 'Related words'.",

@@ -1274,6 +1274,8 @@ model AiTranslationCache {
   russianGloss    String?
   transliteration String?
   partOfSpeech    String?
+  baseForm        String?
+  nounClass       String?
   example         String?
   source          String        @default("gemini")
   status          AiCacheStatus @default(PENDING)

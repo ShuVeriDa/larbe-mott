@@ -191,6 +191,8 @@ export class AiTranslationService {
         russianGloss: targetLanguage !== "ru" ? (parsed.russianGloss ?? null) : null,
         transliteration: parsed.transliteration ?? null,
         partOfSpeech: parsed.partOfSpeech ?? null,
+        baseForm: parsed.baseForm ?? null,
+        nounClass: parsed.nounClass ?? null,
         example: parsed.example ?? null,
         requestCount: 1,
       },
@@ -677,6 +679,8 @@ Return only valid JSON, no markdown. Example: {"дуьне": "мир", "стаг
     russianGloss?: string;
     transliteration?: string;
     partOfSpeech?: string;
+    baseForm?: string;
+    nounClass?: string;
     example?: string;
   } | null {
     try {
