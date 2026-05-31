@@ -68,6 +68,7 @@ export class AuthController {
     });
 
     this.authService.addRefreshTokenResponse(res, refreshToken, rememberMe);
+    this.authService.addAccessTokenResponse(res, response.accessToken, rememberMe);
 
     return response;
   }
@@ -93,6 +94,7 @@ export class AuthController {
     });
 
     this.authService.addRefreshTokenResponse(res, refreshToken);
+    this.authService.addAccessTokenResponse(res, response.accessToken);
 
     return response;
   }
@@ -123,8 +125,9 @@ export class AuthController {
     );
 
     this.authService.addRefreshTokenResponse(res, refreshToken, rememberMe);
+    this.authService.addAccessTokenResponse(res, response.accessToken, rememberMe);
 
-    return response;
+    return { ...response, rememberMe };
   }
 
   @Auth()
@@ -350,6 +353,7 @@ export class AuthController {
   ) {
     await this.authService.logout(userId);
     this.authService.removeRefreshTokenFromResponse(res);
+    this.authService.removeAccessTokenFromResponse(res);
 
     return true;
   }

@@ -2,6 +2,8 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -44,8 +46,56 @@ export class AuthService {
     private readonly mail: MailService,
   ) {}
 
+  private static readonly LOGIN_FAIL_MAX = 10;
+  private static readonly LOGIN_LOCKOUT_TTL = 15 * 60; // 15 minutes in seconds
+
+  private loginFailKey(identifier: string): string {
+    return `login:fail:${identifier.toLowerCase().trim()}`;
+  }
+
+  private async checkAndIncrementLoginFailures(identifier: string): Promise<void> {
+    const key = this.loginFailKey(identifier);
+    const count = await this.redis.incr(key);
+    if (count === 1) {
+      await this.redis.expire(key, AuthService.LOGIN_LOCKOUT_TTL);
+    }
+    if (count > AuthService.LOGIN_FAIL_MAX) {
+      throw new HttpException(
+        { code: ErrorCode.ACCOUNT_TEMPORARILY_LOCKED, message: "Too many failed attempts. Try again in 15 minutes." },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+  }
+
+  private async clearLoginFailures(identifier: string): Promise<void> {
+    await this.redis.del(this.loginFailKey(identifier));
+  }
+
   async login(dto: LoginDto, meta?: { ip?: string; userAgent?: string }) {
-    const user = await this.validateUser(dto);
+    // Check lockout before validateUser to fail fast without hitting the DB.
+    const failKey = dto.username.toLowerCase().trim();
+    const failCount = Number(await this.redis.get(this.loginFailKey(failKey)) ?? "0");
+    if (failCount >= AuthService.LOGIN_FAIL_MAX) {
+      throw new HttpException(
+        { code: ErrorCode.ACCOUNT_TEMPORARILY_LOCKED, message: "Too many failed attempts. Try again in 15 minutes." },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    let user: Awaited<ReturnType<typeof this.validateUser>>;
+    try {
+      user = await this.validateUser(dto);
+    } catch (err) {
+      // Only count failures for credential errors, not account-blocked/deleted.
+      if (err instanceof UnauthorizedException) {
+        await this.checkAndIncrementLoginFailures(failKey);
+      }
+      throw err;
+    }
+
+    // Successful login — reset failure counter.
+    await this.clearLoginFailures(failKey);
+
     const rememberMe = dto.rememberMe ?? false;
 
     // Создаём UserSession ПЕРЕД issueTokens, чтобы вшить sessionId в JWT-пейлоад.
@@ -176,6 +226,48 @@ export class AuthService {
     });
   }
 
+  // Sets the access token as an httpOnly cookie so it cannot be read by
+  // client-side JavaScript. SameSite=strict prevents CSRF on same-origin.
+  addAccessTokenResponse(res: Response, accessToken: string, rememberMe = false) {
+    const accessTtlSeconds = this.parseExpirySeconds(
+      this.configService.get("ACCESS_TOKEN_EXPIRES_IN") ?? "1h",
+    );
+    const domain = this.configService.get<string>("DOMAIN") || undefined;
+    const secure = this.shouldUseSecureCookies();
+    const sameSite = secure ? "none" : ("strict" as const);
+
+    // If rememberMe, align cookie TTL with the refresh token so the browser
+    // doesn't drop the access_token cookie between refreshes.
+    const rememberDays = Number(
+      this.configService.get("EXPIRE_DAY_REFRESH_TOKEN_REMEMBER") ?? 30,
+    );
+    const maxAge = rememberMe ? rememberDays * 24 * 60 * 60 : accessTtlSeconds;
+
+    res.cookie("access_token", accessToken, {
+      httpOnly: true,
+      domain,
+      maxAge: maxAge * 1000,
+      secure,
+      sameSite,
+      path: "/",
+    });
+  }
+
+  removeAccessTokenFromResponse(res: Response) {
+    const domain = this.configService.get<string>("DOMAIN") || undefined;
+    const secure = this.shouldUseSecureCookies();
+    const sameSite = secure ? "none" : ("strict" as const);
+
+    res.cookie("access_token", "", {
+      httpOnly: true,
+      domain,
+      expires: new Date(0),
+      secure,
+      sameSite,
+      path: "/",
+    });
+  }
+
   async getNewTokens(refreshToken: string) {
     const result = await this.jwt.verifyAsync(refreshToken, {
       secret: this.configService.getOrThrow("JWT_REFRESH_SECRET"),
@@ -207,8 +299,15 @@ export class AuthService {
       refreshToken,
     );
 
-    if (!isRefreshTokenValid)
+    if (!isRefreshTokenValid) {
+      // Refresh token reuse detected: the token is structurally valid (JWT
+      // signature OK) but doesn't match the stored hash — a previously-rotated
+      // token was replayed. This is a strong signal of token theft.
+      // Revoke all sessions immediately to contain the breach.
+      await this.clearRefreshTokenHash(user.id);
+      await this.revokeAllSessions(user.id);
       throw new UnauthorizedException({ code: ErrorCode.INVALID_REFRESH_TOKEN, message: "Invalid refresh token" });
+    }
 
     // Если в старом refresh была привязана сессия — проверяем, что она ещё активна,
     // и переиспользуем её id в новом access/refresh.
@@ -272,6 +371,16 @@ export class AuthService {
     return num * (multipliers[unit] ?? 1);
   }
 
+  private async getCachedLocation(ip: string | null): Promise<ReturnType<typeof lookupSessionLocation>> {
+    if (!ip) return null;
+    const cacheKey = `geoip:${ip}`;
+    const cached = await this.redis.get(cacheKey);
+    if (cached) return JSON.parse(cached);
+    const location = lookupSessionLocation(ip);
+    await this.redis.setex(cacheKey, 86400, JSON.stringify(location));
+    return location;
+  }
+
   async getSessions(userId: string, currentSessionId?: string) {
     const sessions = await this.prisma.userSession.findMany({
       where: { userId, revokedAt: null },
@@ -279,10 +388,14 @@ export class AuthService {
       select: { id: true, ipAddress: true, userAgent: true, createdAt: true },
     });
 
-    return sessions.map((s) => ({
+    const locationsResults = await Promise.all(
+      sessions.map((s) => this.getCachedLocation(s.ipAddress)),
+    );
+
+    return sessions.map((s, i) => ({
       ...s,
       device: parseDeviceLabel(s.userAgent),
-      location: lookupSessionLocation(s.ipAddress),
+      location: locationsResults[i],
       isCurrent: currentSessionId ? s.id === currentSessionId : false,
     }));
   }
@@ -300,14 +413,14 @@ export class AuthService {
       data: { revokedAt: new Date() },
     });
 
-    // Инвалидируем все активные access-токены пользователя.
-    // Per-session инвалидация невозможна без sessionId в JWT payload —
-    // отзыв одной сессии блокирует токены всех устройств до следующего рефреша.
+    // Per-session blacklist: only invalidates access tokens that belong to
+    // this specific session (matched by sid claim in the JWT payload).
+    // Other sessions remain active — no cross-device disruption.
     const accessTtl = this.parseExpirySeconds(
       this.configService.get("ACCESS_TOKEN_EXPIRES_IN") ?? "1h",
     );
     await this.redis.set(
-      `session:blacklist:${userId}`,
+      `session:blacklist:${sessionId}`,
       Date.now().toString(),
       "EX",
       accessTtl,
@@ -323,30 +436,36 @@ export class AuthService {
       ...(currentSessionId ? { id: { not: currentSessionId } } : {}),
     };
 
-    const result = await this.prisma.userSession.updateMany({
+    const sessionsToRevoke = await this.prisma.userSession.findMany({
+      where,
+      select: { id: true },
+    });
+
+    await this.prisma.userSession.updateMany({
       where,
       data: { revokedAt: new Date() },
     });
 
-    // ВАЖНО: глобальный redis-blacklist выкинет ВСЕ access-токены пользователя — в том числе
-    // токен текущей сессии. Чтобы фронт не разлогинился сразу после "Завершить все",
-    // ставим blacklist только если currentSessionId не передан (т.е. реально хотим отозвать всё).
-    // При передаче currentSessionId фронт получит новые access-токены через refresh — и старые
-    // токены других сессий не пройдут проверку UserSession.revokedAt в getNewTokens.
-    if (!currentSessionId) {
-      const accessTtl = this.parseExpirySeconds(
-        this.configService.get("ACCESS_TOKEN_EXPIRES_IN") ?? "1h",
-      );
-      await this.redis.set(
-        `session:blacklist:${userId}`,
-        Date.now().toString(),
-        "EX",
-        accessTtl,
-      );
-    }
+    // Per-session blacklist for each revoked session so only those tokens
+    // are invalidated immediately without disrupting the current session.
+    const accessTtl = this.parseExpirySeconds(
+      this.configService.get("ACCESS_TOKEN_EXPIRES_IN") ?? "1h",
+    );
+    const now = Date.now().toString();
+    await Promise.all(
+      sessionsToRevoke.map((s) =>
+        this.redis.set(`session:blacklist:${s.id}`, now, "EX", accessTtl),
+      ),
+    );
 
-    return { success: true, revoked: result.count };
+    return { success: true, revoked: sessionsToRevoke.length };
   }
+
+  // A pre-computed argon2 hash of the string "dummy" used to perform a
+  // constant-time verification when the user is not found, preventing
+  // user-enumeration via response timing differences.
+  private static readonly DUMMY_HASH =
+    "$argon2id$v=19$m=19456,t=2,p=1$dummysaltdummysaltdummy$dummyhashvaluedummyhashvaluedummy";
 
   private async validateUser(dto: LoginDto) {
     const user = await this.prisma.user.findFirst({
@@ -358,11 +477,18 @@ export class AuthService {
       },
     });
 
-    if (!user) throw new NotFoundException({ code: ErrorCode.USER_NOT_FOUND, message: "The user not found" });
+    if (!user) {
+      // Always run verify even when user not found to equalise response time
+      // and prevent timing-based user enumeration (OWASP A07).
+      await verify(AuthService.DUMMY_HASH, dto.password).catch(() => undefined);
+      throw new UnauthorizedException({ code: ErrorCode.INVALID_CREDENTIALS, message: "Invalid credentials" });
+    }
 
     const isValid = await verify(user.password, dto.password);
 
-    if (!isValid) throw new UnauthorizedException({ code: ErrorCode.INVALID_PASSWORD, message: "Invalid password" });
+    if (!isValid) {
+      throw new UnauthorizedException({ code: ErrorCode.INVALID_CREDENTIALS, message: "Invalid credentials" });
+    }
 
     if (user.status === UserStatus.DELETED) {
       throw new ForbiddenException({ code: ErrorCode.ACCOUNT_SCHEDULED_FOR_DELETION, message: "Account scheduled for deletion. Contact support to restore." });

@@ -11,8 +11,8 @@ export const envValidationSchema = Joi.object({
   DATABASE_URL: Joi.string().uri({ scheme: ["postgres", "postgresql"] }).required(),
   REDIS_URL: Joi.string().uri({ scheme: ["redis", "rediss"] }).required(),
 
-  JWT_ACCESS_SECRET: Joi.string().min(16).required(),
-  JWT_REFRESH_SECRET: Joi.string().min(16).required(),
+  JWT_ACCESS_SECRET: Joi.string().min(32).required(),
+  JWT_REFRESH_SECRET: Joi.string().min(32).required(),
   ACCESS_TOKEN_EXPIRES_IN: Joi.string().required(),
   REFRESH_TOKEN_EXPIRES_IN: Joi.string().required(),
   EXPIRE_DAY_REFRESH_TOKEN: Joi.number().integer().min(1).default(7),
@@ -42,7 +42,7 @@ export const envValidationSchema = Joi.object({
   }),
   PASSWORD_RESET_TOKEN_TTL_HOURS: Joi.number().integer().min(1).max(168).default(24),
 
-  GEMINI_KEY_ENCRYPTION_SECRET: Joi.string().min(16).default("change-me-in-production-32-chars"),
+  GEMINI_KEY_ENCRYPTION_SECRET: Joi.string().min(32).optional().allow("", null),
 
   GEOIP_MMDB_PATH: Joi.string().optional().allow("", null),
 });
