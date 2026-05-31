@@ -33,7 +33,9 @@ async function bootstrap() {
   const port = configService.get<number>("PORT") ?? 9555;
   const frontendUrl =
     configService.get<string>("FRONTEND_URL") ?? "http://localhost:3000";
+  const frontendHttpsUrl = configService.get<string>("FRONTEND_HTTPS_URL");
   const frontendMobileUrl = configService.get<string>("FRONTEND_MOBILE_URL");
+  const frontendMobileHttpsUrl = configService.get<string>("FRONTEND_MOBILE_HTTPS_URL");
   const nodeEnv = configService.get<string>("NODE_ENV") ?? "development";
 
   app.use(helmet());
@@ -47,7 +49,12 @@ async function bootstrap() {
   // });
   app.use(cookieParser());
   app.enableCors({
-    origin: [frontendUrl, ...(frontendMobileUrl ? [frontendMobileUrl] : [])],
+    origin: [
+      frontendUrl,
+      ...(frontendHttpsUrl ? [frontendHttpsUrl] : []),
+      ...(frontendMobileUrl ? [frontendMobileUrl] : []),
+      ...(frontendMobileHttpsUrl ? [frontendMobileHttpsUrl] : []),
+    ],
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: [
