@@ -10,7 +10,7 @@ import {
   Post,
   Query,
 } from "@nestjs/common";
-import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from "@nestjs/swagger";
 import { PermissionCode, SuggestionStatus } from "@prisma/client";
 import { Auth } from "src/auth/decorators/auth.decorator";
 import { ErrorCode } from "src/common/errors/error-codes";
@@ -21,13 +21,28 @@ import { CreateSuggestionDto } from "./dto/create-suggestion.dto";
 import { ReviewSuggestionDto } from "./dto/review-suggestion.dto";
 
 const VALID_STATUSES = new Set(Object.values(SuggestionStatus));
+const VALID_TYPES = new Set(["entry", "text"]);
 
 const parseStatus = (raw?: string): SuggestionStatus | undefined => {
   if (!raw) return undefined;
   if (!VALID_STATUSES.has(raw as SuggestionStatus)) {
-    throw new BadRequestException({ code: ErrorCode.SUGGESTION_INVALID_STATUS, message: `Invalid status: ${raw}` });
+    throw new BadRequestException({
+      code: ErrorCode.SUGGESTION_INVALID_STATUS,
+      message: `Invalid status: ${raw}`,
+    });
   }
   return raw as SuggestionStatus;
+};
+
+const parseType = (raw?: string): "entry" | "text" | undefined => {
+  if (!raw) return undefined;
+  if (!VALID_TYPES.has(raw)) {
+    throw new BadRequestException({
+      code: ErrorCode.SUGGESTION_INVALID_TYPE,
+      message: `Invalid type: ${raw}. Allowed: entry, text`,
+    });
+  }
+  return raw as "entry" | "text";
 };
 
 @ApiTags("suggestions")
@@ -38,17 +53,16 @@ export class SuggestionsController {
   @Post()
   @Auth()
   @ApiBearerAuth()
-  @ApiOperation({ summary: "Отправить предложение правки к записи словаря" })
+  @ApiOperation({ summary: "Отправить предложение правки к записи словаря или тексту" })
   create(@User("id") userId: string, @Body() dto: CreateSuggestionDto) {
-    return this.suggestionsService.create(
-      userId,
-      dto.normalized,
-      dto.rawWord,
-      dto.currentTranslation,
-      dto.field,
-      dto.newValue,
-      dto.comment,
-    );
+    return this.suggestionsService.create(userId, dto.field, dto.newValue, {
+      normalized: dto.normalized,
+      rawWord: dto.rawWord,
+      currentTranslation: dto.currentTranslation,
+      entryId: dto.entryId,
+      textId: dto.textId,
+      comment: dto.comment,
+    });
   }
 
   @Get("my")
@@ -60,8 +74,16 @@ export class SuggestionsController {
     @Query("status") status?: string,
     @Query("limit", new DefaultValuePipe(20), ParseIntPipe) limit?: number,
     @Query("offset", new DefaultValuePipe(0), ParseIntPipe) offset?: number,
+    @Query("order") order?: string,
   ) {
-    return this.suggestionsService.getMySubmissions(userId, limit, offset, parseStatus(status));
+    const o = order === "asc" ? "asc" : "desc";
+    return this.suggestionsService.getMySubmissions(userId, limit, offset, parseStatus(status), o);
+  }
+
+  @Get("text-fields")
+  @ApiOperation({ summary: "Список полей текста, доступных для предложения правки" })
+  textFields() {
+    return this.suggestionsService.getTextFields();
   }
 
   @Get("stats")
@@ -76,15 +98,17 @@ export class SuggestionsController {
   @AdminPermission(PermissionCode.CAN_MANAGE_SUGGESTIONS)
   @ApiBearerAuth()
   @ApiOperation({ summary: "Список всех предложений (admin)" })
+  @ApiQuery({ name: "type", required: false, enum: ["entry", "text"], description: "Фильтр по типу: entry — правки слов, text — правки текстов" })
   list(
     @Query("status") status?: string,
     @Query("limit", new DefaultValuePipe(50), ParseIntPipe) limit?: number,
     @Query("offset", new DefaultValuePipe(0), ParseIntPipe) offset?: number,
     @Query("order") order?: string,
     @Query("q") q?: string,
+    @Query("type") type?: string,
   ) {
     const o = order === "asc" ? "asc" : "desc";
-    return this.suggestionsService.list(parseStatus(status), limit, offset, o, q);
+    return this.suggestionsService.list(parseStatus(status), limit, offset, o, q, parseType(type));
   }
 
   @Get(":id/adjacent")

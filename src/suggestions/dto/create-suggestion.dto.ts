@@ -1,26 +1,45 @@
 import { IsOptional, IsString, MinLength } from "class-validator";
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { ApiPropertyOptional } from "@nestjs/swagger";
 
 export class CreateSuggestionDto {
-  @ApiProperty({ description: "Нормализованная форма слова" })
+  // --- entry path (existing) ---
+
+  @ApiPropertyOptional({ description: "Нормализованная форма слова (только для entry-правок)" })
+  @IsOptional()
   @IsString()
   @MinLength(1)
-  normalized: string;
+  normalized?: string;
 
-  @ApiProperty({ description: "Оригинальное написание слова" })
+  @ApiPropertyOptional({ description: "Оригинальное написание слова (только для entry-правок)" })
+  @IsOptional()
   @IsString()
   @MinLength(1)
-  rawWord: string;
+  rawWord?: string;
 
-  @ApiProperty({ description: "Текущий перевод слова (для создания DictionaryEntry если её нет)" })
+  @ApiPropertyOptional({ description: "Текущий перевод слова (для создания DictionaryEntry если её нет)" })
+  @IsOptional()
   @IsString()
-  currentTranslation: string;
+  currentTranslation?: string;
 
-  @ApiProperty({ description: "Поле, которое нужно изменить (например: rawTranslate, notes)" })
+  @ApiPropertyOptional({ description: "ID записи словаря (альтернатива rawWord)" })
+  @IsOptional()
+  @IsString()
+  entryId?: string;
+
+  // --- text path (new) ---
+
+  @ApiPropertyOptional({ description: "ID текста (для правок метаданных текста)" })
+  @IsOptional()
+  @IsString()
+  textId?: string;
+
+  // --- shared ---
+
+  @ApiPropertyOptional({ description: "Поле, которое нужно изменить" })
   @IsString()
   field: string;
 
-  @ApiProperty({ description: "Предложенное новое значение" })
+  @ApiPropertyOptional({ description: "Предложенное новое значение" })
   @IsString()
   @MinLength(1)
   newValue: string;

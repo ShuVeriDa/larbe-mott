@@ -18861,7 +18861,7 @@
             "bearer": []
           }
         ],
-        "summary": "Отправить предложение правки к записи словаря",
+        "summary": "Отправить предложение правки к записи словаря или тексту",
         "tags": [
           "suggestions"
         ]
@@ -18906,6 +18906,19 @@
             "required": true,
             "in": "query",
             "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "type",
+            "required": false,
+            "in": "query",
+            "description": "Фильтр по типу: entry — правки слов, text — правки текстов",
+            "schema": {
+              "enum": [
+                "entry",
+                "text"
+              ],
               "type": "string"
             }
           }
@@ -18953,6 +18966,14 @@
             "schema": {
               "type": "number"
             }
+          },
+          {
+            "name": "order",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -18966,6 +18987,21 @@
           }
         ],
         "summary": "Мои предложения правок",
+        "tags": [
+          "suggestions"
+        ]
+      }
+    },
+    "/api/suggestions/text-fields": {
+      "get": {
+        "operationId": "SuggestionsController_textFields",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Список полей текста, доступных для предложения правки",
         "tags": [
           "suggestions"
         ]
@@ -19093,6 +19129,220 @@
         "summary": "Одобрить или отклонить предложение (admin)",
         "tags": [
           "suggestions"
+        ]
+      }
+    },
+    "/api/text-submissions": {
+      "post": {
+        "operationId": "TextSubmissionsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTextSubmissionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Предложить новый текст",
+        "tags": [
+          "text-submissions"
+        ]
+      },
+      "get": {
+        "operationId": "TextSubmissionsController_list",
+        "parameters": [
+          {
+            "name": "status",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "offset",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "order",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Список всех заявок (admin)",
+        "tags": [
+          "text-submissions"
+        ]
+      }
+    },
+    "/api/text-submissions/my": {
+      "get": {
+        "operationId": "TextSubmissionsController_my",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "offset",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Мои предложения текстов",
+        "tags": [
+          "text-submissions"
+        ]
+      }
+    },
+    "/api/text-submissions/stats": {
+      "get": {
+        "operationId": "TextSubmissionsController_stats",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Статистика заявок (admin)",
+        "tags": [
+          "text-submissions"
+        ]
+      }
+    },
+    "/api/text-submissions/{id}": {
+      "get": {
+        "operationId": "TextSubmissionsController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Одна заявка со связями (admin)",
+        "tags": [
+          "text-submissions"
+        ]
+      }
+    },
+    "/api/text-submissions/{id}/review": {
+      "post": {
+        "operationId": "TextSubmissionsController_review",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewTextSubmissionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Одобрить или отклонить заявку (admin)",
+        "tags": [
+          "text-submissions"
         ]
       }
     },
@@ -23838,19 +24088,27 @@
         "properties": {
           "normalized": {
             "type": "string",
-            "description": "Нормализованная форма слова"
+            "description": "Нормализованная форма слова (только для entry-правок)"
           },
           "rawWord": {
             "type": "string",
-            "description": "Оригинальное написание слова"
+            "description": "Оригинальное написание слова (только для entry-правок)"
           },
           "currentTranslation": {
             "type": "string",
             "description": "Текущий перевод слова (для создания DictionaryEntry если её нет)"
           },
+          "entryId": {
+            "type": "string",
+            "description": "ID записи словаря (альтернатива rawWord)"
+          },
+          "textId": {
+            "type": "string",
+            "description": "ID текста (для правок метаданных текста)"
+          },
           "field": {
             "type": "string",
-            "description": "Поле, которое нужно изменить (например: rawTranslate, notes)"
+            "description": "Поле, которое нужно изменить"
           },
           "newValue": {
             "type": "string",
@@ -23860,14 +24118,7 @@
             "type": "string",
             "description": "Комментарий автора правки"
           }
-        },
-        "required": [
-          "normalized",
-          "rawWord",
-          "currentTranslation",
-          "field",
-          "newValue"
-        ]
+        }
       },
       "ReviewSuggestionDto": {
         "type": "object",
@@ -23882,6 +24133,58 @@
           "comment": {
             "type": "string",
             "description": "Комментарий рецензента"
+          }
+        },
+        "required": [
+          "decision"
+        ]
+      },
+      "CreateTextSubmissionDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Название текста или книги"
+          },
+          "language": {
+            "type": "string",
+            "description": "Язык текста (che, ru, en, other)"
+          },
+          "author": {
+            "type": "string",
+            "description": "Автор текста"
+          },
+          "sourceUrl": {
+            "type": "string",
+            "description": "Ссылка на источник"
+          },
+          "content": {
+            "type": "string",
+            "description": "Текст (вставка), максимум 100 000 символов"
+          },
+          "comment": {
+            "type": "string",
+            "description": "Комментарий автора"
+          }
+        },
+        "required": [
+          "title",
+          "language"
+        ]
+      },
+      "ReviewTextSubmissionDto": {
+        "type": "object",
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approve",
+              "reject"
+            ]
+          },
+          "reviewComment": {
+            "type": "string",
+            "description": "Комментарий редактора"
           }
         },
         "required": [

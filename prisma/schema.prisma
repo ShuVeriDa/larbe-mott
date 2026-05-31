@@ -44,6 +44,8 @@ model User {
   reviewedSuggestions      Suggestion[]                 @relation("SuggestionReviewer")
   authoredSuggestions      Suggestion[]                 @relation("SuggestionAuthor")
   texts                    Text[]                       @relation("text")
+  textSubmissions          TextSubmission[]             @relation("TextSubmissionAuthor")
+  reviewedTextSubmissions  TextSubmission[]             @relation("TextSubmissionReviewer")
   initiatedVersions        TextProcessingVersion[]      @relation("VersionInitiator")
   tokenizationJobs         TokenizationJob[]            @relation("TokenizationJobInitiator")
   deckCards                UserDeckCard[]               @relation("UserDeckCards")
@@ -638,6 +640,7 @@ model Text {
   exampleSources     Example[]               @relation("ExampleSourceText")
   feedbackReactions  FeedbackReaction[]      @relation("TextFeedbackReactions")
   feedbackThreads    FeedbackThread[]        @relation("TextFeedbackThreads")
+  suggestions        Suggestion[]            @relation("SuggestionText")
   createdBy          User                    @relation("text", fields: [createdById], references: [id], onDelete: Cascade)
   pages              TextPage[]
   phraseOccurrences  TextPhraseOccurrence[]
@@ -1336,7 +1339,8 @@ model LegalDocument {
 model Suggestion {
   id            String           @id @default(uuid())
   userId        String
-  entryId       String
+  entryId       String?
+  textId        String?
   normalized    String?
   field         String
   oldValue      String?
@@ -1347,14 +1351,22 @@ model Suggestion {
   reviewedAt    DateTime?
   reviewComment String?
   createdAt     DateTime         @default(now())
-  entry         DictionaryEntry  @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  entry         DictionaryEntry? @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  text          Text?            @relation("SuggestionText", fields: [textId], references: [id], onDelete: Cascade)
   reviewer      User?            @relation("SuggestionReviewer", fields: [reviewedBy], references: [id])
   user          User             @relation("SuggestionAuthor", fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([entryId])
+  @@index([textId])
   @@index([status])
   @@map("suggestion")
+}
+
+enum TextSubmissionStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 enum DictionarySource {
@@ -1656,6 +1668,29 @@ enum FeedbackAuthorType {
 enum FeedbackMessageType {
   PUBLIC_REPLY
   INTERNAL_NOTE
+}
+
+model TextSubmission {
+  id            String                @id @default(uuid())
+  userId        String
+  title         String
+  language      String
+  author        String?
+  sourceUrl     String?
+  content       String?               @db.Text
+  comment       String?
+  status        TextSubmissionStatus  @default(PENDING)
+  reviewedBy    String?
+  reviewedAt    DateTime?
+  reviewComment String?
+  createdAt     DateTime              @default(now())
+
+  user          User                  @relation("TextSubmissionAuthor", fields: [userId], references: [id], onDelete: Cascade)
+  reviewer      User?                 @relation("TextSubmissionReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([status])
+  @@map("text_submission")
 }
 
 model TrackingEvent {

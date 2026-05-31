@@ -14,54 +14,185 @@ const EDITABLE_FIELDS = [
   "notes",
 ] as const;
 
+export const TEXT_EDITABLE_FIELDS = [
+  "title",
+  "author",
+  "source",
+  "description",
+  "notes",
+] as const;
+
+type SuggestionType = "entry" | "text";
+
+const textInclude = { select: { id: true, title: true } } as const;
+const entryInclude = { select: { id: true, rawWord: true } } as const;
+
 @Injectable()
 export class SuggestionsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(
     userId: string,
-    normalized: string,
-    rawWord: string,
-    currentTranslation: string,
     field: string,
     newValue: string,
+    opts: {
+      // entry path
+      normalized?: string;
+      rawWord?: string;
+      currentTranslation?: string;
+      entryId?: string;
+      // text path
+      textId?: string;
+      comment?: string;
+    },
+  ) {
+    const { textId, entryId, normalized, rawWord, currentTranslation, comment } = opts;
+
+    if (textId) {
+      return this.createTextSuggestion(userId, textId, field, newValue, comment);
+    }
+
+    return this.createEntrySuggestion(
+      userId,
+      field,
+      newValue,
+      { normalized, rawWord, currentTranslation, entryId },
+      comment,
+    );
+  }
+
+  private async createEntrySuggestion(
+    userId: string,
+    field: string,
+    newValue: string,
+    opts: {
+      normalized?: string;
+      rawWord?: string;
+      currentTranslation?: string;
+      entryId?: string;
+    },
     comment?: string,
   ) {
     if (!EDITABLE_FIELDS.includes(field as (typeof EDITABLE_FIELDS)[number])) {
-      throw new BadRequestException({ code: ErrorCode.SUGGESTION_FIELD_NOT_EDITABLE, message: `Field "${field}" is not editable. Allowed: ${EDITABLE_FIELDS.join(", ")}` });
+      throw new BadRequestException({
+        code: ErrorCode.SUGGESTION_FIELD_NOT_EDITABLE,
+        message: `Field "${field}" is not editable. Allowed: ${EDITABLE_FIELDS.join(", ")}`,
+      });
     }
 
-    // Upsert DictionaryEntry by rawWord so suggestions always have a target entry
-    const entry = await this.prisma.dictionaryEntry.upsert({
-      where: { rawWord },
-      update: {},
-      create: { rawWord, rawTranslate: currentTranslation || rawWord },
-    });
+    let entry: { id: string; [key: string]: unknown };
+
+    if (opts.entryId) {
+      const found = await this.prisma.dictionaryEntry.findUnique({ where: { id: opts.entryId } });
+      if (!found) {
+        throw new NotFoundException({
+          code: ErrorCode.DICTIONARY_ENTRY_NOT_FOUND,
+          message: `DictionaryEntry #${opts.entryId} not found`,
+        });
+      }
+      entry = found as { id: string; [key: string]: unknown };
+    } else {
+      if (!opts.rawWord) {
+        throw new BadRequestException({
+          code: ErrorCode.SUGGESTION_NO_TARGET,
+          message: "Provide either entryId or rawWord for an entry suggestion",
+        });
+      }
+      entry = (await this.prisma.dictionaryEntry.upsert({
+        where: { rawWord: opts.rawWord },
+        update: {},
+        create: {
+          rawWord: opts.rawWord,
+          rawTranslate: opts.currentTranslation || opts.rawWord,
+        },
+      })) as { id: string; [key: string]: unknown };
+    }
 
     const existing = await this.prisma.suggestion.findFirst({
       where: { userId, entryId: entry.id, field, status: SuggestionStatus.PENDING },
       select: { id: true },
     });
-    if (existing) throw new BadRequestException({ code: ErrorCode.SUGGESTION_PENDING_EXISTS, message: "You already have a pending suggestion for this field" });
+    if (existing) {
+      throw new BadRequestException({
+        code: ErrorCode.SUGGESTION_PENDING_EXISTS,
+        message: "You already have a pending suggestion for this field",
+      });
+    }
 
-    const rawVal = entry[field as keyof typeof entry];
+    const rawVal = entry[field];
     const oldValue = rawVal != null ? JSON.stringify(rawVal) : null;
 
     return this.prisma.suggestion.create({
-      data: { userId, entryId: entry.id, normalized, field, oldValue, newValue, comment },
+      data: {
+        userId,
+        entryId: entry.id,
+        normalized: opts.normalized,
+        field,
+        oldValue,
+        newValue,
+        comment,
+      },
     });
   }
 
-  async getMySubmissions(userId: string, limit = 20, offset = 0, status?: SuggestionStatus) {
+  private async createTextSuggestion(
+    userId: string,
+    textId: string,
+    field: string,
+    newValue: string,
+    comment?: string,
+  ) {
+    if (!TEXT_EDITABLE_FIELDS.includes(field as (typeof TEXT_EDITABLE_FIELDS)[number])) {
+      throw new BadRequestException({
+        code: ErrorCode.SUGGESTION_FIELD_NOT_EDITABLE,
+        message: `Field "${field}" is not editable for texts. Allowed: ${TEXT_EDITABLE_FIELDS.join(", ")}`,
+      });
+    }
+
+    const text = await this.prisma.text.findUnique({ where: { id: textId } });
+    if (!text) {
+      throw new NotFoundException({
+        code: ErrorCode.TEXT_NOT_FOUND,
+        message: `Text #${textId} not found`,
+      });
+    }
+
+    const existing = await this.prisma.suggestion.findFirst({
+      where: { userId, textId, field, status: SuggestionStatus.PENDING },
+      select: { id: true },
+    });
+    if (existing) {
+      throw new BadRequestException({
+        code: ErrorCode.SUGGESTION_PENDING_EXISTS,
+        message: "You already have a pending suggestion for this field",
+      });
+    }
+
+    const rawVal = (text as Record<string, unknown>)[field];
+    const oldValue = rawVal != null ? String(rawVal) : null;
+
+    return this.prisma.suggestion.create({
+      data: { userId, textId, field, oldValue, newValue, comment },
+    });
+  }
+
+  async getMySubmissions(
+    userId: string,
+    limit = 20,
+    offset = 0,
+    status?: SuggestionStatus,
+    order: "asc" | "desc" = "desc",
+  ) {
     const where: Prisma.SuggestionWhereInput = { userId, ...(status && { status }) };
     const [data, total] = await Promise.all([
       this.prisma.suggestion.findMany({
         where,
         include: {
-          entry: { select: { id: true, rawWord: true } },
+          entry: entryInclude,
+          text: textInclude,
           reviewer: { select: { id: true, name: true, username: true } },
         },
-        orderBy: { createdAt: "desc" },
+        orderBy: { createdAt: order },
         take: limit,
         skip: offset,
       }),
@@ -76,12 +207,22 @@ export class SuggestionsService {
     offset = 0,
     order: "asc" | "desc" = "desc",
     q?: string,
+    type?: SuggestionType,
   ) {
+    const typeFilter: Prisma.SuggestionWhereInput =
+      type === "entry"
+        ? { entryId: { not: null } }
+        : type === "text"
+          ? { textId: { not: null } }
+          : {};
+
     const where: Prisma.SuggestionWhereInput = {
       ...(status && { status }),
+      ...typeFilter,
       ...(q && {
         OR: [
           { entry: { rawWord: { contains: q, mode: "insensitive" } } },
+          { text: { title: { contains: q, mode: "insensitive" } } },
           { user: { username: { contains: q, mode: "insensitive" } } },
           { user: { name: { contains: q, mode: "insensitive" } } },
         ],
@@ -93,7 +234,8 @@ export class SuggestionsService {
         where,
         include: {
           user: { select: { id: true, username: true, name: true } },
-          entry: { select: { id: true, rawWord: true } },
+          entry: entryInclude,
+          text: textInclude,
           reviewer: { select: { id: true, username: true, name: true } },
         },
         orderBy: { createdAt: order },
@@ -124,10 +266,16 @@ export class SuggestionsService {
       include: {
         user: { select: { id: true, username: true, name: true } },
         reviewer: { select: { id: true, username: true, name: true } },
-        entry: { select: { id: true, rawWord: true } },
+        entry: entryInclude,
+        text: textInclude,
       },
     });
-    if (!s) throw new NotFoundException({ code: ErrorCode.SUGGESTION_NOT_FOUND, message: `Suggestion #${id} not found` });
+    if (!s) {
+      throw new NotFoundException({
+        code: ErrorCode.SUGGESTION_NOT_FOUND,
+        message: `Suggestion #${id} not found`,
+      });
+    }
     return s;
   }
 
@@ -136,7 +284,12 @@ export class SuggestionsService {
       where: { id },
       select: { createdAt: true },
     });
-    if (!current) throw new NotFoundException({ code: ErrorCode.SUGGESTION_NOT_FOUND, message: `Suggestion #${id} not found` });
+    if (!current) {
+      throw new NotFoundException({
+        code: ErrorCode.SUGGESTION_NOT_FOUND,
+        message: `Suggestion #${id} not found`,
+      });
+    }
 
     const statusFilter = status ? { status } : {};
 
@@ -144,18 +297,30 @@ export class SuggestionsService {
       this.prisma.suggestion.findFirst({
         where: { ...statusFilter, createdAt: { lt: current.createdAt } },
         orderBy: { createdAt: "desc" },
-        select: { id: true, entry: { select: { rawWord: true } } },
+        select: {
+          id: true,
+          entry: { select: { rawWord: true } },
+          text: { select: { title: true } },
+        },
       }),
       this.prisma.suggestion.findFirst({
         where: { ...statusFilter, createdAt: { gt: current.createdAt } },
         orderBy: { createdAt: "asc" },
-        select: { id: true, entry: { select: { rawWord: true } } },
+        select: {
+          id: true,
+          entry: { select: { rawWord: true } },
+          text: { select: { title: true } },
+        },
       }),
     ]);
 
     return {
-      prev: prev ? { id: prev.id, entry: { word: prev.entry.rawWord } } : null,
-      next: next ? { id: next.id, entry: { word: next.entry.rawWord } } : null,
+      prev: prev
+        ? { id: prev.id, label: prev.entry?.rawWord ?? prev.text?.title ?? null }
+        : null,
+      next: next
+        ? { id: next.id, label: next.entry?.rawWord ?? next.text?.title ?? null }
+        : null,
     };
   }
 
@@ -168,10 +333,18 @@ export class SuggestionsService {
     const suggestion = await this.prisma.suggestion.findUnique({
       where: { id: suggestionId },
     });
-    if (!suggestion)
-      throw new NotFoundException({ code: ErrorCode.SUGGESTION_NOT_FOUND, message: `Suggestion #${suggestionId} not found` });
-    if (suggestion.status !== SuggestionStatus.PENDING)
-      throw new BadRequestException({ code: ErrorCode.SUGGESTION_ALREADY_REVIEWED, message: "Suggestion has already been reviewed" });
+    if (!suggestion) {
+      throw new NotFoundException({
+        code: ErrorCode.SUGGESTION_NOT_FOUND,
+        message: `Suggestion #${suggestionId} not found`,
+      });
+    }
+    if (suggestion.status !== SuggestionStatus.PENDING) {
+      throw new BadRequestException({
+        code: ErrorCode.SUGGESTION_ALREADY_REVIEWED,
+        message: "Suggestion has already been reviewed",
+      });
+    }
 
     const newStatus =
       decision === "approve" ? SuggestionStatus.APPROVED : SuggestionStatus.REJECTED;
@@ -188,30 +361,44 @@ export class SuggestionsService {
       });
 
       if (decision === "approve") {
-        let parsedValue: unknown;
-        try {
-          parsedValue = JSON.parse(suggestion.newValue);
-        } catch {
-          parsedValue = suggestion.newValue;
-        }
-
-        // Apply to DictionaryEntry (source of truth for admin dict)
-        await tx.dictionaryEntry.update({
-          where: { id: suggestion.entryId },
-          data: { [suggestion.field]: parsedValue },
-        });
-
-        // If translation field changed — propagate to DictionaryCache so readers see it immediately
-        if (suggestion.field === "rawTranslate" && suggestion.normalized) {
-          await tx.dictionaryCache.upsert({
-            where: { normalized: suggestion.normalized },
-            update: { translation: String(parsedValue) },
-            create: { normalized: suggestion.normalized, translation: String(parsedValue) },
+        if (suggestion.textId) {
+          // Apply field change to Text model
+          await tx.text.update({
+            where: { id: suggestion.textId },
+            data: { [suggestion.field]: suggestion.newValue },
           });
+        } else if (suggestion.entryId) {
+          let parsedValue: unknown;
+          try {
+            parsedValue = JSON.parse(suggestion.newValue);
+          } catch {
+            parsedValue = suggestion.newValue;
+          }
+
+          await tx.dictionaryEntry.update({
+            where: { id: suggestion.entryId },
+            data: { [suggestion.field]: parsedValue },
+          });
+
+          // Propagate translation change to DictionaryCache so readers see it immediately
+          if (suggestion.field === "rawTranslate" && suggestion.normalized) {
+            await tx.dictionaryCache.upsert({
+              where: { normalized: suggestion.normalized },
+              update: { translation: String(parsedValue) },
+              create: {
+                normalized: suggestion.normalized,
+                translation: String(parsedValue),
+              },
+            });
+          }
         }
       }
 
       return updated;
     });
+  }
+
+  getTextFields() {
+    return { fields: [...TEXT_EDITABLE_FIELDS] };
   }
 }

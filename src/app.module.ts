@@ -37,6 +37,7 @@ import { UserModule } from "./user/user.module";
 import { WordsModule } from "./words/words.module";
 import { DictionaryExportModule } from "./dictionary-export/dictionary-export.module";
 import { SuggestionsModule } from "./suggestions/suggestions.module";
+import { TextSubmissionsModule } from "./text-submissions/text-submissions.module";
 import { TrackingModule } from "./tracking/tracking.module";
 import { ReaderContextModule } from "./reader-context/reader-context.module";
 import { envValidationSchema } from "./config/env.validation";
@@ -93,6 +94,7 @@ import { envValidationSchema } from "./config/env.validation";
     AiTranslationModule,
     DictionaryExportModule,
     SuggestionsModule,
+    TextSubmissionsModule,
     TrackingModule,
     ReaderContextModule,
   ],
