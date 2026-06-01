@@ -1,9 +1,13 @@
 import { Injectable } from "@nestjs/common";
+import { Level } from "@prisma/client";
 import { AnalyticsService } from "src/analytics/analytics.service";
 import { PrismaService } from "src/prisma.service";
 import { SubscriptionService } from "src/subscription/subscription.service";
 import { TextService } from "src/text/text.service";
 import { UserService } from "src/user/user.service";
+
+const SHORT_TEXT_MAX_WORDS = 400;
+const SECTION_LIMIT = 10;
 
 @Injectable()
 export class DashboardService {
@@ -16,16 +20,42 @@ export class DashboardService {
   ) {}
 
   async getDashboard(userId: string) {
-    // Fetch subscription once and share it across plan snapshot and the response.
-    const [stats, continueReading, dictionaryStats, translationsToday, user, subscription] =
-      await Promise.all([
-        this.analyticsService.getUserAnalytics(userId),
-        this.textService.getContinueReading(userId),
-        this.getDictionaryStats(userId),
-        this.getTranslationsToday(userId),
-        this.userService.getUserById(userId),
-        this.subscriptionService.getMySubscription(userId),
-      ]);
+    const user = await this.userService.getUserById(userId);
+    const userLevel = user?.level ?? null;
+
+    const [
+      stats,
+      continueReading,
+      dictionaryStats,
+      translationsToday,
+      subscription,
+      recentTexts,
+      popularTexts,
+      shortTexts,
+      byLevelTexts,
+    ] = await Promise.all([
+      this.analyticsService.getUserAnalytics(userId),
+      this.textService.getContinueReading(userId),
+      this.getDictionaryStats(userId),
+      this.getTranslationsToday(userId),
+      this.subscriptionService.getMySubscription(userId),
+      // Recent texts — newest first
+      this.textService.getTexts({ orderBy: "newest", limit: SECTION_LIMIT }, userId),
+      // Popular texts — by reader count
+      this.textService.getTexts({ orderBy: "popular", limit: SECTION_LIMIT }, userId),
+      // Short texts — up to SHORT_TEXT_MAX_WORDS words, sorted shortest first
+      this.textService.getTexts(
+        { orderBy: "length", limit: SECTION_LIMIT * 2, maxWords: SHORT_TEXT_MAX_WORDS },
+        userId,
+      ),
+      // Texts matching user's level (null → skip)
+      userLevel
+        ? this.textService.getTexts(
+            { orderBy: "newest", levels: [userLevel as Level], limit: SECTION_LIMIT },
+            userId,
+          )
+        : Promise.resolve(null),
+    ]);
 
     return {
       user,
@@ -41,6 +71,13 @@ export class DashboardService {
       },
       continueReading,
       plan: this.buildPlanSnapshot(subscription, translationsToday),
+      sections: {
+        recentTexts: recentTexts.items,
+        popularTexts: popularTexts.items,
+        shortTexts: shortTexts.items.slice(0, SECTION_LIMIT),
+        byLevelTexts: byLevelTexts?.items ?? [],
+        userLevel,
+      },
     };
   }
 

@@ -606,6 +606,18 @@ model Tag {
   @@map("tag")
 }
 
+model Genre {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  slug      String   @unique
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  texts     Text[]
+
+  @@map("genre")
+}
+
 model TextTag {
   textId String
   tagId  String
@@ -634,6 +646,7 @@ model Text {
   autoTokenizeOnSave Boolean                 @default(true)
   useNormalization   Boolean                 @default(true)
   useMorphAnalysis   Boolean                 @default(false)
+  genreId            String?
   createdById        String
   createdAt          DateTime                @default(now())
   updatedAt          DateTime                @updatedAt
@@ -642,6 +655,7 @@ model Text {
   feedbackThreads    FeedbackThread[]        @relation("TextFeedbackThreads")
   suggestions        Suggestion[]            @relation("SuggestionText")
   createdBy          User                    @relation("text", fields: [createdById], references: [id], onDelete: Cascade)
+  genre              Genre?                  @relation(fields: [genreId], references: [id], onDelete: SetNull)
   pages              TextPage[]
   phraseOccurrences  TextPhraseOccurrence[]
   processingVersions TextProcessingVersion[]

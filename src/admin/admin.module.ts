@@ -32,6 +32,8 @@ import { AdminFeedbackController } from "./feedback/admin-feedback.controller";
 import { AdminFeedbackService } from "./feedback/admin-feedback.service";
 import { AdminTagsController } from "./tags/admin-tags.controller";
 import { AdminTagsService } from "./tags/admin-tags.service";
+import { AdminGenresController } from "./genres/admin-genres.controller";
+import { AdminGenresService } from "./genres/admin-genres.service";
 import { AdminPhrasebookController } from "./phrasebook/admin-phrasebook.controller";
 import { AdminPhrasebookService } from "./phrasebook/admin-phrasebook.service";
 import { AdminDashboardController } from "./dashboard/admin-dashboard.controller";
@@ -79,6 +81,7 @@ import { DictionaryExportService } from "src/dictionary-export/dictionary-export
     AdminMorphologyController,
     AdminFeedbackController,
     AdminTagsController,
+    AdminGenresController,
     AdminPhrasebookController,
     AdminDashboardController,
     AdminTokenizationController,
@@ -93,6 +96,7 @@ import { DictionaryExportService } from "src/dictionary-export/dictionary-export
     AdminService,
     AdminTextService,
     AdminTagsService,
+    AdminGenresService,
     AdminTokenService,
     AdminUnknownWordsService,
     AdminUsersService,

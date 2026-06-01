@@ -552,7 +552,7 @@
             "name": "orderBy",
             "required": false,
             "in": "query",
-            "description": "Sort order. Default: newest. 'level' sorts A→C.",
+            "description": "Sort order. Default: newest. 'level' sorts A→C. 'popular' sorts by reader count. 'length' sorts shortest first.",
             "schema": {
               "enum": [
                 "newest",
@@ -560,7 +560,8 @@
                 "alpha",
                 "progress",
                 "length",
-                "level"
+                "level",
+                "popular"
               ],
               "type": "string"
             }
@@ -588,6 +589,24 @@
             "required": false,
             "in": "query",
             "description": "Items per page (default 20, max 50)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "maxWords",
+            "required": false,
+            "in": "query",
+            "description": "Filter: only texts with wordCount ≤ maxWords",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "genreId",
+            "required": false,
+            "in": "query",
+            "description": "Filter by genre ID",
             "schema": {
               "type": "string"
             }
@@ -12702,6 +12721,159 @@
         ]
       }
     },
+    "/api/admin/genres": {
+      "get": {
+        "operationId": "AdminGenresController_getAllGenres",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Array of genres with id, name, slug, sortOrder, _count.texts."
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "CAN_EDIT_TEXTS permission required."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List all genres with text count",
+        "tags": [
+          "admin/genres"
+        ]
+      },
+      "post": {
+        "operationId": "AdminGenresController_createGenre",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateGenreDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Genre created."
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "CAN_EDIT_TEXTS permission required."
+          },
+          "409": {
+            "description": "Genre with this name or slug already exists."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a genre",
+        "tags": [
+          "admin/genres"
+        ]
+      }
+    },
+    "/api/admin/genres/{id}": {
+      "patch": {
+        "operationId": "AdminGenresController_updateGenre",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Genre ID (UUID)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateGenreDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Genre updated."
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "CAN_EDIT_TEXTS permission required."
+          },
+          "404": {
+            "description": "Genre not found."
+          },
+          "409": {
+            "description": "Genre with this name or slug already exists."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update a genre",
+        "tags": [
+          "admin/genres"
+        ]
+      },
+      "delete": {
+        "description": "Sets genreId to null on all associated texts.",
+        "operationId": "AdminGenresController_deleteGenre",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Genre ID (UUID)",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Genre deleted."
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "CAN_EDIT_TEXTS permission required."
+          },
+          "404": {
+            "description": "Genre not found."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a genre",
+        "tags": [
+          "admin/genres"
+        ]
+      }
+    },
     "/api/admin/phrasebook/categories": {
       "get": {
         "operationId": "AdminPhrasebookController_getCategories",
@@ -16663,7 +16835,7 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": "stats: { textsRead, wordsInDictionary, streak, streakRecord, streakDays, dueToday: { total, new, learning }, words }, continueReading: [], plan: { code, name, type, status, isPremium, translationsToday, translationsLimit }"
+            "description": "stats, continueReading, plan, sections: { recentTexts, popularTexts, shortTexts, byLevelTexts, userLevel }. All text sections are pre-fetched server-side to avoid waterfall requests from the client."
           },
           "401": {
             "description": "Missing or invalid bearer token"
@@ -19386,6 +19558,22 @@
           "reader-context"
         ]
       }
+    },
+    "/api/genres": {
+      "get": {
+        "description": "Returns all genres ordered by sortOrder. Public endpoint.",
+        "operationId": "GenreController_getAllGenres",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Array of { id, name, slug, sortOrder }."
+          }
+        },
+        "summary": "List all genres",
+        "tags": [
+          "genres"
+        ]
+      }
     }
   },
   "info": {
@@ -20277,6 +20465,10 @@
             "description": "Cover image URL. Either a full URL (https://...) or a relative path returned by POST /admin/uploads/cover (e.g. /uploads/covers/foo.png).",
             "nullable": true
           },
+          "genreId": {
+            "type": "string",
+            "description": "Genre ID (UUID)"
+          },
           "tagIds": {
             "description": "Array of tag UUIDs to assign to the text.",
             "example": [
@@ -20518,6 +20710,11 @@
             "items": {
               "$ref": "#/components/schemas/CreateTextPageDto"
             }
+          },
+          "genreId": {
+            "type": "object",
+            "nullable": true,
+            "description": "Genre ID (UUID). Pass null to remove."
           },
           "tagIds": {
             "description": "Array of tag UUIDs to assign to the text. If `tagIds` and/or `tagNames` is sent, ALL existing tags on the text are replaced with the union of resolved IDs.",
@@ -22905,6 +23102,44 @@
         "required": [
           "name"
         ]
+      },
+      "CreateGenreDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Поэзия"
+          },
+          "slug": {
+            "type": "string",
+            "example": "poetry"
+          },
+          "sortOrder": {
+            "type": "number",
+            "example": 1
+          }
+        },
+        "required": [
+          "name",
+          "slug"
+        ]
+      },
+      "UpdateGenreDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Поэзия"
+          },
+          "slug": {
+            "type": "string",
+            "example": "poetry"
+          },
+          "sortOrder": {
+            "type": "number",
+            "example": 1
+          }
+        }
       },
       "CreatePhrasebookCategoryDto": {
         "type": "object",

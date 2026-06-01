@@ -76,13 +76,15 @@ export class TextController {
   })
   @ApiQuery({
     name: "orderBy",
-    enum: ["newest", "oldest", "alpha", "progress", "length", "level"],
+    enum: ["newest", "oldest", "alpha", "progress", "length", "level", "popular"],
     required: false,
-    description: "Sort order. Default: newest. 'level' sorts A→C.",
+    description: "Sort order. Default: newest. 'level' sorts A→C. 'popular' sorts by reader count. 'length' sorts shortest first.",
   })
   @ApiQuery({ name: "search", required: false, description: "Search by title or author" })
   @ApiQuery({ name: "page", required: false, description: "Page number (default 1)" })
   @ApiQuery({ name: "limit", required: false, description: "Items per page (default 20, max 50)" })
+  @ApiQuery({ name: "maxWords", required: false, description: "Filter: only texts with wordCount ≤ maxWords" })
+  @ApiQuery({ name: "genreId", required: false, description: "Filter by genre ID" })
   @ApiOkResponse({
     description: "{ items: Text[], page, limit, counts: { total, new, inProgress, completed } }",
     type: GetTextsResponseDto,
@@ -96,6 +98,8 @@ export class TextController {
     @Query("search") search?: string,
     @Query("page") page?: string,
     @Query("limit") limit?: string,
+    @Query("maxWords") maxWords?: string,
+    @Query("genreId") genreId?: string,
     @User("id") userId?: string,
   ) {
     const languages = language ? (Array.isArray(language) ? language : [language]) : [];
@@ -103,6 +107,7 @@ export class TextController {
     const tagIds = tagId ? (Array.isArray(tagId) ? tagId : [tagId]) : [];
     const parsedPage = Number.parseInt(page ?? "", 10);
     const parsedLimit = Number.parseInt(limit ?? "", 10);
+    const parsedMaxWords = Number.parseInt(maxWords ?? "", 10);
     return this.textService.getTexts(
       {
         languages,
@@ -113,6 +118,8 @@ export class TextController {
         search,
         page: Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1,
         limit: Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : 20,
+        maxWords: Number.isFinite(parsedMaxWords) && parsedMaxWords > 0 ? parsedMaxWords : undefined,
+        genreId: genreId || undefined,
       },
       userId,
     );

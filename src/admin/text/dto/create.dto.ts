@@ -127,6 +127,11 @@ export class CreateTextDto {
   })
   imageUrl?: string | null;
 
+  @ApiProperty({ required: false, description: "Genre ID (UUID)" })
+  @IsOptional()
+  @IsUUID("4")
+  genreId?: string;
+
   @ApiProperty({
     type: [String],
     description: "Array of tag UUIDs to assign to the text.",

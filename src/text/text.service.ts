@@ -16,17 +16,19 @@ import { RedisService } from "src/redis/redis.service";
 import { ReportTextDto, TextReportReason } from "./dto/report-text.dto";
 
 export type TextProgressStatus = "NEW" | "IN_PROGRESS" | "COMPLETED";
-export type TextSortOrder = "newest" | "oldest" | "alpha" | "progress" | "length" | "level";
+export type TextSortOrder = "newest" | "oldest" | "alpha" | "progress" | "length" | "level" | "popular";
 
 export interface GetTextsQuery {
   languages?: Language[];
   levels?: Level[];
   tagIds?: string[];
+  genreId?: string;
   status?: TextProgressStatus;
   orderBy?: TextSortOrder;
   search?: string;
   page?: number;
   limit?: number;
+  maxWords?: number;
 }
 
 const WORDS_PER_MINUTE = 200;
@@ -83,11 +85,13 @@ export class TextService {
       languages,
       levels,
       tagIds,
+      genreId,
       status,
       orderBy = "newest",
       search,
       page = 1,
       limit = 20,
+      maxWords,
     } = query;
     const safeLimit = Math.min(50, Math.max(1, limit));
     const safePage = Math.max(1, page);
@@ -99,6 +103,7 @@ export class TextService {
       ...(tagIds?.length
         ? { tags: { some: { tagId: { in: tagIds } } } }
         : {}),
+      ...(genreId ? { genreId } : {}),
       ...(search
         ? {
             OR: [
@@ -109,23 +114,49 @@ export class TextService {
         : {}),
     };
 
+    // For "popular" sort we need a separate aggregation pass first to get
+    // reader counts, then reorder ids. Use a larger fetch window and re-rank.
+    const isPopular = orderBy === "popular";
+
+    // popular: fetch IDs ranked by reader count using a raw groupBy aggregate,
+    // then pull the actual text rows in that order.
+    let popularTextIds: string[] | null = null;
+    if (isPopular) {
+      const counts = await this.prisma.userTextProgress.groupBy({
+        by: ["textId"],
+        _count: { userId: true },
+        orderBy: { _count: { userId: "desc" } },
+        take: Math.min(safeLimit * 3, 150), // over-fetch to account for where filters
+      });
+      popularTextIds = counts.map((c) => c.textId);
+    }
+
+    const dbOrderBy = isPopular
+      ? { createdAt: "desc" as const }
+      : orderBy === "alpha"
+        ? { title: "asc" as const }
+        : orderBy === "oldest"
+          ? { createdAt: "asc" as const }
+          : orderBy === "level"
+            ? { level: "asc" as const }
+            : { createdAt: "desc" as const };
+
+    const whereWithPopular = isPopular && popularTextIds
+      ? { ...where, id: { in: popularTextIds } }
+      : where;
+
     const [texts, total] = await Promise.all([
       this.prisma.text.findMany({
-        where,
+        where: whereWithPopular,
         include: {
           tags: { include: { tag: { select: { id: true, name: true } } } },
+          genre: { select: { id: true, name: true, slug: true } },
         },
-        skip,
-        take: safeLimit,
-        orderBy: orderBy === "alpha"
-          ? { title: "asc" }
-          : orderBy === "oldest"
-            ? { createdAt: "asc" }
-            : orderBy === "level"
-              ? { level: "asc" }
-              : { createdAt: "desc" },
+        skip: isPopular ? 0 : skip,   // popular: re-slice after rank sort
+        take: isPopular ? safeLimit * 3 : safeLimit,
+        orderBy: dbOrderBy,
       }),
-      this.prisma.text.count({ where }),
+      this.prisma.text.count({ where: whereWithPopular }),
     ]);
 
     // Глобальные счётчики по всей выборке (without status filter), чтобы stats row
@@ -225,14 +256,25 @@ export class TextService {
       items = items.filter((item) => item.progressStatus === status);
     }
 
+    // Фильтр по максимальному числу слов (wordCount вычисляется постфактум)
+    if (maxWords && maxWords > 0) {
+      items = items.filter((item) => item.wordCount <= maxWords);
+    }
+
     // Постсортировка для полей, недоступных в SQL-запросе:
     // - "progress": progressPercent хранится в отдельной таблице (LEFT JOIN усложнит запрос)
     // - "length": wordCount вычисляется из textToken и не хранится в Text
+    // - "popular": ранжируем по popularTextIds (уже отсортированы по reader count)
     // "level" сортируется на стороне DB (enum A1<A2<B1… алфавитно корректен).
     if (orderBy === "progress" && userId) {
       items.sort((a, b) => b.progressPercent - a.progressPercent);
     } else if (orderBy === "length") {
-      items.sort((a, b) => b.wordCount - a.wordCount);
+      items.sort((a, b) => a.wordCount - b.wordCount);
+    } else if (isPopular && popularTextIds) {
+      const rankMap = new Map(popularTextIds.map((id, i) => [id, i]));
+      items.sort((a, b) => (rankMap.get(a.id) ?? 999) - (rankMap.get(b.id) ?? 999));
+      // Apply manual pagination after re-ranking
+      items = items.slice(skip, skip + safeLimit);
     }
 
     // Убираем служебное поле tags из Prisma (TextTag[]), оставляем наш маппинг

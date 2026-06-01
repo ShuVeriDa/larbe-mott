@@ -40,6 +40,7 @@ import { SuggestionsModule } from "./suggestions/suggestions.module";
 import { TextSubmissionsModule } from "./text-submissions/text-submissions.module";
 import { TrackingModule } from "./tracking/tracking.module";
 import { ReaderContextModule } from "./reader-context/reader-context.module";
+import { GenreModule } from "./genre/genre.module";
 import { envValidationSchema } from "./config/env.validation";
 
 @Module({
@@ -97,6 +98,7 @@ import { envValidationSchema } from "./config/env.validation";
     TextSubmissionsModule,
     TrackingModule,
     ReaderContextModule,
+    GenreModule,
   ],
   controllers: [],
   providers: [

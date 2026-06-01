@@ -559,6 +559,7 @@ export class AdminTextService {
           level: dto.level,
           author: dto.author,
           source: dto.source,
+          genreId: dto.genreId ?? null,
           imageUrl: dto.imageUrl ?? null,
           publishedAt,
           archivedAt,
@@ -638,6 +639,9 @@ export class AdminTextService {
       if (dto.source !== undefined) textData.source = dto.source;
       if (dto.imageUrl !== undefined) {
         textData.imageUrl = dto.imageUrl === null ? null : dto.imageUrl;
+      }
+      if (dto.genreId !== undefined) {
+        textData.genreId = dto.genreId === null ? null : dto.genreId;
       }
       if (dto.autoTokenizeOnSave !== undefined)
         textData.autoTokenizeOnSave = dto.autoTokenizeOnSave;

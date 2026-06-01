@@ -202,6 +202,12 @@ export class PatchTextDto {
     };
   }[];
 
+  @ApiProperty({ required: false, nullable: true, description: "Genre ID (UUID). Pass null to remove." })
+  @IsOptional()
+  @ValidateIf((_o, v) => v !== null)
+  @IsUUID("4")
+  genreId?: string | null;
+
   @ApiProperty({
     type: [String],
     description:

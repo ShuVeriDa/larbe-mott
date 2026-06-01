@@ -26,7 +26,8 @@ export class DashboardController {
   })
   @ApiOkResponse({
     description:
-      "stats: { textsRead, wordsInDictionary, streak, streakRecord, streakDays, dueToday: { total, new, learning }, words }, continueReading: [], plan: { code, name, type, status, isPremium, translationsToday, translationsLimit }",
+      "stats, continueReading, plan, sections: { recentTexts, popularTexts, shortTexts, byLevelTexts, userLevel }. " +
+      "All text sections are pre-fetched server-side to avoid waterfall requests from the client.",
   })
   async getDashboard(@User("id") userId: string) {
     return this.dashboardService.getDashboard(userId);
