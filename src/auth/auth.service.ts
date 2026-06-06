@@ -269,9 +269,14 @@ export class AuthService {
   }
 
   async getNewTokens(refreshToken: string) {
-    const result = await this.jwt.verifyAsync(refreshToken, {
-      secret: this.configService.getOrThrow("JWT_REFRESH_SECRET"),
-    });
+    let result: { id: string; type: string; sid?: string; rem?: boolean } & Record<string, unknown>;
+    try {
+      result = await this.jwt.verifyAsync(refreshToken, {
+        secret: this.configService.getOrThrow("JWT_REFRESH_SECRET"),
+      });
+    } catch {
+      throw new UnauthorizedException({ code: ErrorCode.INVALID_REFRESH_TOKEN, message: "Invalid refresh token" });
+    }
 
     if (!result) throw new UnauthorizedException({ code: ErrorCode.INVALID_REFRESH_TOKEN, message: "Invalid refresh token" });
 

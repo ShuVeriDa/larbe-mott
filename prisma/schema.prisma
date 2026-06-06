@@ -26,7 +26,7 @@ model User {
   updatedAt                DateTime                     @updatedAt
   deletedAt                DateTime?
   geminiApiKeyEncrypted    String?
-  geminiModel              String?   @default("gemini-3.1-flash-lite")
+  geminiModel              String?                      @default("gemini-3.1-flash-lite")
   couponRedemptions        CouponRedemption[]
   dictionaryEntries        DictionaryEntry[]            @relation("DictionaryEntryCreator")
   emailChangeTokens        EmailChangeToken[]
@@ -44,6 +44,7 @@ model User {
   reviewedSuggestions      Suggestion[]                 @relation("SuggestionReviewer")
   authoredSuggestions      Suggestion[]                 @relation("SuggestionAuthor")
   texts                    Text[]                       @relation("text")
+  submittedTexts           Text[]                       @relation("TextSubmittedBy")
   textSubmissions          TextSubmission[]             @relation("TextSubmissionAuthor")
   reviewedTextSubmissions  TextSubmission[]             @relation("TextSubmissionReviewer")
   initiatedVersions        TextProcessingVersion[]      @relation("VersionInitiator")
@@ -69,6 +70,9 @@ model User {
   textProgress             UserTextProgress[]
   wordProgress             UserWordProgress[]
   wordContexts             WordContext[]
+  ownedTexts               UserText[]                   @relation("UserOwnedTexts")
+  userTextVersions         UserTextProcessingVersion[]  @relation("UserOwnedTextVersions")
+  appNotifications         Notification[]               @relation("UserAppNotifications")
 
   @@index([username])
   @@index([status])
@@ -452,7 +456,7 @@ model Headword {
 }
 
 model Lemma {
-  id                    String                @id @default(uuid())
+  id                    String                  @id @default(uuid())
   baseForm              String
   normalized            String
   language              Language
@@ -464,22 +468,24 @@ model Lemma {
   declensionClass       String?
   domain                String?
   doshamId              Int?
-  createdAt             DateTime              @default(now())
-  updatedAt             DateTime              @updatedAt
-  feedbackReactions     FeedbackReaction[]    @relation("LemmaFeedbackReactions")
-  feedbackThreads       FeedbackThread[]      @relation("LemmaFeedbackThreads")
-  headwords             Headword[]            @relation("HeadwordLemma")
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  feedbackReactions     FeedbackReaction[]      @relation("LemmaFeedbackReactions")
+  feedbackThreads       FeedbackThread[]        @relation("LemmaFeedbackThreads")
+  headwords             Headword[]              @relation("HeadwordLemma")
   morphForms            MorphForm[]
   vocabulary            TextVocabulary[]
-  tokenAnalyses         TokenAnalysis[]       @relation("TokenLemma")
-  deckCards             UserDeckCard[]        @relation("LemmaDeckCards")
-  deckLogs              UserDeckLog[]         @relation("LemmaDeckLogs")
-  userDictionaryEntries UserDictionaryEntry[] @relation("UserDictionaryEntryLemma")
-  reviewLogs            UserReviewLog[]       @relation("LemmaReviewLogs")
+  tokenAnalyses         TokenAnalysis[]         @relation("TokenLemma")
+  userTextVocabs        UserTextVocabulary[]    @relation("UserTextVocabLemma")
+  userTextAnalyses      UserTextTokenAnalysis[] @relation("UserTextTokenLemma")
+  deckCards             UserDeckCard[]          @relation("LemmaDeckCards")
+  deckLogs              UserDeckLog[]           @relation("LemmaDeckLogs")
+  userDictionaryEntries UserDictionaryEntry[]   @relation("UserDictionaryEntryLemma")
+  reviewLogs            UserReviewLog[]         @relation("LemmaReviewLogs")
   wordProgress          UserWordProgress[]
   wordContexts          WordContext[]
-  relations             WordRelation[]        @relation("WordRelationLemma")
-  inverseRelations      WordRelation[]        @relation("WordRelationRelated")
+  relations             WordRelation[]          @relation("WordRelationLemma")
+  inverseRelations      WordRelation[]          @relation("WordRelationRelated")
 
   @@unique([normalized, language])
   @@index([normalized])
@@ -648,6 +654,7 @@ model Text {
   useMorphAnalysis   Boolean                 @default(false)
   genreId            String?
   createdById        String
+  submittedById      String?
   createdAt          DateTime                @default(now())
   updatedAt          DateTime                @updatedAt
   exampleSources     Example[]               @relation("ExampleSourceText")
@@ -655,6 +662,7 @@ model Text {
   feedbackThreads    FeedbackThread[]        @relation("TextFeedbackThreads")
   suggestions        Suggestion[]            @relation("SuggestionText")
   createdBy          User                    @relation("text", fields: [createdById], references: [id], onDelete: Cascade)
+  submittedBy        User?                   @relation("TextSubmittedBy", fields: [submittedById], references: [id], onDelete: SetNull)
   genre              Genre?                  @relation(fields: [genreId], references: [id], onDelete: SetNull)
   pages              TextPage[]
   phraseOccurrences  TextPhraseOccurrence[]
@@ -898,16 +906,16 @@ model UserPageBookmark {
 }
 
 model UserDeckCard {
-  id                String    @id @default(cuid())
-  userId            String
-  lemmaId           String
-  deckType          DeckType
-  deckNumber        Int?
-  movedAt           DateTime  @default(now())
-  originDeckType    DeckType?
-  originDeckNumber  Int?
-  lemma             Lemma     @relation("LemmaDeckCards", fields: [lemmaId], references: [id], onDelete: Cascade)
-  user              User      @relation("UserDeckCards", fields: [userId], references: [id], onDelete: Cascade)
+  id               String    @id @default(cuid())
+  userId           String
+  lemmaId          String
+  deckType         DeckType
+  deckNumber       Int?
+  movedAt          DateTime  @default(now())
+  originDeckType   DeckType?
+  originDeckNumber Int?
+  lemma            Lemma     @relation("LemmaDeckCards", fields: [lemmaId], references: [id], onDelete: Cascade)
+  user             User      @relation("UserDeckCards", fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, lemmaId])
   @@index([userId, deckType])
@@ -916,14 +924,14 @@ model UserDeckCard {
 }
 
 model UserDeckState {
-  userId               String    @id
-  isEnabled            Boolean   @default(true)
-  currentNumberedDeck  Int       @default(1)
-  lastRotatedAt        DateTime?
-  dailyWordCount       Int       @default(5)
-  deckMaxSize          Int       @default(90)
-  dailyNumberedDecks   Int       @default(1)
-  user                 User      @relation("UserDeckState", fields: [userId], references: [id], onDelete: Cascade)
+  userId              String    @id
+  isEnabled           Boolean   @default(true)
+  currentNumberedDeck Int       @default(1)
+  lastRotatedAt       DateTime?
+  dailyWordCount      Int       @default(5)
+  deckMaxSize         Int       @default(90)
+  dailyNumberedDecks  Int       @default(1)
+  user                User      @relation("UserDeckState", fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_deck_state")
 }
@@ -957,17 +965,17 @@ model PhrasebookCategory {
 }
 
 model PhrasebookPhrase {
-  id              String                      @id @default(uuid())
+  id              String                    @id @default(uuid())
   categoryId      String
   original        String
   transliteration String?
   translation     String
   lang            Language
   audioUrl        String?
-  sortOrder       Int                         @default(0)
-  createdAt       DateTime                    @default(now())
-  updatedAt       DateTime                    @updatedAt
-  category        PhrasebookCategory          @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  sortOrder       Int                       @default(0)
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+  category        PhrasebookCategory        @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   examples        PhrasebookPhraseExample[]
   words           PhrasebookPhraseWord[]
   saves           UserPhrasebookSave[]
@@ -1033,17 +1041,17 @@ model UserPhrasebookSave {
 }
 
 model UserPhrasebookProgress {
-  id          String        @id @default(cuid())
+  id          String           @id @default(cuid())
   userId      String
   phraseId    String
-  status      PhraseStatus  @default(NEW)
-  repetitions Int           @default(0)
+  status      PhraseStatus     @default(NEW)
+  repetitions Int              @default(0)
   lastSeen    DateTime?
   nextReview  DateTime?
-  easeFactor  Float         @default(2.5)
-  interval    Int           @default(0)
+  easeFactor  Float            @default(2.5)
+  interval    Int              @default(0)
   phrase      PhrasebookPhrase @relation(fields: [phraseId], references: [id], onDelete: Cascade)
-  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, phraseId])
   @@index([userId])
@@ -1054,16 +1062,16 @@ model UserPhrasebookProgress {
 }
 
 model UserPhrasebookReviewLog {
-  id             String   @id @default(cuid())
+  id             String           @id @default(cuid())
   userId         String
   phraseId       String
   quality        Int
   correct        Boolean
   intervalBefore Int?
   intervalAfter  Int?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime         @default(now())
   phrase         PhrasebookPhrase @relation(fields: [phraseId], references: [id], onDelete: Cascade)
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
   @@index([userId])
@@ -1381,6 +1389,19 @@ enum TextSubmissionStatus {
   PENDING
   APPROVED
   REJECTED
+  DRAFT
+}
+
+enum SubmissionType {
+  ORIGINAL
+  EXTERNAL
+}
+
+enum SubmissionLicenseType {
+  PUBLIC_DOMAIN
+  CC
+  PERMISSION
+  UNKNOWN
 }
 
 enum DictionarySource {
@@ -1684,31 +1705,61 @@ enum FeedbackMessageType {
   INTERNAL_NOTE
 }
 
+// State machine:
+//   DRAFT      → PENDING     via POST /:id/submit (owner)
+//   PENDING    → APPROVED    via POST /:id/review decision=approve (admin)
+//   PENDING    → REJECTED    via POST /:id/review decision=reject  (admin)
+//   REJECTED   → PENDING     via POST /:id/submit again; clears reviewComment/reviewedBy/reviewedAt
+//   APPROVED   → (terminal)  no transitions out
+// Editable states (PATCH/DELETE by owner): DRAFT, REJECTED
+// Submittable states (POST /:id/submit by owner): DRAFT, REJECTED
 model TextSubmission {
-  id            String                @id @default(uuid())
-  userId        String
-  title         String
-  language      String
-  author        String?
-  sourceUrl     String?
-  content       String?               @db.Text
-  comment       String?
-  status        TextSubmissionStatus  @default(PENDING)
-  reviewedBy    String?
-  reviewedAt    DateTime?
-  reviewComment String?
-  createdAt     DateTime              @default(now())
+  id              String                 @id @default(uuid())
+  userId          String
+  title           String
+  language        String
+  author          String?
+  sourceUrl       String?
+  content         String?                @db.Text
+  comment         String?
+  status          TextSubmissionStatus   @default(PENDING)
+  submissionType  SubmissionType         @default(EXTERNAL)
+  licenseType     SubmissionLicenseType?
+  publicationYear Int?
+  contentRich     Json?
+  reviewedBy      String?
+  reviewedAt      DateTime?
+  reviewComment   String?
+  textId          String?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
 
-  user          User                  @relation("TextSubmissionAuthor", fields: [userId], references: [id], onDelete: Cascade)
-  reviewer      User?                 @relation("TextSubmissionReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+  user       User                   @relation("TextSubmissionAuthor", fields: [userId], references: [id], onDelete: Cascade)
+  reviewer   User?                  @relation("TextSubmissionReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+  pages      TextSubmissionPage[]
 
   @@index([userId])
   @@index([status])
+  @@index([userId, status])
   @@map("text_submission")
 }
 
+model TextSubmissionPage {
+  id           String         @id @default(cuid())
+  submissionId String
+  pageNumber   Int
+  title        String?
+  contentRich  Json
+
+  submission   TextSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@unique([submissionId, pageNumber])
+  @@index([submissionId, pageNumber])
+  @@map("text_submission_page")
+}
+
 model TrackingEvent {
-  id        BigInt   @id @default(autoincrement())
+  id        BigInt  @id @default(autoincrement())
   visitorId String
   sessionId String
   userId    String?
@@ -1751,4 +1802,138 @@ model TrackingDailyStats {
   osBreakdown      Json
 
   @@map("tracking_daily_stats")
+}
+
+// ─── UserText tokenization models ────────────────────────────────────────────
+// Mirror TextProcessingVersion / TextToken / TextVocabulary / TokenAnalysis
+// scoped to UserText (private — never stored in main library).
+
+model UserTextProcessingVersion {
+  id               String            @id @default(uuid())
+  userTextId       String
+  userId           String
+  version          Int
+  status           ProcessingStatus  @default(IDLE)
+  progress         Int               @default(0)
+  errorMessage     String?
+  isCurrent        Boolean           @default(false)
+  trigger          ProcessingTrigger @default(MANUAL)
+  useNormalization Boolean           @default(true)
+  useMorphAnalysis Boolean           @default(false)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  userText   UserText             @relation("UserTextVersions", fields: [userTextId], references: [id], onDelete: Cascade)
+  user       User                 @relation("UserOwnedTextVersions", fields: [userId], references: [id])
+  tokens     UserTextToken[]
+  vocabulary UserTextVocabulary[]
+
+  @@index([userTextId])
+  @@index([userTextId, isCurrent])
+  @@map("user_text_processing_version")
+}
+
+model UserTextToken {
+  id          String      @id @default(cuid())
+  versionId   String
+  pageIndex   Int
+  position    Int
+  original    String
+  normalized  String
+  startOffset Int?
+  endOffset   Int?
+  status      TokenStatus @default(ANALYZED)
+  vocabId     String?
+
+  version  UserTextProcessingVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  vocab    UserTextVocabulary?       @relation(fields: [vocabId], references: [id])
+  analyses UserTextTokenAnalysis[]
+
+  @@index([versionId])
+  @@index([versionId, pageIndex])
+  @@map("user_text_token")
+}
+
+model UserTextVocabulary {
+  id          String  @id @default(cuid())
+  versionId   String
+  normalized  String
+  lemmaId     String?
+  translation String?
+
+  version UserTextProcessingVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  lemma   Lemma?                    @relation("UserTextVocabLemma", fields: [lemmaId], references: [id])
+  tokens  UserTextToken[]
+
+  @@unique([versionId, normalized])
+  @@index([versionId])
+  @@map("user_text_vocabulary")
+}
+
+model UserTextTokenAnalysis {
+  id          String         @id @default(cuid())
+  tokenId     String
+  lemmaId     String?
+  source      AnalysisSource @default(ADMIN)
+  probability Float?
+  isPrimary   Boolean        @default(false)
+
+  token UserTextToken @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  lemma Lemma?        @relation("UserTextTokenLemma", fields: [lemmaId], references: [id])
+
+  @@index([tokenId])
+  @@map("user_text_token_analysis")
+}
+
+// Private text library: texts added by a user for personal reading only.
+// Visibility: owner only. No moderation. Not published to the library.
+// To publish, user copies fields into a TextSubmission (separate row, no FK back here).
+model UserText {
+  id        String       @id @default(uuid())
+  userId    String
+  title     String
+  language  Language     @default(CHE)
+  author    String?
+  sourceUrl String?
+  type      UserTextType @default(EXTERNAL)
+  content   Json
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  user               User                        @relation("UserOwnedTexts", fields: [userId], references: [id], onDelete: Cascade)
+  processingVersions UserTextProcessingVersion[] @relation("UserTextVersions")
+
+  @@index([userId])
+  @@index([userId, type])
+  @@map("user_text")
+}
+
+enum UserTextType {
+  ORIGINAL
+  EXTERNAL
+}
+
+enum NotificationType {
+  FEEDBACK_REPLY
+  SUGGESTION_APPROVED
+  SUGGESTION_REJECTED
+  TEXT_SUBMISSION_APPROVED
+  TEXT_SUBMISSION_REJECTED
+  NEW_FEEDBACK_THREAD
+  NEW_TEXT_SUBMISSION
+  NEW_SUGGESTION
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  entityId  String?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+  user      User             @relation("UserAppNotifications", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("notification")
 }

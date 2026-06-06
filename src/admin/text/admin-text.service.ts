@@ -141,7 +141,13 @@ export class AdminTextService {
     }
 
     const [texts, total] = await Promise.all([
-      this.prisma.text.findMany({ where, skip, take: limit, orderBy }),
+      this.prisma.text.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy,
+        include: { submittedBy: { select: { id: true, name: true, surname: true, username: true } } },
+      }),
       this.prisma.text.count({ where }),
     ]);
 
@@ -473,6 +479,7 @@ export class AdminTextService {
       include: {
         pages: { orderBy: { pageNumber: "asc" } },
         tags: { include: { tag: { select: { id: true, name: true } } } },
+        submittedBy: { select: { id: true, name: true, surname: true, username: true } },
       },
     });
     if (!text) throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });

@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
+import { EventEmitterModule } from "@nestjs/event-emitter";
 import { ScheduleModule } from "@nestjs/schedule";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { ThrottlerStorageRedisService } from "@nest-lab/throttler-storage-redis";
@@ -38,9 +39,12 @@ import { WordsModule } from "./words/words.module";
 import { DictionaryExportModule } from "./dictionary-export/dictionary-export.module";
 import { SuggestionsModule } from "./suggestions/suggestions.module";
 import { TextSubmissionsModule } from "./text-submissions/text-submissions.module";
+import { UserTextsModule } from "./user-texts/user-texts.module";
+import { UserTextReaderModule } from "./user-text-reader/user-text-reader.module";
 import { TrackingModule } from "./tracking/tracking.module";
 import { ReaderContextModule } from "./reader-context/reader-context.module";
 import { GenreModule } from "./genre/genre.module";
+import { NotificationModule } from "./notification/notification.module";
 import { envValidationSchema } from "./config/env.validation";
 
 @Module({
@@ -60,6 +64,7 @@ import { envValidationSchema } from "./config/env.validation";
     }),
     RedisModule,
     ScheduleModule.forRoot(),
+    EventEmitterModule.forRoot({ wildcard: false, delimiter: '.' }),
     ObservabilityModule,
     ThrottlerModule.forRootAsync({
       imports: [RedisModule],
@@ -96,9 +101,12 @@ import { envValidationSchema } from "./config/env.validation";
     DictionaryExportModule,
     SuggestionsModule,
     TextSubmissionsModule,
+    UserTextsModule,
+    UserTextReaderModule,
     TrackingModule,
     ReaderContextModule,
     GenreModule,
+    NotificationModule,
   ],
   controllers: [],
   providers: [

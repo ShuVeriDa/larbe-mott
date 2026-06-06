@@ -1,11 +1,14 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma, SuggestionStatus } from "@prisma/client";
-import { PrismaService } from "src/prisma.service";
+import { EventEmitter2 } from "@nestjs/event-emitter";
+import { NotificationType, Prisma, RoleName, SuggestionStatus } from "@prisma/client";
 import { ErrorCode } from "src/common/errors/error-codes";
+import { NOTIFICATION_EVENTS } from "src/notification/notification-events";
+import { PrismaService } from "src/prisma.service";
 
 const EDITABLE_FIELDS = [
   "rawWord",
@@ -29,7 +32,12 @@ const entryInclude = { select: { id: true, rawWord: true } } as const;
 
 @Injectable()
 export class SuggestionsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(SuggestionsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   async create(
     userId: string,
@@ -48,17 +56,22 @@ export class SuggestionsService {
   ) {
     const { textId, entryId, normalized, rawWord, currentTranslation, comment } = opts;
 
-    if (textId) {
-      return this.createTextSuggestion(userId, textId, field, newValue, comment);
-    }
+    const suggestion = textId
+      ? await this.createTextSuggestion(userId, textId, field, newValue, comment)
+      : await this.createEntrySuggestion(
+          userId,
+          field,
+          newValue,
+          { normalized, rawWord, currentTranslation, entryId },
+          comment,
+        );
 
-    return this.createEntrySuggestion(
-      userId,
-      field,
-      newValue,
-      { normalized, rawWord, currentTranslation, entryId },
-      comment,
+    // Fire-and-forget: notify admins after successful DB write
+    this.notifyAdmins(NotificationType.NEW_SUGGESTION, suggestion.id).catch((err) =>
+      this.logger.error("Failed to notify admins about new suggestion", err),
     );
+
+    return suggestion;
   }
 
   private async createEntrySuggestion(
@@ -349,8 +362,8 @@ export class SuggestionsService {
     const newStatus =
       decision === "approve" ? SuggestionStatus.APPROVED : SuggestionStatus.REJECTED;
 
-    return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.suggestion.update({
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.suggestion.update({
         where: { id: suggestionId },
         data: {
           status: newStatus,
@@ -394,11 +407,36 @@ export class SuggestionsService {
         }
       }
 
-      return updated;
+      return result;
     });
+
+    // Emit after commit — notify the suggestion author
+    this.eventEmitter.emit(NOTIFICATION_EVENTS.CREATE, {
+      userId: suggestion.userId,
+      type: decision === "approve"
+        ? NotificationType.SUGGESTION_APPROVED
+        : NotificationType.SUGGESTION_REJECTED,
+      entityId: suggestionId,
+    });
+
+    return updated;
   }
 
   getTextFields() {
     return { fields: [...TEXT_EDITABLE_FIELDS] };
+  }
+
+  private async notifyAdmins(type: NotificationType, entityId: string): Promise<void> {
+    const admins = await this.prisma.user.findMany({
+      where: { roles: { some: { role: { name: { in: [RoleName.ADMIN, RoleName.SUPERADMIN, RoleName.SUPPORT] } } } } },
+      select: { id: true },
+    });
+    for (const admin of admins) {
+      this.eventEmitter.emit(NOTIFICATION_EVENTS.CREATE, {
+        userId: admin.id,
+        type,
+        entityId,
+      });
+    }
   }
 }

@@ -120,9 +120,16 @@ export class AuthController {
       throw new UnauthorizedException({ code: ErrorCode.REFRESH_TOKEN_NOT_PASSED, message: "Refresh token not passed" });
     }
 
-    const { refreshToken, rememberMe, ...response } = await this.authService.getNewTokens(
-      refreshTokenFromCookies,
-    );
+    let tokens: Awaited<ReturnType<typeof this.authService.getNewTokens>>;
+    try {
+      tokens = await this.authService.getNewTokens(refreshTokenFromCookies);
+    } catch (err) {
+      this.authService.removeRefreshTokenFromResponse(res);
+      this.authService.removeAccessTokenFromResponse(res);
+      throw err;
+    }
+
+    const { refreshToken, rememberMe, ...response } = tokens;
 
     this.authService.addRefreshTokenResponse(res, refreshToken, rememberMe);
     this.authService.addAccessTokenResponse(res, response.accessToken, rememberMe);

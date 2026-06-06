@@ -19320,7 +19320,7 @@
         },
         "responses": {
           "201": {
-            "description": ""
+            "description": "Заявка создана"
           }
         },
         "security": [
@@ -19328,7 +19328,7 @@
             "bearer": []
           }
         ],
-        "summary": "Предложить новый текст",
+        "summary": "Создать черновик заявки на публикацию",
         "tags": [
           "text-submissions"
         ]
@@ -19379,7 +19379,7 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Постраничный список"
           }
         },
         "security": [
@@ -19398,8 +19398,22 @@
         "operationId": "TextSubmissionsController_my",
         "parameters": [
           {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "PENDING",
+                "APPROVED",
+                "REJECTED",
+                "DRAFT"
+              ],
+              "type": "string"
+            }
+          },
+          {
             "name": "limit",
-            "required": true,
+            "required": false,
             "in": "query",
             "schema": {
               "type": "number"
@@ -19407,7 +19421,7 @@
           },
           {
             "name": "offset",
-            "required": true,
+            "required": false,
             "in": "query",
             "schema": {
               "type": "number"
@@ -19416,7 +19430,7 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Постраничный список"
           }
         },
         "security": [
@@ -19424,19 +19438,31 @@
             "bearer": []
           }
         ],
-        "summary": "Мои предложения текстов",
+        "summary": "Мои заявки (без содержимого)",
         "tags": [
           "text-submissions"
         ]
       }
     },
-    "/api/text-submissions/stats": {
+    "/api/text-submissions/{id}/draft": {
       "get": {
-        "operationId": "TextSubmissionsController_stats",
-        "parameters": [],
+        "operationId": "TextSubmissionsController_findOwned",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Заявка найдена"
+          },
+          "404": {
+            "description": "Не найдена или не принадлежит пользователю"
           }
         },
         "security": [
@@ -19444,13 +19470,89 @@
             "bearer": []
           }
         ],
-        "summary": "Статистика заявок (admin)",
+        "summary": "Загрузить черновик/отклонённую заявку (owner only, с содержимым)",
         "tags": [
           "text-submissions"
         ]
       }
     },
     "/api/text-submissions/{id}": {
+      "patch": {
+        "operationId": "TextSubmissionsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTextSubmissionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Обновлена"
+          },
+          "403": {
+            "description": "Заявка не редактируема в текущем статусе"
+          },
+          "404": {
+            "description": "Не найдена или не принадлежит пользователю"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Обновить черновик или отклонённую заявку (owner only)",
+        "tags": [
+          "text-submissions"
+        ]
+      },
+      "delete": {
+        "operationId": "TextSubmissionsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Удалена"
+          },
+          "403": {
+            "description": "Заявка не редактируема в текущем статусе"
+          },
+          "404": {
+            "description": "Не найдена или не принадлежит пользователю"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Удалить черновик или отклонённую заявку (owner only)",
+        "tags": [
+          "text-submissions"
+        ]
+      },
       "get": {
         "operationId": "TextSubmissionsController_findOne",
         "parameters": [
@@ -19465,7 +19567,10 @@
         ],
         "responses": {
           "200": {
-            "description": ""
+            "description": "Заявка найдена"
+          },
+          "404": {
+            "description": "Не найдена"
           }
         },
         "security": [
@@ -19474,6 +19579,64 @@
           }
         ],
         "summary": "Одна заявка со связями (admin)",
+        "tags": [
+          "text-submissions"
+        ]
+      }
+    },
+    "/api/text-submissions/{id}/submit": {
+      "post": {
+        "operationId": "TextSubmissionsController_submit",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Переведена в PENDING"
+          },
+          "400": {
+            "description": "Не заполнены обязательные поля"
+          },
+          "403": {
+            "description": "Нельзя подать в текущем статусе"
+          },
+          "404": {
+            "description": "Не найдена или не принадлежит пользователю"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Отправить на модерацию (DRAFT/REJECTED → PENDING)",
+        "tags": [
+          "text-submissions"
+        ]
+      }
+    },
+    "/api/text-submissions/stats": {
+      "get": {
+        "operationId": "TextSubmissionsController_stats",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Счётчики по статусам"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Статистика заявок (admin)",
         "tags": [
           "text-submissions"
         ]
@@ -19503,8 +19666,8 @@
           }
         },
         "responses": {
-          "201": {
-            "description": ""
+          "200": {
+            "description": "Статус обновлён"
           }
         },
         "security": [
@@ -19515,6 +19678,228 @@
         "summary": "Одобрить или отклонить заявку (admin)",
         "tags": [
           "text-submissions"
+        ]
+      }
+    },
+    "/api/user-texts": {
+      "post": {
+        "operationId": "UserTextsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserTextDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Текст создан"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Добавить текст в личную библиотеку",
+        "tags": [
+          "user-texts"
+        ]
+      },
+      "get": {
+        "operationId": "UserTextsController_findMine",
+        "parameters": [
+          {
+            "name": "type",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "enum": [
+                "ORIGINAL",
+                "EXTERNAL"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Постраничный список"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Список текстов личной библиотеки (без содержимого)",
+        "tags": [
+          "user-texts"
+        ]
+      }
+    },
+    "/api/user-texts/{id}": {
+      "get": {
+        "operationId": "UserTextsController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Текст найден"
+          },
+          "404": {
+            "description": "Не найден или не принадлежит пользователю"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Получить один текст с полным содержимым",
+        "tags": [
+          "user-texts"
+        ]
+      },
+      "patch": {
+        "operationId": "UserTextsController_update",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserTextDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Текст обновлён"
+          },
+          "404": {
+            "description": "Не найден или не принадлежит пользователю"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Обновить текст личной библиотеки",
+        "tags": [
+          "user-texts"
+        ]
+      },
+      "delete": {
+        "operationId": "UserTextsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Удалён"
+          },
+          "404": {
+            "description": "Не найден или не принадлежит пользователю"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Удалить текст личной библиотеки",
+        "tags": [
+          "user-texts"
+        ]
+      }
+    },
+    "/api/user-text-reader-context": {
+      "get": {
+        "operationId": "UserTextReaderContextController_getContext",
+        "parameters": [
+          {
+            "name": "userTextId",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageNumber",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Page data + highlights + notes"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "UserText not found or page out of range"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Reader context for a private UserText page (owner only)",
+        "tags": [
+          "user-text-reader"
         ]
       }
     },
@@ -19572,6 +19957,104 @@
         "summary": "List all genres",
         "tags": [
           "genres"
+        ]
+      }
+    },
+    "/api/notifications": {
+      "get": {
+        "operationId": "NotificationController_getList",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get my notifications",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/notifications/unread-count": {
+      "get": {
+        "operationId": "NotificationController_getUnreadCount",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get unread notifications count",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/notifications/read-all": {
+      "patch": {
+        "operationId": "NotificationController_markAllRead",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Mark all notifications as read",
+        "tags": [
+          "notifications"
+        ]
+      }
+    },
+    "/api/notifications/{id}/read": {
+      "patch": {
+        "operationId": "NotificationController_markRead",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Mark notification as read",
+        "tags": [
+          "notifications"
         ]
       }
     }
@@ -23995,7 +24478,12 @@
             "type": "string",
             "enum": [
               "sans",
+              "golos",
               "serif",
+              "lora",
+              "merriweather",
+              "pt-serif",
+              "source-serif",
               "mono"
             ]
           },
@@ -24374,6 +24862,29 @@
           "decision"
         ]
       },
+      "CreateTextSubmissionPageDto": {
+        "type": "object",
+        "properties": {
+          "pageNumber": {
+            "type": "number",
+            "description": "Номер страницы (начиная с 1)",
+            "example": 1
+          },
+          "title": {
+            "type": "string",
+            "description": "Заголовок страницы (необязательно)",
+            "maxLength": 100
+          },
+          "contentRich": {
+            "type": "object",
+            "description": "Содержимое страницы в формате TipTap JSON"
+          }
+        },
+        "required": [
+          "pageNumber",
+          "contentRich"
+        ]
+      },
       "CreateTextSubmissionDto": {
         "type": "object",
         "properties": {
@@ -24387,7 +24898,7 @@
           },
           "author": {
             "type": "string",
-            "description": "Автор текста"
+            "description": "Автор текста (игнорируется для ORIGINAL — выводится с сервера)"
           },
           "sourceUrl": {
             "type": "string",
@@ -24395,17 +24906,134 @@
           },
           "content": {
             "type": "string",
-            "description": "Текст (вставка), максимум 100 000 символов"
+            "description": "Текст (plain), максимум 100 000 символов"
           },
           "comment": {
             "type": "string",
             "description": "Комментарий автора"
+          },
+          "submissionType": {
+            "type": "string",
+            "enum": [
+              "ORIGINAL",
+              "EXTERNAL"
+            ],
+            "default": "EXTERNAL"
+          },
+          "licenseType": {
+            "type": "string",
+            "enum": [
+              "PUBLIC_DOMAIN",
+              "CC",
+              "PERMISSION",
+              "UNKNOWN"
+            ],
+            "description": "Тип лицензии (только для EXTERNAL)"
+          },
+          "publicationYear": {
+            "type": "number",
+            "description": "Год публикации (только для EXTERNAL)",
+            "minimum": 1000
+          },
+          "contentRich": {
+            "type": "object",
+            "description": "Содержимое в формате TipTap JSON (макс. 500 КБ)"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "APPROVED",
+              "REJECTED",
+              "DRAFT"
+            ],
+            "description": "Статус при создании (DRAFT по умолчанию для нового flow)"
+          },
+          "pages": {
+            "description": "Страницы текста. Если указаны — заменяют contentRich.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CreateTextSubmissionPageDto"
+            }
           }
         },
         "required": [
           "title",
           "language"
         ]
+      },
+      "UpdateTextSubmissionDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Название текста или книги"
+          },
+          "language": {
+            "type": "string",
+            "description": "Язык текста (che, ru, en, other)"
+          },
+          "author": {
+            "type": "string",
+            "description": "Автор текста (игнорируется для ORIGINAL — выводится с сервера)"
+          },
+          "sourceUrl": {
+            "type": "string",
+            "description": "Ссылка на источник"
+          },
+          "content": {
+            "type": "string",
+            "description": "Текст (plain), максимум 100 000 символов"
+          },
+          "comment": {
+            "type": "string",
+            "description": "Комментарий автора"
+          },
+          "submissionType": {
+            "type": "string",
+            "enum": [
+              "ORIGINAL",
+              "EXTERNAL"
+            ],
+            "default": "EXTERNAL"
+          },
+          "licenseType": {
+            "type": "string",
+            "enum": [
+              "PUBLIC_DOMAIN",
+              "CC",
+              "PERMISSION",
+              "UNKNOWN"
+            ],
+            "description": "Тип лицензии (только для EXTERNAL)"
+          },
+          "publicationYear": {
+            "type": "number",
+            "description": "Год публикации (только для EXTERNAL)",
+            "minimum": 1000
+          },
+          "contentRich": {
+            "type": "object",
+            "description": "Содержимое в формате TipTap JSON (макс. 500 КБ)"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "APPROVED",
+              "REJECTED",
+              "DRAFT"
+            ],
+            "description": "Статус при создании (DRAFT по умолчанию для нового flow)"
+          },
+          "pages": {
+            "description": "Страницы текста. Если указаны — заменяют contentRich.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CreateTextSubmissionPageDto"
+            }
+          }
+        }
       },
       "ReviewTextSubmissionDto": {
         "type": "object",
@@ -24425,6 +25053,92 @@
         "required": [
           "decision"
         ]
+      },
+      "CreateUserTextDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Название текста"
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "CHE",
+              "RU",
+              "AR",
+              "EN"
+            ],
+            "default": "CHE",
+            "description": "Язык текста"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "ORIGINAL",
+              "EXTERNAL"
+            ],
+            "description": "Тип: своё произведение или чужой текст"
+          },
+          "author": {
+            "type": "string",
+            "description": "Автор текста (игнорируется для ORIGINAL — выводится с сервера)"
+          },
+          "sourceUrl": {
+            "type": "string",
+            "description": "Ссылка на источник"
+          },
+          "content": {
+            "type": "object",
+            "description": "Содержимое текста (TipTap JSON, макс. 500 КБ)"
+          }
+        },
+        "required": [
+          "title",
+          "language",
+          "type",
+          "content"
+        ]
+      },
+      "UpdateUserTextDto": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Название текста"
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "CHE",
+              "RU",
+              "AR",
+              "EN"
+            ],
+            "default": "CHE",
+            "description": "Язык текста"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "ORIGINAL",
+              "EXTERNAL"
+            ],
+            "description": "Тип: своё произведение или чужой текст"
+          },
+          "author": {
+            "type": "string",
+            "description": "Автор текста (игнорируется для ORIGINAL — выводится с сервера)"
+          },
+          "sourceUrl": {
+            "type": "string",
+            "description": "Ссылка на источник"
+          },
+          "content": {
+            "type": "object",
+            "description": "Содержимое текста (TipTap JSON, макс. 500 КБ)"
+          }
+        }
       }
     }
   }

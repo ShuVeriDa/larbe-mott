@@ -1,17 +1,21 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import {
   FeedbackAuthorType,
   FeedbackMessageType,
   FeedbackStatus,
+  NotificationType,
   Prisma,
   RoleName,
   SubscriptionStatus,
 } from "@prisma/client";
 import { ErrorCode } from "src/common/errors/error-codes";
+import { NOTIFICATION_EVENTS } from "src/notification/notification-events";
 import { PrismaService } from "src/prisma.service";
 import { AdminReplyDto } from "./dto/admin-reply.dto";
 import { AssignFeedbackDto } from "./dto/assign-feedback.dto";
@@ -40,7 +44,12 @@ const ACTIVE_SUB_STATUSES: SubscriptionStatus[] = [
 
 @Injectable()
 export class AdminFeedbackService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(AdminFeedbackService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   async getThreads(dto: FetchAdminFeedbackDto) {
     const {
@@ -275,7 +284,11 @@ export class AdminFeedbackService {
   }
 
   async reply(adminId: string, threadId: string, dto: AdminReplyDto) {
-    await this.ensureExists(threadId);
+    const thread = await this.prisma.feedbackThread.findUnique({
+      where: { id: threadId },
+      select: { id: true, userId: true },
+    });
+    if (!thread) throw new NotFoundException({ code: ErrorCode.THREAD_NOT_FOUND, message: "Thread not found" });
 
     const message = await this.prisma.$transaction(async (tx) => {
       const createdMessage = await tx.feedbackMessage.create({
@@ -303,6 +316,15 @@ export class AdminFeedbackService {
 
       return createdMessage;
     });
+
+    // Emit after commit — only for public replies visible to the user
+    if (!dto.isInternal) {
+      this.eventEmitter.emit(NOTIFICATION_EVENTS.CREATE, {
+        userId: thread.userId,
+        type: NotificationType.FEEDBACK_REPLY,
+        entityId: threadId,
+      });
+    }
 
     return message;
   }
@@ -482,5 +504,19 @@ export class AdminFeedbackService {
       select: { id: true },
     });
     if (!thread) throw new NotFoundException({ code: ErrorCode.THREAD_NOT_FOUND, message: "Thread not found" });
+  }
+
+  private async notifyAdmins(type: NotificationType, entityId: string): Promise<void> {
+    const admins = await this.prisma.user.findMany({
+      where: { roles: { some: { role: { name: { in: [RoleName.ADMIN, RoleName.SUPERADMIN, RoleName.SUPPORT] } } } } },
+      select: { id: true },
+    });
+    for (const admin of admins) {
+      this.eventEmitter.emit(NOTIFICATION_EVENTS.CREATE, {
+        userId: admin.id,
+        type,
+        entityId,
+      });
+    }
   }
 }

@@ -85,9 +85,9 @@ export class UpdatePreferencesDto {
 
   // ─── Reader typography ────────────────────────────────────────────────────────
 
-  @ApiPropertyOptional({ enum: ["sans", "serif", "mono"] })
+  @ApiPropertyOptional({ enum: ["sans", "golos", "serif", "lora", "merriweather", "pt-serif", "source-serif", "mono"] })
   @IsOptional()
-  @IsIn(["sans", "serif", "mono"])
+  @IsIn(["sans", "golos", "serif", "lora", "merriweather", "pt-serif", "source-serif", "mono"])
   readerFontFamily?: string;
 
   @ApiPropertyOptional({ enum: ["xs", "sm", "md", "lg", "xl"] })

@@ -1,14 +1,19 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
+import { EventEmitter2 } from "@nestjs/event-emitter";
 import {
   FeedbackAuthorType,
   FeedbackMessageType,
   FeedbackStatus,
+  NotificationType,
+  RoleName,
 } from "@prisma/client";
 import { ErrorCode } from "src/common/errors/error-codes";
+import { NOTIFICATION_EVENTS } from "src/notification/notification-events";
 import { PrismaService } from "src/prisma.service";
 import { AddMessageDto } from "./dto/add-message.dto";
 import { CreateFeedbackDto } from "./dto/create-feedback.dto";
@@ -17,10 +22,15 @@ import { GetFeedbackDto } from "./dto/get-feedback.dto";
 
 @Injectable()
 export class FeedbackService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(FeedbackService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   async createThread(userId: string, dto: CreateFeedbackDto) {
-    return this.prisma.feedbackThread.create({
+    const thread = await this.prisma.feedbackThread.create({
       data: {
         userId,
         type: dto.type,
@@ -42,6 +52,13 @@ export class FeedbackService {
       },
       include: { messages: true },
     });
+
+    // Fire-and-forget: notify admins after successful DB write
+    this.notifyAdmins(NotificationType.NEW_FEEDBACK_THREAD, thread.id).catch((err) =>
+      this.logger.error("Failed to notify admins about new feedback thread", err),
+    );
+
+    return thread;
   }
 
   async getThreads(userId: string, dto: GetFeedbackDto) {
@@ -238,5 +255,19 @@ export class FeedbackService {
     });
     if (!reaction) throw new NotFoundException({ code: ErrorCode.REACTION_NOT_FOUND, message: "Reaction not found" });
     await this.prisma.feedbackReaction.delete({ where: { id: reactionId } });
+  }
+
+  private async notifyAdmins(type: NotificationType, entityId: string): Promise<void> {
+    const admins = await this.prisma.user.findMany({
+      where: { roles: { some: { role: { name: { in: [RoleName.ADMIN, RoleName.SUPERADMIN, RoleName.SUPPORT] } } } } },
+      select: { id: true },
+    });
+    for (const admin of admins) {
+      this.eventEmitter.emit(NOTIFICATION_EVENTS.CREATE, {
+        userId: admin.id,
+        type,
+        entityId,
+      });
+    }
   }
 }

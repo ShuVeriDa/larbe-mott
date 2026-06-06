@@ -122,7 +122,61 @@ export class TokenService {
     });
 
     if (!token) {
-      throw new NotFoundException({ code: ErrorCode.TOKEN_NOT_FOUND, message: "Token not found" });
+      // Fallback: check UserTextToken (private library — not in main TextToken table)
+      const userToken = await this.prisma.userTextToken.findUnique({
+        where: { id: tokenId },
+        include: {
+          version: { select: { userTextId: true } },
+          vocab: { select: { translation: true, lemmaId: true } },
+          analyses: {
+            where: { isPrimary: true },
+            take: 1,
+            include: {
+              lemma: {
+                include: {
+                  headwords: {
+                    include: { entry: { select: { rawTranslate: true } } },
+                  },
+                  morphForms: { select: { form: true, normalized: true, grammarTag: true, translation: true } },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (!userToken) {
+        throw new NotFoundException({ code: ErrorCode.TOKEN_NOT_FOUND, message: "Token not found" });
+      }
+
+      // Return same shape as TextToken path — textId = userTextId for context
+      const primary = userToken.analyses[0];
+      const lemmaId = primary?.lemmaId ?? userToken.vocab?.lemmaId ?? null;
+      const headword = primary?.lemma?.headwords?.[0];
+      const rawTranslate = (headword?.entry as { rawTranslate?: string } | undefined)?.rawTranslate ?? null;
+      const translation = rawTranslate ?? userToken.vocab?.translation ?? null;
+      const matchingForm = primary?.lemma?.morphForms?.find((f) => f.normalized === userToken.normalized);
+      const grammarTag = matchingForm?.grammarTag ?? null;
+
+      return {
+        tokenId: userToken.id,
+        word: userToken.original,
+        normalized: userToken.normalized,
+        textId: userToken.version.userTextId, // userTextId used as textId
+        lemmaId,
+        vocabId: userToken.vocabId ?? null,
+        translation,
+        tranAlt: null,
+        grammar: grammarTag,
+        baseForm: primary?.lemma?.baseForm ?? null,
+        nounClass: null,
+        forms: [],
+        tags: grammarTag ? [grammarTag] : [],
+        inDictionary: false,
+        userStatus: null,
+        dictionaryEntryId: null,
+        dictionaryFolder: null,
+      };
     }
 
     // 3️⃣ кэш по (versionId, normalized): то же слово на другой странице — без повторного разбора.

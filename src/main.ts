@@ -2,6 +2,7 @@ import { ValidationPipe } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
 import { NestExpressApplication } from "@nestjs/platform-express";
+import { WsAdapter } from "@nestjs/platform-ws";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import cookieParser from "cookie-parser";
 import * as dotenv from "dotenv";
@@ -137,6 +138,8 @@ async function bootstrap() {
       });
     }
   }
+
+  app.useWebSocketAdapter(new WsAdapter(app));
 
   await app.listen(port);
 
