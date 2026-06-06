@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { Notification } from '@prisma/client';
+import { Notification, NotificationType } from '@prisma/client';
 import { PrismaService } from 'src/prisma.service';
 import { CreateNotificationDto } from './dto/create-notification.dto';
 import { NOTIFICATION_EVENTS } from './notification-events';
@@ -70,6 +70,29 @@ export class NotificationService {
   @OnEvent(NOTIFICATION_EVENTS.CREATE)
   async handleCreateEvent(payload: CreateNotificationPayload): Promise<void> {
     const notification = await this.create(payload);
+
+    if (await this.isInAppBlocked(payload.userId, payload.type)) return;
+
     this.gateway.sendToUser(payload.userId, notification);
+  }
+
+  private async isInAppBlocked(userId: string, type: NotificationType): Promise<boolean> {
+    const prefs = await this.prisma.userNotificationPreferences.findUnique({
+      where: { userId },
+      select: { inAppFeedbackReply: true, inAppSuggestion: true, inAppTextSubmission: true },
+    });
+    if (!prefs) return false;
+
+    if (type === NotificationType.FEEDBACK_REPLY) return !prefs.inAppFeedbackReply;
+    if (
+      type === NotificationType.SUGGESTION_APPROVED ||
+      type === NotificationType.SUGGESTION_REJECTED
+    ) return !prefs.inAppSuggestion;
+    if (
+      type === NotificationType.TEXT_SUBMISSION_APPROVED ||
+      type === NotificationType.TEXT_SUBMISSION_REJECTED
+    ) return !prefs.inAppTextSubmission;
+
+    return false;
   }
 }

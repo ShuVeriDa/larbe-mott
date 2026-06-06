@@ -32,6 +32,21 @@ export class UpdateNotificationsDto {
   @IsBoolean()
   marketing?: boolean;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  inAppFeedbackReply?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  inAppSuggestion?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  inAppTextSubmission?: boolean;
+
   @ApiPropertyOptional({ example: "09:00" })
   @IsOptional()
   @IsString()

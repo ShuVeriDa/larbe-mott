@@ -1277,15 +1277,19 @@ model UserGoals {
 }
 
 model UserNotificationPreferences {
-  userId         String  @id
-  repeatReminder Boolean @default(true)
-  weeklyReport   Boolean @default(true)
-  newTexts       Boolean @default(false)
-  supportReplies Boolean @default(true)
-  marketing      Boolean @default(false)
-  reminderTime   String  @default("09:00")
-  timezone       String  @default("Europe/Moscow")
-  user           User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId               String  @id
+  repeatReminder       Boolean @default(true)
+  weeklyReport         Boolean @default(true)
+  newTexts             Boolean @default(false)
+  supportReplies       Boolean @default(true)
+  marketing            Boolean @default(false)
+  reminderTime         String  @default("09:00")
+  timezone             String  @default("Europe/Moscow")
+  // In-app (колокольчик) уведомления
+  inAppFeedbackReply   Boolean @default(true)
+  inAppSuggestion      Boolean @default(true)
+  inAppTextSubmission  Boolean @default(true)
+  user                 User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_notification_preferences")
 }

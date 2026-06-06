@@ -24603,6 +24603,15 @@
           "marketing": {
             "type": "boolean"
           },
+          "inAppFeedbackReply": {
+            "type": "boolean"
+          },
+          "inAppSuggestion": {
+            "type": "boolean"
+          },
+          "inAppTextSubmission": {
+            "type": "boolean"
+          },
           "reminderTime": {
             "type": "string",
             "example": "09:00"

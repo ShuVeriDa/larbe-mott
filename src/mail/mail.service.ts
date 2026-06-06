@@ -18,6 +18,26 @@ import {
   PaymentReceiptArgs,
   buildPaymentReceiptEmail,
 } from "./templates/payment-receipt.template";
+import {
+  RepeatReminderArgs,
+  buildRepeatReminderEmail,
+} from "./templates/repeat-reminder.template";
+import {
+  WeeklyReportArgs,
+  buildWeeklyReportEmail,
+} from "./templates/weekly-report.template";
+import {
+  NewTextsArgs,
+  buildNewTextsEmail,
+} from "./templates/new-texts.template";
+import {
+  SupportReplyArgs,
+  buildSupportReplyEmail,
+} from "./templates/support-reply.template";
+import {
+  MarketingArgs,
+  buildMarketingEmail,
+} from "./templates/marketing.template";
 
 export interface SendMailParams {
   to: string;
@@ -78,6 +98,31 @@ export class MailService {
 
   async sendPaymentReceiptEmail(args: PaymentReceiptArgs & { to: string }) {
     const { subject, html, text } = buildPaymentReceiptEmail(args);
+    await this.send({ to: args.to, subject, html, text });
+  }
+
+  async sendRepeatReminderEmail(args: RepeatReminderArgs & { to: string }) {
+    const { subject, html, text } = buildRepeatReminderEmail(args);
+    await this.send({ to: args.to, subject, html, text });
+  }
+
+  async sendWeeklyReportEmail(args: WeeklyReportArgs & { to: string }) {
+    const { subject, html, text } = buildWeeklyReportEmail(args);
+    await this.send({ to: args.to, subject, html, text });
+  }
+
+  async sendNewTextsEmail(args: NewTextsArgs & { to: string }) {
+    const { subject, html, text } = buildNewTextsEmail(args);
+    await this.send({ to: args.to, subject, html, text });
+  }
+
+  async sendSupportReplyEmail(args: SupportReplyArgs & { to: string }) {
+    const { subject, html, text } = buildSupportReplyEmail(args);
+    await this.send({ to: args.to, subject, html, text });
+  }
+
+  async sendMarketingEmail(args: MarketingArgs & { to: string }) {
+    const { subject, html, text } = buildMarketingEmail(args);
     await this.send({ to: args.to, subject, html, text });
   }
 
