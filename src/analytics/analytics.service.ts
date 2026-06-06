@@ -130,6 +130,7 @@ export class AnalyticsService {
         userId,
         status: { not: WordStatus.KNOWN },
         OR: [{ nextReview: null }, { nextReview: { lte: now } }],
+        lemma: { userDictionaryEntries: { some: { userId } } },
       },
       _count: { status: true },
     });

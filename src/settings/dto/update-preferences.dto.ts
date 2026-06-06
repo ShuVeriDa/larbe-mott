@@ -62,9 +62,9 @@ export class UpdatePreferencesDto {
   @IsBoolean()
   showExamples?: boolean;
 
-  @ApiPropertyOptional({ enum: ["RU", "EN", "AR"] })
+  @ApiPropertyOptional({ enum: ["RU", "EN", "AR", "DE", "FR", "TR"] })
   @IsOptional()
-  @IsIn(["RU", "EN", "AR"])
+  @IsIn(["RU", "EN", "AR", "DE", "FR", "TR"])
   translationLanguage?: string;
 
   @ApiPropertyOptional({
@@ -82,6 +82,16 @@ export class UpdatePreferencesDto {
   @IsOptional()
   @IsBoolean()
   enableDecks?: boolean;
+
+  @ApiPropertyOptional({ description: "Enable SuperMemo 2 spaced repetition system." })
+  @IsOptional()
+  @IsBoolean()
+  enableSm2?: boolean;
+
+  @ApiPropertyOptional({ description: "Enable phrase review mode." })
+  @IsOptional()
+  @IsBoolean()
+  enablePhrases?: boolean;
 
   // ─── Reader typography ────────────────────────────────────────────────────────
 

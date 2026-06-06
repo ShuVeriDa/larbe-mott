@@ -24463,7 +24463,10 @@
             "enum": [
               "RU",
               "EN",
-              "AR"
+              "AR",
+              "DE",
+              "FR",
+              "TR"
             ]
           },
           "showReviewReminder": {
@@ -24473,6 +24476,14 @@
           "enableDecks": {
             "type": "boolean",
             "description": "Premium feature: enable curated learning decks (NEW / OLD / RETIRED). Setting to true requires an active Premium subscription."
+          },
+          "enableSm2": {
+            "type": "boolean",
+            "description": "Enable SuperMemo 2 spaced repetition system."
+          },
+          "enablePhrases": {
+            "type": "boolean",
+            "description": "Enable phrase review mode."
           },
           "readerFontFamily": {
             "type": "string",

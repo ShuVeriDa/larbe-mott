@@ -536,6 +536,7 @@ export class DictionaryService {
           userId,
           status: { not: "KNOWN" },
           OR: [{ nextReview: null }, { nextReview: { lte: now } }],
+          lemma: { userDictionaryEntries: { some: { userId } } },
         },
       }),
     ]);
@@ -774,6 +775,7 @@ export class DictionaryService {
         userId,
         status: { not: "KNOWN" },
         OR: [{ nextReview: null }, { nextReview: { lte: now } }],
+        lemma: { userDictionaryEntries: { some: { userId } } },
       },
       orderBy: { nextReview: "asc" },
       select: {

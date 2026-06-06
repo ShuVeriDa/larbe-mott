@@ -28,6 +28,7 @@ export class DashboardService {
       continueReading,
       dictionaryStats,
       translationsToday,
+      wordsAddedToday,
       subscription,
       recentTexts,
       popularTexts,
@@ -38,6 +39,7 @@ export class DashboardService {
       this.textService.getContinueReading(userId),
       this.getDictionaryStats(userId),
       this.getTranslationsToday(userId),
+      this.getWordsAddedToday(userId),
       this.subscriptionService.getMySubscription(userId),
       // Recent texts — newest first
       this.textService.getTexts({ orderBy: "newest", limit: SECTION_LIMIT }, userId),
@@ -68,6 +70,7 @@ export class DashboardService {
         streakDays: stats.streakDays,
         dueToday: stats.dueToday,
         words: stats.words,
+        wordsAddedToday,
       },
       continueReading,
       plan: this.buildPlanSnapshot(subscription, translationsToday),
@@ -87,6 +90,14 @@ export class DashboardService {
       _count: true,
     });
     return { total: agg._count };
+  }
+
+  private async getWordsAddedToday(userId: string): Promise<number> {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    return this.prisma.userDictionaryEntry.count({
+      where: { userId, addedAt: { gte: todayStart } },
+    });
   }
 
   private async getTranslationsToday(userId: string): Promise<number> {

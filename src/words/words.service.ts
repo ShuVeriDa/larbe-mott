@@ -121,9 +121,15 @@ export class WordsService {
       if (lemmaId) {
         await this.wordProgress.registerClick(userId, lemmaId, hint);
       } else if (hint.translation) {
-        void this.wordProgress.ensureDictionaryEntry(userId, hint).catch((e) => {
-          this.logger.warn(`ensureDictionaryEntry(no-lemma) failed: ${e instanceof Error ? e.message : String(e)}`);
+        const prefs = await this.prisma.userPreferences.findUnique({
+          where: { userId },
+          select: { autoAddOnClick: true },
         });
+        if (prefs?.autoAddOnClick) {
+          void this.wordProgress.ensureDictionaryEntry(userId, hint).catch((e) => {
+            this.logger.warn(`ensureDictionaryEntry(no-lemma) failed: ${e instanceof Error ? e.message : String(e)}`);
+          });
+        }
       }
     }
 

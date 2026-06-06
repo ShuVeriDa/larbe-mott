@@ -1216,6 +1216,8 @@ model UserPreferences {
   translationLanguage    String              @default("RU")
   showReviewReminder     Boolean             @default(true)
   enableDecks            Boolean             @default(false)
+  enableSm2              Boolean             @default(true)
+  enablePhrases          Boolean             @default(true)
   readerFontFamily       String              @default("sans")
   readerFontSize         String              @default("md")
   readerColumnWidth      String              @default("md")

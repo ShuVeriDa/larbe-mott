@@ -137,27 +137,34 @@ export class WordProgressService {
       });
     });
 
-    // Первый клик = слово попадает в словарь автоматически
-    if (hint) {
-      await this.ensureDictionaryEntry(userId, {
-        lemmaId,
-        word: hint.word,
-        normalized: hint.normalized,
-        translation: hint.translation,
-      });
-    } else {
-      // fallback без hint — берём данные из БД внутри ensureDictionaryEntry
-      const lemma = await this.prisma.lemma.findUnique({
-        where: { id: lemmaId },
-        select: { baseForm: true, normalized: true },
-      });
-      if (lemma) {
+    // Добавляем в словарь только если пользователь включил autoAddOnClick
+    const prefs = await this.prisma.userPreferences.findUnique({
+      where: { userId },
+      select: { autoAddOnClick: true },
+    });
+    const autoAdd = prefs?.autoAddOnClick ?? false;
+
+    if (autoAdd) {
+      if (hint) {
         await this.ensureDictionaryEntry(userId, {
           lemmaId,
-          word: lemma.baseForm,
-          normalized: lemma.normalized,
-          translation: "",
+          word: hint.word,
+          normalized: hint.normalized,
+          translation: hint.translation,
         });
+      } else {
+        const lemma = await this.prisma.lemma.findUnique({
+          where: { id: lemmaId },
+          select: { baseForm: true, normalized: true },
+        });
+        if (lemma) {
+          await this.ensureDictionaryEntry(userId, {
+            lemmaId,
+            word: lemma.baseForm,
+            normalized: lemma.normalized,
+            translation: "",
+          });
+        }
       }
     }
     await this.syncTextProgressForLemma(userId, lemmaId);
