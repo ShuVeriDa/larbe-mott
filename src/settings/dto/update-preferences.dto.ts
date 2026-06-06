@@ -45,11 +45,6 @@ export class UpdatePreferencesDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()
-  autoNextPage?: boolean;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsBoolean()
   autoAddOnClick?: boolean;
 
   @ApiPropertyOptional()
@@ -100,10 +95,12 @@ export class UpdatePreferencesDto {
   @IsIn(["sans", "golos", "serif", "lora", "merriweather", "pt-serif", "source-serif", "mono"])
   readerFontFamily?: string;
 
-  @ApiPropertyOptional({ enum: ["xs", "sm", "md", "lg", "xl"] })
+  @ApiPropertyOptional({ minimum: 13, maximum: 22 })
   @IsOptional()
-  @IsIn(["xs", "sm", "md", "lg", "xl"])
-  readerFontSize?: string;
+  @IsInt()
+  @Min(13)
+  @Max(22)
+  readerFontSize?: number;
 
   @ApiPropertyOptional({ enum: ["xs", "sm", "md", "lg", "full"] })
   @IsOptional()

@@ -24446,9 +24446,6 @@
           "showProgress": {
             "type": "boolean"
           },
-          "autoNextPage": {
-            "type": "boolean"
-          },
           "autoAddOnClick": {
             "type": "boolean"
           },
@@ -24499,14 +24496,9 @@
             ]
           },
           "readerFontSize": {
-            "type": "string",
-            "enum": [
-              "xs",
-              "sm",
-              "md",
-              "lg",
-              "xl"
-            ]
+            "type": "number",
+            "minimum": 13,
+            "maximum": 22
           },
           "readerColumnWidth": {
             "type": "string",
