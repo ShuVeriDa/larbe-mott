@@ -80,7 +80,7 @@ export class FeedbackService {
         include: {
           messages: {
             where: { messageType: FeedbackMessageType.PUBLIC_REPLY },
-            orderBy: { createdAt: "asc" },
+            orderBy: { createdAt: "desc" },
             take: 1,
           },
         },
@@ -105,7 +105,7 @@ export class FeedbackService {
 
     const items = threads.map((t) => ({
       ...t,
-      unreadCount: unreadMap[t.id] ?? 0,
+      unreadCountUser: unreadMap[t.id] ?? 0,
     }));
 
     return { items, total, page, limit };
@@ -189,7 +189,7 @@ export class FeedbackService {
     });
     if (!thread) throw new NotFoundException({ code: ErrorCode.THREAD_NOT_FOUND, message: "Thread not found" });
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const message = await tx.feedbackMessage.create({
         data: {
           threadId,
@@ -215,6 +215,12 @@ export class FeedbackService {
 
       return message;
     });
+
+    this.notifyAdmins(NotificationType.FEEDBACK_REPLY, threadId).catch((err) =>
+      this.logger.error("Failed to notify admins about feedback reply", err),
+    );
+
+    return result;
   }
 
   async createReaction(userId: string, dto: CreateReactionDto) {
