@@ -12,12 +12,12 @@ const prisma = new PrismaClient({ adapter });
 
 export const createTallarUser = async () => {
   const user = {
-    email: "tallarho@nakhcho.vu",
-    username: "tallarho",
-    password: "123456Bb.",
-    phone: "+79635940530",
-    name: "Tallarho",
-    surname: "Vu So",
+    email: process.env["SEED_USER_EMAIL"]!,
+    username: process.env["SEED_USER_USERNAME"]!,
+    password: process.env["SEED_USER_PASSWORD"]!,
+    phone: process.env["SEED_USER_PHONE"]!,
+    name: process.env["SEED_USER_NAME"]!,
+    surname: process.env["SEED_USER_SURNAME"]!,
   };
 
   const created = await prisma.user.create({
@@ -41,27 +41,6 @@ export const createTallarUser = async () => {
     });
   }
 };
-
-// await prisma.user.upsert({
-//   where: { email: user.email },
-//   create: {
-//     email: user.email,
-//     username: user.username,
-//     password: await hash(user.password),
-//     phone: user.phone,
-//     name: user.name,
-//     surname: user.surname,
-//     role: user.role,
-//   },
-//   update: {
-//     username: user.username,
-//     password: await hash(user.password),
-//     phone: user.phone,
-//     name: user.name,
-//     surname: user.surname,
-//     role: user.role,
-//   },
-// });
 
 const fakeUsers = [
   {
