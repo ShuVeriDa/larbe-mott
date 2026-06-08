@@ -14,7 +14,7 @@ export const createTallarUser = async () => {
   const user = {
     email: "tallarho@nakhcho.vu",
     username: "tallarho",
-    password: "123456",
+    password: "123456Bb.",
     phone: "+79635940530",
     name: "Tallarho",
     surname: "Vu So",
