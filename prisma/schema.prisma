@@ -1207,6 +1207,7 @@ model UserPreferences {
   uiLanguage             String              @default("RU")
   fontSize               Int                 @default(16)
   popupMode              String              @default("POPUP")
+  mobileDisplayMode      String              @default("SHEET")
   highlightKnown         Boolean             @default(true)
   showProgress           Boolean             @default(true)
   autoAddOnClick         Boolean             @default(false)

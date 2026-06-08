@@ -32,6 +32,11 @@ export class UpdatePreferencesDto {
   @IsIn(["POPUP", "SIDEBAR", "BOTH"])
   popupMode?: string;
 
+  @ApiPropertyOptional({ enum: ["POPUP", "SHEET"] })
+  @IsOptional()
+  @IsIn(["POPUP", "SHEET"])
+  mobileDisplayMode?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()

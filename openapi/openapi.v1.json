@@ -24440,6 +24440,13 @@
               "BOTH"
             ]
           },
+          "mobileDisplayMode": {
+            "type": "string",
+            "enum": [
+              "POPUP",
+              "SHEET"
+            ]
+          },
           "highlightKnown": {
             "type": "boolean"
           },

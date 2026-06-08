@@ -203,22 +203,44 @@ export class AnalyticsService {
     const twoYearsAgo = new Date(now);
     twoYearsAgo.setUTCFullYear(twoYearsAgo.getUTCFullYear() - 2);
 
+    const STREAK_CLICK_THRESHOLD = 7;
+
     const [allEvents, weekEvents] = await Promise.all([
       this.prisma.userEvent.findMany({
-        where: { userId, createdAt: { gte: twoYearsAgo } },
-        select: { createdAt: true },
+        where: {
+          userId,
+          createdAt: { gte: twoYearsAgo },
+          type: { in: [UserEventType.CLICK_WORD, UserEventType.REVIEW_SESSION] },
+        },
+        select: { createdAt: true, type: true },
         orderBy: { createdAt: "desc" },
       }),
       this.prisma.userEvent.findMany({
-        where: { userId, createdAt: { gte: mondayUtc, lte: sundayUtc } },
-        select: { createdAt: true },
+        where: {
+          userId,
+          createdAt: { gte: mondayUtc, lte: sundayUtc },
+          type: { in: [UserEventType.CLICK_WORD, UserEventType.REVIEW_SESSION] },
+        },
+        select: { createdAt: true, type: true },
       }),
     ]);
 
+    // День считается активным если: ≥7 CLICK_WORD или хотя бы 1 REVIEW_SESSION
+    const isActiveDayMap = new Map<string, boolean>();
+    const clickCountByDay = new Map<string, number>();
+    for (const e of allEvents) {
+      const day = this.dateKeyWithOffset(e.createdAt, tzOffsetMinutes);
+      if (e.type === UserEventType.REVIEW_SESSION) {
+        isActiveDayMap.set(day, true);
+      } else if (e.type === UserEventType.CLICK_WORD) {
+        const count = (clickCountByDay.get(day) ?? 0) + 1;
+        clickCountByDay.set(day, count);
+        if (count >= STREAK_CLICK_THRESHOLD) isActiveDayMap.set(day, true);
+      }
+    }
+
     // Уникальные дни, от новых к старым
-    const uniqueDaysDesc = [
-      ...new Set(allEvents.map((e) => this.dateKeyWithOffset(e.createdAt, tzOffsetMinutes))),
-    ].sort().reverse();
+    const uniqueDaysDesc = [...isActiveDayMap.keys()].sort().reverse();
 
     // Текущий streak
     let current = 0;
@@ -248,9 +270,19 @@ export class AnalyticsService {
     }
 
     // Дни текущей недели
-    const activeDays = new Set(
-      weekEvents.map((e) => this.dateKeyWithOffset(e.createdAt, tzOffsetMinutes)),
-    );
+    const weekClickCountByDay = new Map<string, number>();
+    const weekActiveDaysSet = new Set<string>();
+    for (const e of weekEvents) {
+      const day = this.dateKeyWithOffset(e.createdAt, tzOffsetMinutes);
+      if (e.type === UserEventType.REVIEW_SESSION) {
+        weekActiveDaysSet.add(day);
+      } else if (e.type === UserEventType.CLICK_WORD) {
+        const count = (weekClickCountByDay.get(day) ?? 0) + 1;
+        weekClickCountByDay.set(day, count);
+        if (count >= STREAK_CLICK_THRESHOLD) weekActiveDaysSet.add(day);
+      }
+    }
+    const activeDays = weekActiveDaysSet;
     const weekDays = Array.from({ length: 7 }, (_, i) => {
       const d = new Date(monday);
       d.setUTCDate(monday.getUTCDate() + i);
