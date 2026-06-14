@@ -46,6 +46,8 @@ import { ReaderContextModule } from "./reader-context/reader-context.module";
 import { GenreModule } from "./genre/genre.module";
 import { NotificationModule } from "./notification/notification.module";
 import { NotificationsEmailModule } from "./notifications-email/notifications-email.module";
+import { TransliterationModule } from "./transliteration/transliteration.module";
+import { TextScriptModule } from "./text-script/text-script.module";
 import { envValidationSchema } from "./config/env.validation";
 
 @Module({
@@ -109,6 +111,8 @@ import { envValidationSchema } from "./config/env.validation";
     GenreModule,
     NotificationModule,
     NotificationsEmailModule,
+    TransliterationModule,
+    TextScriptModule,
   ],
   controllers: [],
   providers: [

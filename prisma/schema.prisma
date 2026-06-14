@@ -671,6 +671,7 @@ model Text {
   tokenizationJobs   TokenizationJob[]
   bookmarks          UserTextBookmark[]
   progress           UserTextProgress[]
+  scriptVersions     TextScriptVersion[]
   wordContexts       WordContext[]
 
   @@index([publishedAt])
@@ -970,6 +971,11 @@ model PhrasebookPhrase {
   original        String
   transliteration String?
   translation     String
+  translationEn   String?
+  translationAr   String?
+  translationDe   String?
+  translationFr   String?
+  translationTr   String?
   lang            Language
   audioUrl        String?
   sortOrder       Int                       @default(0)
@@ -1227,6 +1233,9 @@ model UserPreferences {
   readerParagraphSpacing String              @default("none")
   readerTheme            String              @default("default")
   readerBgColor          String              @default("")
+  readerWordSpacing      String              @default("normal")
+  readerArabicFontFamily String              @default("scheherazade")
+  readerArabicFontSize   Int                 @default(22)
   pageBookmarks          UserPageBookmark[]
   user                   User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   textHighlights         UserTextHighlight[]
@@ -1908,6 +1917,7 @@ model UserText {
 
   user               User                        @relation("UserOwnedTexts", fields: [userId], references: [id], onDelete: Cascade)
   processingVersions UserTextProcessingVersion[] @relation("UserTextVersions")
+  scriptVersions     UserTextScriptVersion[]
 
   @@index([userId])
   @@index([userId, type])
@@ -1917,6 +1927,63 @@ model UserText {
 enum UserTextType {
   ORIGINAL
   EXTERNAL
+}
+
+enum ChScript {
+  LATIN
+  ARABIC
+}
+
+model TextScriptVersion {
+  id           String           @id @default(cuid())
+  textId       String
+  script       ChScript
+  status       ProcessingStatus @default(IDLE)
+  errorMessage String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  text         Text             @relation(fields: [textId], references: [id], onDelete: Cascade)
+  pages        TextScriptPage[]
+
+  @@unique([textId, script])
+  @@map("text_script_version")
+}
+
+model TextScriptPage {
+  id          String            @id @default(cuid())
+  versionId   String
+  pageNumber  Int
+  contentRich Json
+  version     TextScriptVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@unique([versionId, pageNumber])
+  @@map("text_script_page")
+}
+
+model UserTextScriptVersion {
+  id           String                @id @default(cuid())
+  userTextId   String
+  script       ChScript
+  status       ProcessingStatus      @default(IDLE)
+  errorMessage String?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+  userText     UserText              @relation(fields: [userTextId], references: [id], onDelete: Cascade)
+  pages        UserTextScriptPage[]
+
+  @@unique([userTextId, script])
+  @@map("user_text_script_version")
+}
+
+model UserTextScriptPage {
+  id          String                @id @default(cuid())
+  versionId   String
+  pageNumber  Int
+  contentRich Json
+  version     UserTextScriptVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+
+  @@unique([versionId, pageNumber])
+  @@map("user_text_script_page")
 }
 
 enum NotificationType {

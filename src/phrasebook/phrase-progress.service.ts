@@ -228,7 +228,7 @@ export class PhraseProgressService {
   async getReviewStats(userId: string) {
     const now = new Date();
 
-    const [dueProgress, learningCount, knownCount, todayLogs, totalPhrases, startedPhraseIds] =
+    const [dueProgress, learningCount, knownCount, todayLogs, totalPhrases, startedPhraseIds, savedIds] =
       await this.prisma.$transaction([
         // phrases in progress that are due (not KNOWN and due now)
         this.prisma.userPhrasebookProgress.count({
@@ -255,6 +255,10 @@ export class PhraseProgressService {
           where: { userId },
           select: { phraseId: true },
         }),
+        this.prisma.userPhrasebookSave.findMany({
+          where: { userId },
+          select: { phraseId: true },
+        }),
       ]);
 
     // NEW phrases (never started) are also due
@@ -262,10 +266,19 @@ export class PhraseProgressService {
     const newCount = totalPhrases - startedIds.size;
     const dueCount = dueProgress + Math.max(0, newCount);
 
+    // savedDueCount: saved phrases that are not KNOWN
+    const savedPhraseIds = savedIds.map((s) => s.phraseId);
+    const savedKnownCount = savedPhraseIds.length > 0
+      ? await this.prisma.userPhrasebookProgress.count({
+          where: { userId, phraseId: { in: savedPhraseIds }, status: "KNOWN" },
+        })
+      : 0;
+    const savedDueCount = Math.max(0, savedPhraseIds.length - savedKnownCount);
+
     // Streak: count consecutive days with at least one review
     const streak = await this.calculateStreak(userId);
 
-    return { dueCount, learningCount, knownCount, reviewedToday: todayLogs, streak };
+    return { dueCount, savedDueCount, learningCount, knownCount, reviewedToday: todayLogs, streak };
   }
 
   private async calculateStreak(userId: string): Promise<number> {

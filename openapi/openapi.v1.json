@@ -729,6 +729,19 @@
             "schema": {
               "type": "number"
             }
+          },
+          {
+            "name": "script",
+            "required": false,
+            "in": "query",
+            "description": "Return transliterated contentRich (LATIN or ARABIC). Omit for Cyrillic.",
+            "schema": {
+              "enum": [
+                "LATIN",
+                "ARABIC"
+              ],
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -1912,6 +1925,348 @@
         "summary": "Force re-aggregate daily stats (for day=YYYY-MM-DD or last 3 days)",
         "tags": [
           "admin/tracking"
+        ]
+      }
+    },
+    "/api/admin/texts/{id}/script-versions": {
+      "post": {
+        "operationId": "TextScriptController_generateTextVersion",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Text ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateScriptVersionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Generate a script version for a library text (admin)",
+        "tags": [
+          "text-script"
+        ]
+      },
+      "get": {
+        "operationId": "TextScriptController_getTextVersions",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Text ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of script version statuses"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List script versions for a library text (admin)",
+        "tags": [
+          "text-script"
+        ]
+      }
+    },
+    "/api/admin/texts/{id}/script-versions/{script}/pages/{pageNumber}": {
+      "patch": {
+        "operationId": "TextScriptController_updateTextPage",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Text ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "script",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "enum": [
+                "LATIN",
+                "ARABIC"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageNumber",
+            "required": true,
+            "in": "path",
+            "description": "Page number (1-based)",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateScriptPageDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Edit a single page of a library text script version (admin)",
+        "tags": [
+          "text-script"
+        ]
+      }
+    },
+    "/api/admin/texts/{id}/script-versions/{script}": {
+      "delete": {
+        "operationId": "TextScriptController_deleteTextVersion",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Text ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "script",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "enum": [
+                "LATIN",
+                "ARABIC"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Script version deleted"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a library text script version (admin)",
+        "tags": [
+          "text-script"
+        ]
+      }
+    },
+    "/api/user-texts/{id}/script-versions": {
+      "post": {
+        "operationId": "TextScriptController_generateUserTextVersion",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "UserText ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateScriptVersionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Generate a script version for a user text",
+        "tags": [
+          "text-script"
+        ]
+      },
+      "get": {
+        "operationId": "TextScriptController_getUserTextVersions",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "UserText ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of script version statuses"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List script versions for a user text",
+        "tags": [
+          "text-script"
+        ]
+      }
+    },
+    "/api/user-texts/{id}/script-versions/{script}/pages/{pageNumber}": {
+      "patch": {
+        "operationId": "TextScriptController_updateUserTextPage",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "UserText ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "script",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "enum": [
+                "LATIN",
+                "ARABIC"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "name": "pageNumber",
+            "required": true,
+            "in": "path",
+            "description": "Page number (1-based)",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateScriptPageDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Edit a single page of a user text script version",
+        "tags": [
+          "text-script"
+        ]
+      }
+    },
+    "/api/user-texts/{id}/script-versions/{script}": {
+      "delete": {
+        "operationId": "TextScriptController_deleteUserTextVersion",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "UserText ID",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "script",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "enum": [
+                "LATIN",
+                "ARABIC"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Script version deleted"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a user text script version",
+        "tags": [
+          "text-script"
         ]
       }
     },
@@ -19879,6 +20234,19 @@
             "schema": {
               "type": "number"
             }
+          },
+          {
+            "name": "script",
+            "required": false,
+            "in": "query",
+            "description": "Return transliterated contentRich (LATIN or ARABIC).",
+            "schema": {
+              "enum": [
+                "LATIN",
+                "ARABIC"
+              ],
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -20605,6 +20973,33 @@
         },
         "required": [
           "type"
+        ]
+      },
+      "GenerateScriptVersionDto": {
+        "type": "object",
+        "properties": {
+          "script": {
+            "type": "string",
+            "enum": [
+              "LATIN",
+              "ARABIC"
+            ]
+          }
+        },
+        "required": [
+          "script"
+        ]
+      },
+      "UpdateScriptPageDto": {
+        "type": "object",
+        "properties": {
+          "contentRich": {
+            "type": "object",
+            "description": "TipTap JSON document"
+          }
+        },
+        "required": [
+          "contentRich"
         ]
       },
       "SetTextPositionDto": {
@@ -24506,6 +24901,39 @@
             "type": "number",
             "minimum": 13,
             "maximum": 22
+          },
+          "readerWordSpacing": {
+            "type": "string",
+            "enum": [
+              "tight",
+              "normal",
+              "wide",
+              "wider"
+            ]
+          },
+          "readerArabicFontFamily": {
+            "type": "string",
+            "enum": [
+              "scheherazade",
+              "amiri",
+              "noto-naskh",
+              "lateef",
+              "reem-kufi"
+            ]
+          },
+          "readerArabicFontSize": {
+            "type": "number",
+            "enum": [
+              16,
+              18,
+              20,
+              22,
+              24,
+              26,
+              28,
+              32,
+              36
+            ]
           },
           "readerColumnWidth": {
             "type": "string",

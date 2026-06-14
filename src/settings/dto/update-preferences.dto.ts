@@ -107,6 +107,22 @@ export class UpdatePreferencesDto {
   @Max(22)
   readerFontSize?: number;
 
+  @ApiPropertyOptional({ enum: ["tight", "normal", "wide", "wider"] })
+  @IsOptional()
+  @IsIn(["tight", "normal", "wide", "wider"])
+  readerWordSpacing?: string;
+
+  @ApiPropertyOptional({ enum: ["scheherazade", "amiri", "noto-naskh", "lateef", "reem-kufi"] })
+  @IsOptional()
+  @IsIn(["scheherazade", "amiri", "noto-naskh", "lateef", "reem-kufi"])
+  readerArabicFontFamily?: string;
+
+  @ApiPropertyOptional({ enum: [16, 18, 20, 22, 24, 26, 28, 32, 36] })
+  @IsOptional()
+  @IsInt()
+  @IsIn([16, 18, 20, 22, 24, 26, 28, 32, 36])
+  readerArabicFontSize?: number;
+
   @ApiPropertyOptional({ enum: ["xs", "sm", "md", "lg", "full"] })
   @IsOptional()
   @IsIn(["xs", "sm", "md", "lg", "full"])

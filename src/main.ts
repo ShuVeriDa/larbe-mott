@@ -6,6 +6,7 @@ import { WsAdapter } from "@nestjs/platform-ws";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import cookieParser from "cookie-parser";
 import * as dotenv from "dotenv";
+import express from "express";
 import type { Application, Request, Response } from "express";
 import * as fs from "fs";
 import helmet from "helmet";
@@ -49,6 +50,8 @@ async function bootstrap() {
   //   defaultVersion: "1",
   // });
   app.use(cookieParser());
+  app.use(express.json({ limit: "10mb" }));
+  app.use(express.urlencoded({ limit: "10mb", extended: true }));
   app.enableCors({
     origin: [
       frontendUrl,

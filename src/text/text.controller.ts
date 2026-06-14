@@ -23,7 +23,9 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
-import { Language, Level } from "@prisma/client";
+import { ChScript, Language, Level } from "@prisma/client";
+import { TextScriptService } from "src/text-script/text-script.service";
+import { TransliterationService } from "src/transliteration/transliteration.service";
 import { Throttle } from "@nestjs/throttler";
 import type { Request } from "express";
 import { Auth } from "src/auth/decorators/auth.decorator";
@@ -43,6 +45,8 @@ export class TextController {
   constructor(
     private readonly textService: TextService,
     private readonly tracking: TrackingService,
+    private readonly textScript: TextScriptService,
+    private readonly transliteration: TransliterationService,
   ) {}
 
   @Get("tags")
@@ -150,6 +154,7 @@ export class TextController {
   })
   @ApiParam({ name: "id", description: "Text ID (UUID)" })
   @ApiParam({ name: "pageNumber", description: "Page number (1-based)" })
+  @ApiQuery({ name: "script", enum: ChScript, required: false, description: "Return transliterated contentRich (LATIN or ARABIC). Omit for Cyrillic." })
   @ApiOkResponse({
     description: "Text metadata, page (contentRich, contentRaw), tokens for the page, progress.",
   })
@@ -158,8 +163,21 @@ export class TextController {
     @Param("id", ParseUUIDPipe) textId: string,
     @Param("pageNumber", ParseIntPipe) pageNumber: number,
     @User("id") userId: string | undefined,
+    @Query("script") script?: ChScript,
   ) {
-    return this.textService.getPage(textId, pageNumber, userId);
+    const page = await this.textService.getPage(textId, pageNumber, userId);
+    if (script) {
+      const scriptPage = await this.textScript.getTextPageWithScript(textId, pageNumber, script);
+      if (scriptPage) {
+        const nasalizedWords = this.transliteration.extractNasalizedWords(page.page.contentRich as object);
+        const tokens = page.tokens.map((t) => ({
+          ...t,
+          displayText: this.transliteration.transliterateWord(t.original, script, nasalizedWords.has(t.original)),
+        }));
+        return { ...page, tokens, page: { ...page.page, contentRich: scriptPage.contentRich } };
+      }
+    }
+    return page;
   }
 
   @Get("bookmarks")
