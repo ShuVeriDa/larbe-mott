@@ -43,7 +43,7 @@ export class TokenService {
     });
 
     const planLimits = subscription?.plan?.limits as Record<string, number> | null;
-    const limit = planLimits?.translationsPerDay ?? 50;
+    const limit = planLimits?.translationsPerDay ?? -1; // Free tier is unlimited
     await this.redis.set(PLAN_LIMIT_KEY(userId), String(limit), "EX", PLAN_LIMIT_TTL);
     return limit;
   }

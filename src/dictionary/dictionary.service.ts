@@ -577,7 +577,7 @@ export class DictionaryService {
       }),
     ]);
     const planLimits = subscription?.plan?.limits as Record<string, number> | null;
-    const wordsInDictionary = planLimits?.wordsInDictionary ?? 500;
+    const wordsInDictionary = planLimits?.wordsInDictionary ?? -1; // Free tier is unlimited
     if (wordsInDictionary !== -1 && currentCount >= wordsInDictionary) {
       throw new ForbiddenException({ code: ErrorCode.VOCABULARY_LIMIT_REACHED, message: `Vocabulary limit of ${wordsInDictionary} words reached. Upgrade your plan to add more.` });
     }

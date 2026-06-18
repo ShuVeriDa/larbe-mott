@@ -21,73 +21,78 @@ export class PremiumGuard implements CanActivate {
     private readonly redis: RedisService,
   ) {}
 
-  async canActivate(context: ExecutionContext): Promise<boolean> {
-    const request = context
-      .switchToHttp()
-      .getRequest<{ user?: UserPrisma }>();
-    const userId = request.user?.id;
+  async canActivate(_context: ExecutionContext): Promise<boolean> {
+    // All features are free — premium gate disabled.
+    // To re-enable: remove the line below and restore the commented block.
+    return true;
 
-    if (!userId) {
-      throw new ForbiddenException({ code: ErrorCode.ACCESS_DENIED, message: "Access denied" });
-    }
-
-    const cached = await this.getCachedState(userId);
-    if (cached === "active") return true;
-    if (cached === "expired") {
-      throw new ForbiddenException({
-        code: ErrorCode.SUBSCRIPTION_EXPIRED,
-        message:
-          "Your Premium subscription has expired. Your data is preserved — renew to continue.",
-      });
-    }
-    if (cached === "none") {
-      throw new ForbiddenException({
-        code: ErrorCode.SUBSCRIPTION_REQUIRED,
-        message: "This feature requires a Premium subscription.",
-      });
-    }
-
-    // Проверяем роль и последнюю premium-подписку параллельно (2 запроса максимум)
-    const [adminRole, latestPremiumSubscription] = await Promise.all([
-      this.prisma.userRoleAssignment.findFirst({
-        where: { userId, role: { name: { in: [...PRIVILEGED_ROLES] } } },
-      }),
-      this.prisma.subscription.findFirst({
-        where: {
-          userId,
-          plan: { type: PlanType.PREMIUM },
-        },
-        orderBy: { startDate: "desc" },
-        select: { status: true },
-      }),
-    ]);
-
-    if (
-      adminRole ||
-      latestPremiumSubscription?.status === SubscriptionStatus.ACTIVE ||
-      latestPremiumSubscription?.status === SubscriptionStatus.TRIALING
-    ) {
-      await this.setCachedState(userId, "active");
-      return true;
-    }
-
-    if (
-      latestPremiumSubscription?.status === SubscriptionStatus.CANCELED ||
-      latestPremiumSubscription?.status === SubscriptionStatus.EXPIRED
-    ) {
-      await this.setCachedState(userId, "expired");
-      throw new ForbiddenException({
-        code: ErrorCode.SUBSCRIPTION_EXPIRED,
-        message:
-          "Your Premium subscription has expired. Your data is preserved — renew to continue.",
-      });
-    }
-
-    await this.setCachedState(userId, "none");
-    throw new ForbiddenException({
-      code: ErrorCode.SUBSCRIPTION_REQUIRED,
-      message: "This feature requires a Premium subscription.",
-    });
+    // ── Restore block below to re-enable premium gating ──────────────────────
+    // const request = context
+    //   .switchToHttp()
+    //   .getRequest<{ user?: UserPrisma }>();
+    // const userId = request.user?.id;
+    //
+    // if (!userId) {
+    //   throw new ForbiddenException({ code: ErrorCode.ACCESS_DENIED, message: "Access denied" });
+    // }
+    //
+    // const cached = await this.getCachedState(userId);
+    // if (cached === "active") return true;
+    // if (cached === "expired") {
+    //   throw new ForbiddenException({
+    //     code: ErrorCode.SUBSCRIPTION_EXPIRED,
+    //     message:
+    //       "Your Premium subscription has expired. Your data is preserved — renew to continue.",
+    //   });
+    // }
+    // if (cached === "none") {
+    //   throw new ForbiddenException({
+    //     code: ErrorCode.SUBSCRIPTION_REQUIRED,
+    //     message: "This feature requires a Premium subscription.",
+    //   });
+    // }
+    //
+    // const [adminRole, latestPremiumSubscription] = await Promise.all([
+    //   this.prisma.userRoleAssignment.findFirst({
+    //     where: { userId, role: { name: { in: [...PRIVILEGED_ROLES] } } },
+    //   }),
+    //   this.prisma.subscription.findFirst({
+    //     where: {
+    //       userId,
+    //       plan: { type: PlanType.PREMIUM },
+    //     },
+    //     orderBy: { startDate: "desc" },
+    //     select: { status: true },
+    //   }),
+    // ]);
+    //
+    // if (
+    //   adminRole ||
+    //   latestPremiumSubscription?.status === SubscriptionStatus.ACTIVE ||
+    //   latestPremiumSubscription?.status === SubscriptionStatus.TRIALING
+    // ) {
+    //   await this.setCachedState(userId, "active");
+    //   return true;
+    // }
+    //
+    // if (
+    //   latestPremiumSubscription?.status === SubscriptionStatus.CANCELED ||
+    //   latestPremiumSubscription?.status === SubscriptionStatus.EXPIRED
+    // ) {
+    //   await this.setCachedState(userId, "expired");
+    //   throw new ForbiddenException({
+    //     code: ErrorCode.SUBSCRIPTION_EXPIRED,
+    //     message:
+    //       "Your Premium subscription has expired. Your data is preserved — renew to continue.",
+    //   });
+    // }
+    //
+    // await this.setCachedState(userId, "none");
+    // throw new ForbiddenException({
+    //   code: ErrorCode.SUBSCRIPTION_REQUIRED,
+    //   message: "This feature requires a Premium subscription.",
+    // });
+    // ─────────────────────────────────────────────────────────────────────────
   }
 
   private cacheKey(userId: string): string {

@@ -238,6 +238,6 @@ export class FoldersService {
 
     // Fallback: если ключа нет — выводим из булевого dictionaryFolders
     if (dictionaryFolders === true) return -1;
-    return 0;
+    return -1; // Free tier is unlimited
   }
 }

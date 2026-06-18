@@ -102,10 +102,27 @@ export class SubscriptionService {
     return {
       translationsToday,
       wordsInDictionary,
-      // Полный limits-объект отдаём, чтобы фронт мог построить feature-list карточек и сравнительную таблицу
+      // Full limits object sent to frontend for feature cards and comparison table.
+      // Fallback gives unlimited access — all features free until subscriptions are re-enabled.
       limits: planLimits ?? {
-        translationsPerDay: 50,
-        wordsInDictionary: 500,
+        translationsPerDay: -1,
+        wordsInDictionary: -1,
+        availableTexts: -1,
+        statisticsDays: -1,
+        maxFolders: -1,
+        readTexts: true,
+        wordTranslation: true,
+        tokenAnalysis: true,
+        personalDictionary: true,
+        dictionaryFolders: true,
+        hasComplexTexts: true,
+        textProgress: true,
+        spaceRepetition: true,
+        hasFlashcards: true,
+        wordContexts: true,
+        analytics: true,
+        hasAdvancedAnalytics: true,
+        hasPrioritySupport: true,
       },
     };
   }

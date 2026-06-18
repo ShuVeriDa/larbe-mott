@@ -10,25 +10,31 @@ if (!connectionString) {
 const adapter = new PrismaPg({ connectionString });
 const prisma = new PrismaClient({ adapter });
 
+// All features are free — limits match PRO tier.
+// To restore original free-tier restrictions, replace the values below with:
+//   translationsPerDay: 50, wordsInDictionary: 500, availableTexts: 20,
+//   maxFolders: 0, dictionaryFolders: false, hasComplexTexts: false,
+//   spaceRepetition: false, hasFlashcards: false, wordContexts: false,
+//   analytics: false, hasAdvancedAnalytics: false, hasPrioritySupport: false
 const FREE_LIMITS: PlanLimits = {
-  translationsPerDay: 50,
-  wordsInDictionary: 500,
-  availableTexts: 20,
+  translationsPerDay: -1,
+  wordsInDictionary: -1,
+  availableTexts: -1,
   statisticsDays: -1,
-  maxFolders: 0,
+  maxFolders: -1,
   readTexts: true,
   wordTranslation: true,
   tokenAnalysis: true,
   personalDictionary: true,
-  dictionaryFolders: false,
-  hasComplexTexts: false,
+  dictionaryFolders: true,
+  hasComplexTexts: true,
   textProgress: true,
-  spaceRepetition: false,
-  hasFlashcards: false,
-  wordContexts: false,
-  analytics: false,
-  hasAdvancedAnalytics: false,
-  hasPrioritySupport: false,
+  spaceRepetition: true,
+  hasFlashcards: true,
+  wordContexts: true,
+  analytics: true,
+  hasAdvancedAnalytics: true,
+  hasPrioritySupport: true,
 };
 
 const PREMIUM_LIMITS: PlanLimits = {
