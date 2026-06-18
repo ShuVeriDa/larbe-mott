@@ -751,12 +751,6 @@ export class AdminTextService {
       }
     }
 
-    const wasUnpublished = text.publishedAt === null;
-    const isNowPublished = updated.publishedAt !== null;
-    if (wasUnpublished && isNowPublished) {
-      void this.emitNewLibraryText(updated.id, updated.title).catch(() => undefined);
-    }
-
     return { ...updated, tags: updated.tags.map((tt) => tt.tag) };
   }
 
@@ -1323,7 +1317,6 @@ export class AdminTextService {
       where: { id: textId },
       data: { publishedAt: new Date(), archivedAt: null },
     });
-    void this.emitNewLibraryText(textId, text.title).catch(() => undefined);
     return { textId, published: true };
   }
 
@@ -1384,6 +1377,13 @@ export class AdminTextService {
   }
 
   private async deleteTextById(textId: string) {
+    const text = await this.prisma.text.findUnique({ where: { id: textId }, select: { imageUrl: true } });
+    if (text?.imageUrl?.startsWith("/uploads/covers/")) {
+      fs.unlink(join(process.cwd(), text.imageUrl), () => {});
+      const origPath = join(process.cwd(), text.imageUrl.replace("/covers/", "/covers/originals/").replace(/\.webp$/, "").replace(/([^/]+)$/, "$1-orig.jpg"));
+      fs.unlink(origPath, () => {});
+    }
+
     await this.prisma.$transaction(async (tx) => {
       const versions = await tx.textProcessingVersion.findMany({
         where: { textId },
