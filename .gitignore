@@ -67,3 +67,6 @@ prompt.md
 # GeoIP databases
 *.mmdb
 /data/geoip/
+
+#uploads
+uploads

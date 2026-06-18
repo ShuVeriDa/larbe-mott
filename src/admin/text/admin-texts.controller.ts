@@ -34,9 +34,7 @@ import {
 } from "@nestjs/swagger";
 import { PermissionCode } from "@prisma/client";
 import { ErrorCode } from "src/common/errors/error-codes";
-import { diskStorage } from "multer";
-import { extname, join } from "path";
-import * as fs from "fs";
+import { memoryStorage } from "multer";
 import { CreateTextDto } from "src/admin/text/dto/create.dto";
 import { BulkTextIdsDto } from "src/admin/text/dto/bulk.dto";
 import { BulkImportTextsDto } from "src/admin/text/dto/bulk-import.dto";
@@ -443,30 +441,20 @@ export class AdminTextsController {
       properties: { file: { type: "string", format: "binary" } },
     },
   })
-  @ApiOkResponse({ description: "{ imageUrl: string }" })
+  @ApiOkResponse({ description: "{ imageUrl: string, imageUrlOptimized: string }" })
   @ApiNotFoundResponse({ description: "Text not found." })
   @ApiForbiddenResponse({ description: "Forbidden. Admin role required." })
   @UseInterceptors(
     FileInterceptor("file", {
-      storage: diskStorage({
-        destination: (_req, _file, cb) => {
-          const dir = join(process.cwd(), "uploads", "covers");
-          fs.mkdirSync(dir, { recursive: true });
-          cb(null, dir);
-        },
-        filename: (req, file, cb) => {
-          const ext = extname(file.originalname).toLowerCase();
-          cb(null, `${(req.params as { id: string }).id}-${Date.now()}${ext}`);
-        },
-      }),
+      storage: memoryStorage(),
       fileFilter: (_req, file, cb) => {
         const allowed = ["image/jpeg", "image/png", "image/webp"];
         if (!allowed.includes(file.mimetype)) {
-          return cb(new BadRequestException("Only JPG, PNG, WebP files are allowed"), false);
+          return cb(new BadRequestException({ code: ErrorCode.INVALID_IMAGE_TYPE, message: "Only JPG, PNG, WebP files are allowed" }), false);
         }
         cb(null, true);
       },
-      limits: { fileSize: 2 * 1024 * 1024 },
+      limits: { fileSize: 10 * 1024 * 1024 },
     }),
   )
   async uploadCover(

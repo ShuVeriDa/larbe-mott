@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
 import { JwtModule, JwtModuleOptions, JwtService } from "@nestjs/jwt";
 import { PrismaService } from "src/prisma.service";
 import { MailModule } from "src/mail/mail.module";
+import { ImageProcessingModule } from "src/common/image-processing/image-processing.module";
 import { UserService } from "src/user/user.service";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
@@ -30,6 +31,7 @@ import { EmailChangeCleanupTask } from "./email-change-cleanup.task";
   imports: [
     ConfigModule,
     MailModule,
+    ImageProcessingModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

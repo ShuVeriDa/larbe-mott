@@ -98,7 +98,7 @@ export class AnalyticsService {
   async getWordStats(userId: string): Promise<WordStats> {
     const grouped = await this.prisma.userWordProgress.groupBy({
       by: ["status"],
-      where: { userId },
+      where: { userId, lemma: { userDictionaryEntries: { some: { userId } } } },
       _count: { status: true },
     });
 

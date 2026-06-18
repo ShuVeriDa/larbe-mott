@@ -24,7 +24,11 @@ async function bootstrap() {
 
   // Ensure uploads directory exists and serve static files
   const uploadsDir = join(process.cwd(), "uploads");
+  fs.mkdirSync(join(uploadsDir, "avatars"), { recursive: true });
   fs.mkdirSync(join(uploadsDir, "covers"), { recursive: true });
+  fs.mkdirSync(join(uploadsDir, "covers", "originals"), { recursive: true });
+  fs.mkdirSync(join(uploadsDir, "images"), { recursive: true });
+  fs.mkdirSync(join(uploadsDir, "images", "originals"), { recursive: true });
   app.useStaticAssets(uploadsDir, { prefix: "/uploads" });
 
   // After full initialization switch to Winston for runtime logs

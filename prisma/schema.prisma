@@ -16,6 +16,8 @@ model User {
   hashedRefreshToken       String?
   phone                    String?
   avatar                   String?
+  avatarThumb              String?
+  avatarMedium             String?
   status                   UserStatus                   @default(ACTIVE)
   language                 Language?                    @default(CHE)
   level                    Level?                       @default(A)

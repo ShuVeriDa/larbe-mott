@@ -136,6 +136,56 @@
         ]
       }
     },
+    "/api/users/me/avatar": {
+      "post": {
+        "description": "Uploads a new avatar image for the authenticated user. Automatically deletes the previous avatar file if it was locally stored. Returns the full updated user profile.",
+        "operationId": "UserController_uploadAvatar",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponseDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Upload avatar for current user",
+        "tags": [
+          "users"
+        ]
+      }
+    },
     "/api/auth/login": {
       "post": {
         "operationId": "AuthController_login",
@@ -4683,7 +4733,7 @@
         },
         "responses": {
           "200": {
-            "description": "{ imageUrl: string }"
+            "description": "{ imageUrl: string, imageUrlOptimized: string }"
           },
           "401": {
             "description": "Missing or invalid bearer token"
@@ -15635,7 +15685,7 @@
     },
     "/api/admin/uploads/cover": {
       "post": {
-        "description": "Uploads a cover image without binding it to a specific text. Returns a relative imageUrl that can be passed in CreateTextDto.imageUrl on text creation, or in PatchTextDto.imageUrl later. Useful on the /admin/texts/create page where the text id is not yet known.",
+        "description": "Uploads a cover image without binding it to a specific text. Returns imageUrl (original) and imageUrlOptimized (WebP 1200px). Pass imageUrlOptimized in CreateTextDto.imageUrl for display; keep imageUrl for full-resolution access.",
         "operationId": "AdminUploadsController_uploadCover",
         "parameters": [],
         "requestBody": {
@@ -15659,7 +15709,7 @@
         },
         "responses": {
           "200": {
-            "description": "{ imageUrl: string }"
+            "description": "{ imageUrl: string, imageUrlOptimized: string }"
           },
           "401": {
             "description": "Missing or invalid bearer token"
@@ -15674,6 +15724,52 @@
           }
         ],
         "summary": "Pre-upload a cover image (admin only)",
+        "tags": [
+          "admin/uploads"
+        ]
+      }
+    },
+    "/api/admin/uploads/image": {
+      "post": {
+        "description": "Uploads an image to be embedded inside text body. Returns imageUrl (original) and imageUrlOptimized (WebP 1920px). Use imageUrlOptimized as the src in the editor.",
+        "operationId": "AdminUploadsController_uploadImage",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "{ imageUrl: string, imageUrlOptimized: string }"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Forbidden. Admin role required."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Upload an inline image for text content (admin only)",
         "tags": [
           "admin/uploads"
         ]
@@ -20762,6 +20858,14 @@
             "nullable": true
           },
           "avatar": {
+            "type": "object",
+            "nullable": true
+          },
+          "avatarThumb": {
+            "type": "object",
+            "nullable": true
+          },
+          "avatarMedium": {
             "type": "object",
             "nullable": true
           },

@@ -6,6 +6,8 @@ import {
 } from "@nestjs/common";
 import { Prisma, UserStatus } from "@prisma/client";
 import { hash, argon2id } from "argon2";
+import * as fs from "fs";
+import { join } from "path";
 
 const ARGON2_OPTIONS = {
   type: argon2id,
@@ -21,6 +23,7 @@ import { CreateUserDto } from "./dto/create-user.dto";
 import { DeleteAccountDto } from "./dto/delete-account.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
 import { ErrorCode } from "src/common/errors/error-codes";
+import { ImageProcessingService } from "src/common/image-processing/image-processing.service";
 
 const USER_CACHE_TTL = 60;
 
@@ -30,6 +33,7 @@ export class UserService {
     private readonly prisma: PrismaService,
     private readonly permissionsService: PermissionsService,
     private readonly redis: RedisService,
+    private readonly imageProcessing: ImageProcessingService,
   ) {}
 
   private userCacheKey = (id: string) => `user:profile:${id}`;
@@ -166,6 +170,37 @@ export class UserService {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
         throw new ConflictException({ code: ErrorCode.USERNAME_TAKEN, message: "Username is already taken" });
       }
+      throw e;
+    }
+
+    await this.invalidateUserCache(userId);
+    return this.getUserById(userId);
+  }
+
+  async uploadAvatar(userId: string, file: Express.Multer.File) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException({ code: ErrorCode.USER_NOT_FOUND, message: "The user not found" });
+
+    for (const field of [user.avatar, user.avatarThumb, user.avatarMedium]) {
+      if (field?.startsWith("/uploads/avatars/")) {
+        fs.unlink(join(process.cwd(), field), () => {});
+      }
+    }
+
+    const outputDir = join(process.cwd(), "uploads", "avatars");
+    const baseName = `avatar-${userId}-${file.filename.split(".")[0].split("-").pop()}`;
+    const variants = await this.imageProcessing.processAvatar(file.path, baseName, outputDir);
+
+    try {
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: {
+          avatar: variants.original,
+          avatarThumb: variants.thumb,
+          avatarMedium: variants.medium,
+        },
+      });
+    } catch (e) {
       throw e;
     }
 

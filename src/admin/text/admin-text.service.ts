@@ -25,6 +25,9 @@ import { NOTIFICATION_EVENTS } from "src/notification/notification-events";
 import { PrismaService } from "src/prisma.service";
 import { TextProgressService } from "src/progress/text-progress/text-progress.service";
 import { WordProgressService } from "src/progress/word-progress/word-progress.service";
+import { ImageProcessingService } from "src/common/image-processing/image-processing.service";
+import * as fs from "fs";
+import { join } from "path";
 
 @Injectable()
 export class AdminTextService {
@@ -34,6 +37,7 @@ export class AdminTextService {
     private readonly wordProgress: WordProgressService,
     private readonly textProgress: TextProgressService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly imageProcessing: ImageProcessingService,
   ) {}
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -764,13 +768,28 @@ export class AdminTextService {
     const text = await this.prisma.text.findUnique({ where: { id: textId } });
     if (!text) throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
 
-    const imageUrl = `/uploads/covers/${file.filename}`;
+    if (text.imageUrl?.startsWith("/uploads/covers/")) {
+      fs.unlink(join(process.cwd(), text.imageUrl), () => {});
+      const origPath = join(process.cwd(), text.imageUrl.replace("/covers/", "/covers/originals/").replace(/\.webp$/, "").replace(/([^/]+)$/, "$1-orig.jpg"));
+      fs.unlink(origPath, () => {});
+    }
+
+    const baseName = `${textId}-${Date.now()}`;
+    const outputDir = join(process.cwd(), "uploads", "covers");
+    const originalsDir = join(process.cwd(), "uploads", "covers", "originals");
+
+    const tmpPath = join(outputDir, `${baseName}-tmp`);
+    fs.mkdirSync(outputDir, { recursive: true });
+    fs.writeFileSync(tmpPath, file.buffer);
+
+    const result = await this.imageProcessing.processCover(tmpPath, baseName, outputDir, originalsDir);
+
     await this.prisma.text.update({
       where: { id: textId },
-      data: { imageUrl },
+      data: { imageUrl: result.imageUrlOptimized },
     });
 
-    return { imageUrl };
+    return result;
   }
 
   // ────────────────────────────────────────────────────────────────────────────

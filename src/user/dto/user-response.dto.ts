@@ -24,6 +24,12 @@ export class UserResponseDto {
   avatar: string | null;
 
   @ApiPropertyOptional({ nullable: true })
+  avatarThumb: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  avatarMedium: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
   language: string | null;
 
   @ApiPropertyOptional({ nullable: true })

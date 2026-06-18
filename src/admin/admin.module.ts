@@ -58,6 +58,7 @@ import { DictionaryExportService } from "src/dictionary-export/dictionary-export
 import { AdminSpellingDictionaryController } from "./spelling-dictionary/admin-spelling-dictionary.controller";
 import { SpellingDictionaryController } from "./spelling-dictionary/spelling-dictionary.controller";
 import { AdminSpellingDictionaryService } from "./spelling-dictionary/admin-spelling-dictionary.service";
+import { ImageProcessingModule } from "src/common/image-processing/image-processing.module";
 
 @Module({
   imports: [
@@ -70,6 +71,7 @@ import { AdminSpellingDictionaryService } from "./spelling-dictionary/admin-spel
     DictionaryModule,
     MorphologyModule,
     OnlineDictionaryModule,
+    ImageProcessingModule,
   ],
   controllers: [
     AdminController,

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -8,9 +9,15 @@ import {
   Param,
   ParseUUIDPipe,
   Patch,
+  Post,
+  UploadedFile,
+  UseInterceptors,
 } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import {
   ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -19,6 +26,10 @@ import {
   ApiUnauthorizedResponse,
 } from "@nestjs/swagger";
 import { PermissionCode } from "@prisma/client";
+import { randomUUID } from "crypto";
+import * as fs from "fs";
+import { diskStorage } from "multer";
+import { extname, join } from "path";
 import { Auth } from "src/auth/decorators/auth.decorator";
 import { ErrorCode } from "src/common/errors/error-codes";
 import { PermissionsService } from "src/auth/permissions/permissions.service";
@@ -27,6 +38,9 @@ import { DeleteAccountDto } from "./dto/delete-account.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
 import { UserResponseDto } from "./dto/user-response.dto";
 import { UserService } from "./user.service";
+
+const ALLOWED_AVATAR_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"] as const;
+const AVATAR_MAX_SIZE = 2 * 1024 * 1024;
 
 @ApiTags("users")
 @ApiBearerAuth()
@@ -79,6 +93,57 @@ export class UserController {
   @ApiOkResponse({ description: "User profile updated successfully" })
   async updateUser(@Body() dto: UpdateUserDto, @User("id") userId: string) {
     return this.userService.updateUser(dto, userId);
+  }
+
+  @Post("me/avatar")
+  @Auth()
+  @HttpCode(200)
+  @ApiOperation({
+    summary: "Upload avatar for current user",
+    description:
+      "Uploads a new avatar image for the authenticated user. Automatically deletes the previous avatar file if it was locally stored. Returns the full updated user profile.",
+  })
+  @ApiConsumes("multipart/form-data")
+  @ApiBody({
+    schema: {
+      type: "object",
+      required: ["file"],
+      properties: { file: { type: "string", format: "binary" } },
+    },
+  })
+  @ApiOkResponse({ type: UserResponseDto })
+  @UseInterceptors(
+    FileInterceptor("file", {
+      storage: diskStorage({
+        destination: (_req, _file, cb) => {
+          const dir = join(process.cwd(), "uploads", "avatars");
+          fs.mkdirSync(dir, { recursive: true });
+          cb(null, dir);
+        },
+        filename: (req, file, cb) => {
+          const userId = (req as unknown as { user?: { id?: string } }).user?.id ?? "unknown";
+          const ext = extname(file.originalname).toLowerCase();
+          cb(null, `avatar-${userId}-${randomUUID()}${ext}`);
+        },
+      }),
+      fileFilter: (_req, file, cb) => {
+        if (!ALLOWED_AVATAR_TYPES.includes(file.mimetype as typeof ALLOWED_AVATAR_TYPES[number])) {
+          return cb(
+            new BadRequestException({ code: ErrorCode.INVALID_AVATAR_TYPE, message: "Only JPG, PNG, WebP, GIF files are allowed" }),
+            false,
+          );
+        }
+        cb(null, true);
+      },
+      limits: { fileSize: AVATAR_MAX_SIZE },
+    }),
+  )
+  async uploadAvatar(
+    @UploadedFile() file: Express.Multer.File,
+    @User("id") userId: string,
+  ) {
+    if (!file) throw new BadRequestException({ code: ErrorCode.FILE_REQUIRED, message: "File is required" });
+    return this.userService.uploadAvatar(userId, file);
   }
 
   @HttpCode(200)
