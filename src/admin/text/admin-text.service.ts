@@ -3,7 +3,8 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma, ProcessingStatus, ProcessingTrigger } from "@prisma/client";
+import { EventEmitter2 } from "@nestjs/event-emitter";
+import { NotificationType, Prisma, ProcessingStatus, ProcessingTrigger } from "@prisma/client";
 import { ErrorCode } from "src/common/errors/error-codes";
 import { BulkImportResultItem } from "src/admin/text/dto/bulk-import.dto";
 import { CreateTextDto } from "src/admin/text/dto/create.dto";
@@ -20,6 +21,7 @@ import {
   ProcessTextOpts,
   TokenizerProcessor,
 } from "src/markup-engine/tokenizer/tokenizer.processor";
+import { NOTIFICATION_EVENTS } from "src/notification/notification-events";
 import { PrismaService } from "src/prisma.service";
 import { TextProgressService } from "src/progress/text-progress/text-progress.service";
 import { WordProgressService } from "src/progress/word-progress/word-progress.service";
@@ -31,6 +33,7 @@ export class AdminTextService {
     private readonly tokenizerProcessor: TokenizerProcessor,
     private readonly wordProgress: WordProgressService,
     private readonly textProgress: TextProgressService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   // ────────────────────────────────────────────────────────────────────────────
@@ -744,6 +747,12 @@ export class AdminTextService {
       }
     }
 
+    const wasUnpublished = text.publishedAt === null;
+    const isNowPublished = updated.publishedAt !== null;
+    if (wasUnpublished && isNowPublished) {
+      void this.emitNewLibraryText(updated.id, updated.title).catch(() => undefined);
+    }
+
     return { ...updated, tags: updated.tags.map((tt) => tt.tag) };
   }
 
@@ -1295,6 +1304,7 @@ export class AdminTextService {
       where: { id: textId },
       data: { publishedAt: new Date(), archivedAt: null },
     });
+    void this.emitNewLibraryText(textId, text.title).catch(() => undefined);
     return { textId, published: true };
   }
 
@@ -1311,6 +1321,27 @@ export class AdminTextService {
   // ────────────────────────────────────────────────────────────────────────────
   // PRIVATE
   // ────────────────────────────────────────────────────────────────────────────
+
+  private async emitNewLibraryText(textId: string, textTitle: string): Promise<void> {
+    const users = await this.prisma.user.findMany({
+      where: {
+        status: "ACTIVE",
+        OR: [
+          { notifications: { inAppNewTexts: true } },
+          { notifications: null },
+        ],
+      },
+      select: { id: true },
+    });
+    for (const user of users) {
+      this.eventEmitter.emit(NOTIFICATION_EVENTS.CREATE, {
+        userId: user.id,
+        type: NotificationType.NEW_LIBRARY_TEXT,
+        entityId: textId,
+        title: textTitle,
+      });
+    }
+  }
 
   private async resolveTagIds(
     tx: Prisma.TransactionClient,

@@ -11,4 +11,12 @@ export class CreateNotificationDto {
   @IsOptional()
   @IsString()
   entityId?: string;
+
+  @IsOptional()
+  @IsString()
+  title?: string;
+
+  @IsOptional()
+  @IsString()
+  body?: string;
 }

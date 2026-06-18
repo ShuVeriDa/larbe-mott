@@ -5,6 +5,8 @@ export class NotificationResponseDto {
   userId: string;
   type: NotificationType;
   entityId: string | null;
+  title: string | null;
+  body: string | null;
   isRead: boolean;
   createdAt: Date;
 }

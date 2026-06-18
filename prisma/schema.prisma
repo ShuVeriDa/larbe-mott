@@ -74,6 +74,7 @@ model User {
   userTextVersions         UserTextProcessingVersion[]  @relation("UserOwnedTextVersions")
   appNotifications         Notification[]               @relation("UserAppNotifications")
   spellingEntries          SpellingEntry[]              @relation("SpellingEntryCreator")
+  announcements            Announcement[]               @relation("AnnouncementCreator")
 
   @@index([username])
   @@index([status])
@@ -674,6 +675,7 @@ model Text {
   progress           UserTextProgress[]
   scriptVersions     TextScriptVersion[]
   wordContexts       WordContext[]
+  announcements      Announcement[]
 
   @@index([publishedAt])
   @@map("text")
@@ -1300,6 +1302,7 @@ model UserNotificationPreferences {
   inAppFeedbackReply   Boolean @default(true)
   inAppSuggestion      Boolean @default(true)
   inAppTextSubmission  Boolean @default(true)
+  inAppNewTexts        Boolean @default(true)
   user                 User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_notification_preferences")
@@ -1996,6 +1999,8 @@ enum NotificationType {
   NEW_FEEDBACK_THREAD
   NEW_TEXT_SUBMISSION
   NEW_SUGGESTION
+  NEW_LIBRARY_TEXT
+  PLATFORM_ANNOUNCEMENT
 }
 
 model Notification {
@@ -2003,6 +2008,8 @@ model Notification {
   userId    String
   type      NotificationType
   entityId  String?
+  title     String?
+  body      String?
   isRead    Boolean          @default(false)
   createdAt DateTime         @default(now())
   user      User             @relation("UserAppNotifications", fields: [userId], references: [id], onDelete: Cascade)
@@ -2010,6 +2017,22 @@ model Notification {
   @@index([userId, isRead])
   @@index([userId, createdAt(sort: Desc)])
   @@map("notification")
+}
+
+model Announcement {
+  id          String    @id @default(cuid())
+  title       String
+  body        String?
+  textId      String?
+  createdById String
+  createdAt   DateTime  @default(now())
+  deletedAt   DateTime?
+  createdBy   User      @relation("AnnouncementCreator", fields: [createdById], references: [id])
+  text        Text?     @relation(fields: [textId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt(sort: Desc)])
+  @@index([deletedAt])
+  @@map("announcement")
 }
 
 model SpellingEntry {

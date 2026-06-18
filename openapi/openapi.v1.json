@@ -20615,6 +20615,101 @@
           "notifications"
         ]
       }
+    },
+    "/api/admin/announcements": {
+      "post": {
+        "operationId": "AnnouncementController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAnnouncementDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Forbidden. CAN_MANAGE_USERS permission required."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create and broadcast a platform announcement",
+        "tags": [
+          "admin/announcements"
+        ]
+      },
+      "get": {
+        "operationId": "AnnouncementController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Forbidden. CAN_MANAGE_USERS permission required."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List all non-deleted announcements",
+        "tags": [
+          "admin/announcements"
+        ]
+      }
+    },
+    "/api/admin/announcements/{id}": {
+      "delete": {
+        "operationId": "AnnouncementController_softDelete",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Forbidden. CAN_MANAGE_USERS permission required."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Soft-delete an announcement",
+        "tags": [
+          "admin/announcements"
+        ]
+      }
     }
   },
   "info": {
@@ -25820,6 +25915,10 @@
             "description": "Содержимое текста (TipTap JSON, макс. 500 КБ)"
           }
         }
+      },
+      "CreateAnnouncementDto": {
+        "type": "object",
+        "properties": {}
       }
     }
   }

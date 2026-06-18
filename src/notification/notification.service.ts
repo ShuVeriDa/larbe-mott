@@ -23,7 +23,15 @@ export class NotificationService {
   ) {}
 
   async create(dto: CreateNotificationDto): Promise<Notification> {
-    return this.prisma.notification.create({ data: dto });
+    return this.prisma.notification.create({
+      data: {
+        userId: dto.userId,
+        type: dto.type,
+        entityId: dto.entityId,
+        title: dto.title,
+        body: dto.body,
+      },
+    });
   }
 
   async findAllForUser(userId: string, limit = 20): Promise<Notification[]> {
@@ -79,7 +87,12 @@ export class NotificationService {
   private async isInAppBlocked(userId: string, type: NotificationType): Promise<boolean> {
     const prefs = await this.prisma.userNotificationPreferences.findUnique({
       where: { userId },
-      select: { inAppFeedbackReply: true, inAppSuggestion: true, inAppTextSubmission: true },
+      select: {
+        inAppFeedbackReply: true,
+        inAppSuggestion: true,
+        inAppTextSubmission: true,
+        inAppNewTexts: true,
+      },
     });
     if (!prefs) return false;
 
@@ -92,6 +105,8 @@ export class NotificationService {
       type === NotificationType.TEXT_SUBMISSION_APPROVED ||
       type === NotificationType.TEXT_SUBMISSION_REJECTED
     ) return !prefs.inAppTextSubmission;
+    if (type === NotificationType.NEW_LIBRARY_TEXT) return !(prefs.inAppNewTexts ?? true);
+    if (type === NotificationType.PLATFORM_ANNOUNCEMENT) return false;
 
     return false;
   }
