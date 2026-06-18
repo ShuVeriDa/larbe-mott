@@ -242,6 +242,10 @@ export const ErrorCode = {
 
   // Admin: system logs
   LOG_NOT_FOUND: "LOG_NOT_FOUND",
+
+  // Spelling dictionary
+  SPELLING_ENTRY_NOT_FOUND: "SPELLING_ENTRY_NOT_FOUND",
+  SPELLING_ENTRY_ALREADY_EXISTS: "SPELLING_ENTRY_ALREADY_EXISTS",
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];

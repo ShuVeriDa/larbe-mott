@@ -55,6 +55,9 @@ import { OnlineDictionaryModule } from "src/markup-engine/online-dictionary/onli
 import { AdminAiCacheController } from "./ai-cache/admin-ai-cache.controller";
 import { AdminAiCacheService } from "./ai-cache/admin-ai-cache.service";
 import { DictionaryExportService } from "src/dictionary-export/dictionary-export.service";
+import { AdminSpellingDictionaryController } from "./spelling-dictionary/admin-spelling-dictionary.controller";
+import { SpellingDictionaryController } from "./spelling-dictionary/spelling-dictionary.controller";
+import { AdminSpellingDictionaryService } from "./spelling-dictionary/admin-spelling-dictionary.service";
 
 @Module({
   imports: [
@@ -91,6 +94,8 @@ import { DictionaryExportService } from "src/dictionary-export/dictionary-export
     AdminTextPhraseController,
     AdminAnnotationController,
     AdminAiCacheController,
+    AdminSpellingDictionaryController,
+    SpellingDictionaryController,
   ],
   providers: [
     AdminService,
@@ -117,6 +122,7 @@ import { DictionaryExportService } from "src/dictionary-export/dictionary-export
     AdminAiCacheService,
     DictionaryExportService,
     PagePhrasesCacheService,
+    AdminSpellingDictionaryService,
     PrismaService,
   ],
 })

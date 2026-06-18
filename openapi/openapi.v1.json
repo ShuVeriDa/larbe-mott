@@ -16931,6 +16931,196 @@
         ]
       }
     },
+    "/api/admin/spelling-dictionary": {
+      "get": {
+        "operationId": "AdminSpellingDictionaryController_getEntries",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Page number (1-based)",
+            "schema": {
+              "default": 1,
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Items per page",
+            "schema": {
+              "default": 50,
+              "example": 50,
+              "type": "number"
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "description": "Filter by wrongForm or correctForm (case-insensitive)",
+            "schema": {
+              "example": "вахне",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ items, total, page, limit }"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Forbidden. CAN_EDIT_TEXTS permission required."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List spelling entries (paginated, with search)",
+        "tags": [
+          "admin/spelling-dictionary"
+        ]
+      },
+      "post": {
+        "operationId": "AdminSpellingDictionaryController_createEntry",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSpellingEntryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Forbidden. CAN_EDIT_TEXTS permission required."
+          },
+          "409": {
+            "description": "Entry for this wrongForm already exists"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a new spelling entry",
+        "tags": [
+          "admin/spelling-dictionary"
+        ]
+      }
+    },
+    "/api/admin/spelling-dictionary/{id}": {
+      "patch": {
+        "operationId": "AdminSpellingDictionaryController_updateEntry",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSpellingEntryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Forbidden. CAN_EDIT_TEXTS permission required."
+          },
+          "404": {
+            "description": "Spelling entry not found"
+          },
+          "409": {
+            "description": "Entry for the new wrongForm already exists"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update a spelling entry",
+        "tags": [
+          "admin/spelling-dictionary"
+        ]
+      },
+      "delete": {
+        "operationId": "AdminSpellingDictionaryController_deleteEntry",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Forbidden. CAN_EDIT_TEXTS permission required."
+          },
+          "404": {
+            "description": "Spelling entry not found"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a spelling entry",
+        "tags": [
+          "admin/spelling-dictionary"
+        ]
+      }
+    },
+    "/api/spelling-dictionary/all": {
+      "get": {
+        "description": "Returns all entries (wrongForm → correctForm). Public endpoint, no auth required. Intended to be cached client-side for ~1 hour.",
+        "operationId": "SpellingDictionaryController_getAllEntries",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Array of { id, wrongForm, correctForm, comment }"
+          }
+        },
+        "summary": "Get full spelling dictionary",
+        "tags": [
+          "spelling-dictionary"
+        ]
+      }
+    },
     "/api/plans": {
       "get": {
         "operationId": "SubscriptionController_getPlans",
@@ -21336,7 +21526,7 @@
           },
           "source": {
             "type": "string",
-            "description": "Source URL (must include http(s):// protocol if provided)"
+            "description": "Source reference (URL or bibliographic citation)"
           },
           "imageUrl": {
             "type": "object",
@@ -21533,7 +21723,7 @@
           },
           "source": {
             "type": "string",
-            "description": "Source URL (must include http(s):// protocol if provided)"
+            "description": "Source reference (URL or bibliographic citation)"
           },
           "publishedAt": {
             "type": "object",
@@ -24472,6 +24662,50 @@
       "AnnotateTokenDto": {
         "type": "object",
         "properties": {}
+      },
+      "CreateSpellingEntryDto": {
+        "type": "object",
+        "properties": {
+          "wrongForm": {
+            "type": "string",
+            "description": "The incorrect form to detect (stored lowercase, matched case-insensitively)",
+            "example": "вахнера"
+          },
+          "correctForm": {
+            "type": "string",
+            "description": "The correct form with proper spelling and/or stress marks",
+            "example": "вахне́ра"
+          },
+          "comment": {
+            "type": "string",
+            "description": "Optional explanation for editors",
+            "example": "Ударение на второй слог"
+          }
+        },
+        "required": [
+          "wrongForm",
+          "correctForm"
+        ]
+      },
+      "UpdateSpellingEntryDto": {
+        "type": "object",
+        "properties": {
+          "wrongForm": {
+            "type": "string",
+            "description": "The incorrect form to detect (stored lowercase, matched case-insensitively)",
+            "example": "вахнера"
+          },
+          "correctForm": {
+            "type": "string",
+            "description": "The correct form with proper spelling and/or stress marks",
+            "example": "вахне́ра"
+          },
+          "comment": {
+            "type": "string",
+            "description": "Optional explanation for editors",
+            "example": "Ударение на второй слог"
+          }
+        }
       },
       "StartTrialDto": {
         "type": "object",

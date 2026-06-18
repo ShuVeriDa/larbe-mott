@@ -12,7 +12,6 @@ import {
   IsOptional,
   IsString,
   IsUUID,
-  IsUrl,
   Matches,
   MaxLength,
   Min,
@@ -105,11 +104,11 @@ export class CreateTextDto {
 
   @ApiProperty({
     required: false,
-    description: "Source URL (must include http(s):// protocol if provided)",
+    description: "Source reference (URL or bibliographic citation)",
   })
   @IsOptional()
   @ValidateIf((_o, v) => v != null && v !== "")
-  @IsUrl({ require_protocol: true }, { message: "source must be a valid URL with protocol" })
+  @IsString()
   @MaxLength(500)
   source?: string;
 
