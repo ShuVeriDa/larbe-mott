@@ -2151,9 +2151,15 @@ model UserHeritage {
   otherNationName String?
 
   // Location
-  regionId       String?
-  districtId     String?
-  settlementId   String?
+  countryId        String?
+  country          GeoCountry?    @relation(fields: [countryId], references: [id], onDelete: SetNull)
+  regionId         String?
+  region           GeoRegion?     @relation(fields: [regionId], references: [id], onDelete: SetNull)
+  districtId       String?
+  district         GeoDistrict?   @relation(fields: [districtId], references: [id], onDelete: SetNull)
+  settlementId     String?
+  settlement       GeoSettlement? @relation(fields: [settlementId], references: [id], onDelete: SetNull)
+  ancestralVillage String?
 
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -2162,7 +2168,63 @@ model UserHeritage {
   @@index([tukhumId])
   @@index([taipId])
   @@index([garaId])
+  @@index([countryId])
+  @@index([regionId])
+  @@index([districtId])
+  @@index([settlementId])
   @@map("user_heritage")
+}
+
+model GeoCountry {
+  id           String       @id @default(uuid())
+  code         String       @unique
+  name         Json
+  userHeritages UserHeritage[]
+  regions      GeoRegion[]
+
+  @@map("geo_country")
+}
+
+model GeoRegion {
+  id           String        @id @default(uuid())
+  countryId    String
+  country      GeoCountry    @relation(fields: [countryId], references: [id], onDelete: Cascade)
+  name         Json
+  districts    GeoDistrict[]
+  userHeritages UserHeritage[]
+
+  @@index([countryId])
+  @@map("geo_region")
+}
+
+model GeoDistrict {
+  id           String          @id @default(uuid())
+  regionId     String
+  region       GeoRegion       @relation(fields: [regionId], references: [id], onDelete: Cascade)
+  name         Json
+  settlements  GeoSettlement[]
+  userHeritages UserHeritage[]
+
+  @@index([regionId])
+  @@map("geo_district")
+}
+
+model GeoSettlement {
+  id           String        @id @default(uuid())
+  districtId   String
+  district     GeoDistrict   @relation(fields: [districtId], references: [id], onDelete: Cascade)
+  name         Json
+  type         GeoSettlementType
+  userHeritages UserHeritage[]
+
+  @@index([districtId])
+  @@map("geo_settlement")
+}
+
+enum GeoSettlementType {
+  city
+  town
+  village
 }
 
 model UserPrivacySettings {

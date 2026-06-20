@@ -82,6 +82,11 @@ export class UpdateHeritageDto {
 
   // Location
 
+  @ApiPropertyOptional({ description: "Country ID from the geo directory" })
+  @IsOptional()
+  @IsUUID()
+  countryId?: string;
+
   @ApiPropertyOptional({ description: "Region ID from the geo directory" })
   @IsOptional()
   @IsUUID()
@@ -96,4 +101,13 @@ export class UpdateHeritageDto {
   @IsOptional()
   @IsUUID()
   settlementId?: string;
+
+  @ApiPropertyOptional({ description: "Ancestral village (free text)", maxLength: 100 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === "string" ? value.trim().replace(/<[^>]*>/g, "") : value,
+  )
+  ancestralVillage?: string;
 }

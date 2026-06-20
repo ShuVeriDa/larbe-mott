@@ -61,6 +61,8 @@ import { AdminSpellingDictionaryService } from "./spelling-dictionary/admin-spel
 import { ImageProcessingModule } from "src/common/image-processing/image-processing.module";
 import { AdminHeritageController } from "./heritage/admin-heritage.controller";
 import { AdminHeritageService } from "./heritage/admin-heritage.service";
+import { AdminGeoController } from "./geo/admin-geo.controller";
+import { AdminGeoService } from "./geo/admin-geo.service";
 
 @Module({
   imports: [
@@ -101,6 +103,7 @@ import { AdminHeritageService } from "./heritage/admin-heritage.service";
     AdminSpellingDictionaryController,
     SpellingDictionaryController,
     AdminHeritageController,
+    AdminGeoController,
   ],
   providers: [
     AdminService,
@@ -129,6 +132,7 @@ import { AdminHeritageService } from "./heritage/admin-heritage.service";
     PagePhrasesCacheService,
     AdminSpellingDictionaryService,
     AdminHeritageService,
+    AdminGeoService,
     PrismaService,
   ],
 })

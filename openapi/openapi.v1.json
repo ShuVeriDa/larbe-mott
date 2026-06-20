@@ -17998,6 +17998,489 @@
         ]
       }
     },
+    "/api/admin/geo/countries": {
+      "get": {
+        "operationId": "AdminGeoController_getCountries",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List all countries",
+        "tags": [
+          "admin/geo"
+        ]
+      },
+      "post": {
+        "operationId": "AdminGeoController_createCountry",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCountryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a country",
+        "tags": [
+          "admin/geo"
+        ]
+      }
+    },
+    "/api/admin/geo/countries/{id}": {
+      "patch": {
+        "operationId": "AdminGeoController_updateCountry",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCountryDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update a country",
+        "tags": [
+          "admin/geo"
+        ]
+      },
+      "delete": {
+        "operationId": "AdminGeoController_deleteCountry",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a country",
+        "tags": [
+          "admin/geo"
+        ]
+      }
+    },
+    "/api/admin/geo/regions": {
+      "get": {
+        "operationId": "AdminGeoController_getRegions",
+        "parameters": [
+          {
+            "name": "countryId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List regions (optionally filter by countryId)",
+        "tags": [
+          "admin/geo"
+        ]
+      },
+      "post": {
+        "operationId": "AdminGeoController_createRegion",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRegionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a region",
+        "tags": [
+          "admin/geo"
+        ]
+      }
+    },
+    "/api/admin/geo/regions/{id}": {
+      "patch": {
+        "operationId": "AdminGeoController_updateRegion",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRegionDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update a region",
+        "tags": [
+          "admin/geo"
+        ]
+      },
+      "delete": {
+        "operationId": "AdminGeoController_deleteRegion",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a region",
+        "tags": [
+          "admin/geo"
+        ]
+      }
+    },
+    "/api/admin/geo/districts": {
+      "get": {
+        "operationId": "AdminGeoController_getDistricts",
+        "parameters": [
+          {
+            "name": "regionId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List districts (optionally filter by regionId)",
+        "tags": [
+          "admin/geo"
+        ]
+      },
+      "post": {
+        "operationId": "AdminGeoController_createDistrict",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDistrictDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a district",
+        "tags": [
+          "admin/geo"
+        ]
+      }
+    },
+    "/api/admin/geo/districts/{id}": {
+      "patch": {
+        "operationId": "AdminGeoController_updateDistrict",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDistrictDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update a district",
+        "tags": [
+          "admin/geo"
+        ]
+      },
+      "delete": {
+        "operationId": "AdminGeoController_deleteDistrict",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a district",
+        "tags": [
+          "admin/geo"
+        ]
+      }
+    },
+    "/api/admin/geo/settlements": {
+      "get": {
+        "operationId": "AdminGeoController_getSettlements",
+        "parameters": [
+          {
+            "name": "districtId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List settlements (optionally filter by districtId)",
+        "tags": [
+          "admin/geo"
+        ]
+      },
+      "post": {
+        "operationId": "AdminGeoController_createSettlement",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSettlementDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a settlement",
+        "tags": [
+          "admin/geo"
+        ]
+      }
+    },
+    "/api/admin/geo/settlements/{id}": {
+      "patch": {
+        "operationId": "AdminGeoController_updateSettlement",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSettlementDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update a settlement",
+        "tags": [
+          "admin/geo"
+        ]
+      },
+      "delete": {
+        "operationId": "AdminGeoController_deleteSettlement",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a settlement",
+        "tags": [
+          "admin/geo"
+        ]
+      }
+    },
     "/api/plans": {
       "get": {
         "operationId": "SubscriptionController_getPlans",
@@ -21779,6 +22262,214 @@
           "heritage"
         ]
       }
+    },
+    "/api/geo/countries": {
+      "get": {
+        "operationId": "GeoController_countries",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100,
+              "type": "number"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 0,
+              "default": 0,
+              "type": "number"
+            }
+          },
+          {
+            "name": "countryCode",
+            "required": false,
+            "in": "query",
+            "description": "Filter regions/countries by ISO country code",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List all countries",
+        "tags": [
+          "geo"
+        ]
+      }
+    },
+    "/api/geo/countries/{id}/regions": {
+      "get": {
+        "operationId": "GeoController_regionsByCountry",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100,
+              "type": "number"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 0,
+              "default": 0,
+              "type": "number"
+            }
+          },
+          {
+            "name": "countryCode",
+            "required": false,
+            "in": "query",
+            "description": "Filter regions/countries by ISO country code",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List regions by country",
+        "tags": [
+          "geo"
+        ]
+      }
+    },
+    "/api/geo/regions/{id}/districts": {
+      "get": {
+        "operationId": "GeoController_districtsByRegion",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100,
+              "type": "number"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 0,
+              "default": 0,
+              "type": "number"
+            }
+          },
+          {
+            "name": "countryCode",
+            "required": false,
+            "in": "query",
+            "description": "Filter regions/countries by ISO country code",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List districts by region",
+        "tags": [
+          "geo"
+        ]
+      }
+    },
+    "/api/geo/districts/{id}/settlements": {
+      "get": {
+        "operationId": "GeoController_settlementsByDistrict",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100,
+              "type": "number"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 0,
+              "default": 0,
+              "type": "number"
+            }
+          },
+          {
+            "name": "countryCode",
+            "required": false,
+            "in": "query",
+            "description": "Filter regions/countries by ISO country code",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "List settlements by district",
+        "tags": [
+          "geo"
+        ]
+      }
     }
   },
   "info": {
@@ -21988,6 +22679,10 @@
             "description": "Other nation name (when not Nakhchiy)",
             "maxLength": 100
           },
+          "countryId": {
+            "type": "string",
+            "description": "Country ID from the geo directory"
+          },
           "regionId": {
             "type": "string",
             "description": "Region ID from the geo directory"
@@ -21999,6 +22694,11 @@
           "settlementId": {
             "type": "string",
             "description": "Settlement ID from the geo directory"
+          },
+          "ancestralVillage": {
+            "type": "string",
+            "description": "Ancestral village (free text)",
+            "maxLength": 100
           }
         }
       },
@@ -26180,6 +26880,150 @@
           },
           "taipId": {
             "type": "string"
+          }
+        }
+      },
+      "GeoNameDto": {
+        "type": "object",
+        "properties": {
+          "che": {
+            "type": "string",
+            "description": "Chechen name"
+          },
+          "ru": {
+            "type": "string",
+            "description": "Russian name"
+          },
+          "en": {
+            "type": "string",
+            "description": "English name"
+          }
+        },
+        "required": [
+          "che",
+          "ru",
+          "en"
+        ]
+      },
+      "CreateCountryDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "ISO 3166-1 alpha-2 code, e.g. RU, GE"
+          },
+          "name": {
+            "$ref": "#/components/schemas/GeoNameDto"
+          }
+        },
+        "required": [
+          "code",
+          "name"
+        ]
+      },
+      "UpdateCountryDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "$ref": "#/components/schemas/GeoNameDto"
+          }
+        }
+      },
+      "CreateRegionDto": {
+        "type": "object",
+        "properties": {
+          "countryId": {
+            "type": "string"
+          },
+          "name": {
+            "$ref": "#/components/schemas/GeoNameDto"
+          }
+        },
+        "required": [
+          "countryId",
+          "name"
+        ]
+      },
+      "UpdateRegionDto": {
+        "type": "object",
+        "properties": {
+          "countryId": {
+            "type": "string"
+          },
+          "name": {
+            "$ref": "#/components/schemas/GeoNameDto"
+          }
+        }
+      },
+      "CreateDistrictDto": {
+        "type": "object",
+        "properties": {
+          "regionId": {
+            "type": "string"
+          },
+          "name": {
+            "$ref": "#/components/schemas/GeoNameDto"
+          }
+        },
+        "required": [
+          "regionId",
+          "name"
+        ]
+      },
+      "UpdateDistrictDto": {
+        "type": "object",
+        "properties": {
+          "regionId": {
+            "type": "string"
+          },
+          "name": {
+            "$ref": "#/components/schemas/GeoNameDto"
+          }
+        }
+      },
+      "CreateSettlementDto": {
+        "type": "object",
+        "properties": {
+          "districtId": {
+            "type": "string"
+          },
+          "name": {
+            "$ref": "#/components/schemas/GeoNameDto"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "city",
+              "town",
+              "village"
+            ]
+          }
+        },
+        "required": [
+          "districtId",
+          "name",
+          "type"
+        ]
+      },
+      "UpdateSettlementDto": {
+        "type": "object",
+        "properties": {
+          "districtId": {
+            "type": "string"
+          },
+          "name": {
+            "$ref": "#/components/schemas/GeoNameDto"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "city",
+              "town",
+              "village"
+            ]
           }
         }
       },

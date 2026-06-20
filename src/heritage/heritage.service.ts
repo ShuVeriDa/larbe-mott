@@ -22,7 +22,7 @@ export class HeritageService {
       }),
       this.prisma.nation.count(),
     ]);
-    return { data, meta: { total, limit, offset } };
+    return { items: data, total, limit, offset };
   }
 
   async findTukhumyByNation(nationId: string, limit: number, offset: number) {
@@ -37,7 +37,7 @@ export class HeritageService {
       }),
       this.prisma.tukhum.count({ where: { nationId } }),
     ]);
-    return { data, meta: { total, limit, offset } };
+    return { items: data, total, limit, offset };
   }
 
   async findTaipsByNation(nationId: string, limit: number, offset: number) {
@@ -52,7 +52,7 @@ export class HeritageService {
       }),
       this.prisma.taip.count({ where: { nationId, status: "APPROVED" } }),
     ]);
-    return { data, meta: { total, limit, offset } };
+    return { items: data, total, limit, offset };
   }
 
   async findTaipsByTukhum(tukhumId: string, limit: number, offset: number) {
@@ -76,7 +76,7 @@ export class HeritageService {
       }),
       this.prisma.taip.count({ where: { tukhumId, status: "APPROVED" } }),
     ]);
-    return { data, meta: { total, limit, offset } };
+    return { items: data, total, limit, offset };
   }
 
   async findGarasByTaip(taipId: string, limit: number, offset: number) {
@@ -100,7 +100,7 @@ export class HeritageService {
       }),
       this.prisma.gara.count({ where: { taipId, status: "APPROVED" } }),
     ]);
-    return { data, meta: { total, limit, offset } };
+    return { items: data, total, limit, offset };
   }
 
   private async assertNationExists(nationId: string) {

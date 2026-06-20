@@ -71,9 +71,11 @@ export class UserHeritageService {
           : undefined,
       nekyi: dto.nekyi,
       otherNationName: dto.otherNationName,
+      countryId: dto.countryId,
       regionId: dto.regionId,
       districtId: dto.districtId,
       settlementId: dto.settlementId,
+      ancestralVillage: dto.ancestralVillage,
     };
 
     // Strip undefined — Prisma upsert should not overwrite unset fields
@@ -135,9 +137,11 @@ export class UserHeritageService {
     }
 
     if (showLocation) {
+      result.countryId = heritage.countryId;
       result.regionId = heritage.regionId;
       result.districtId = heritage.districtId;
       result.settlementId = heritage.settlementId;
+      result.ancestralVillage = heritage.ancestralVillage;
     }
 
     return result;
