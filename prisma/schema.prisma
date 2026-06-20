@@ -83,6 +83,9 @@ model User {
   @@index([language])
   @@index([level])
   @@map("users")
+
+  heritage            UserHeritage?
+  privacySettings     UserPrivacySettings?
 }
 
 model FeatureFlag {
@@ -1453,6 +1456,7 @@ enum PermissionCode {
   CAN_MANAGE_FEEDBACK
   CAN_MANAGE_LEGAL
   CAN_MANAGE_SUGGESTIONS
+  CAN_MANAGE_HERITAGE
 }
 
 enum SuggestionStatus {
@@ -2003,6 +2007,7 @@ enum NotificationType {
   NEW_SUGGESTION
   NEW_LIBRARY_TEXT
   PLATFORM_ANNOUNCEMENT
+  HERITAGE_MODERATION
 }
 
 model Notification {
@@ -2049,4 +2054,129 @@ model SpellingEntry {
 
   @@index([wrongForm])
   @@map("spelling_entries")
+}
+
+// ─── Heritage ────────────────────────────────────────────────────────────────
+
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Nation {
+  id           String         @id @default(uuid())
+  slug         String         @unique
+  name         Json
+  tukhumy      Tukhum[]
+  taips        Taip[]
+  userHeritages UserHeritage[]
+
+  @@map("nation")
+}
+
+model Tukhum {
+  id            String         @id @default(uuid())
+  slug          String         @unique
+  name          Json
+  nationId      String
+  nation        Nation         @relation(fields: [nationId], references: [id], onDelete: Cascade)
+  taips         Taip[]
+  userHeritages UserHeritage[]
+
+  @@index([nationId])
+  @@map("tukhum")
+}
+
+model Taip {
+  id            String             @id @default(uuid())
+  slug          String             @unique
+  name          Json
+  nekyi         String[]
+  nationId      String
+  nation        Nation             @relation(fields: [nationId], references: [id], onDelete: Cascade)
+  tukhumId      String?
+  tukhum        Tukhum?            @relation(fields: [tukhumId], references: [id], onDelete: SetNull)
+  garas         Gara[]
+  userHeritage  UserHeritage[]
+  status        VerificationStatus @default(APPROVED)
+  submittedById String?
+
+  @@index([nationId])
+  @@index([tukhumId])
+  @@index([status])
+  @@map("taip")
+}
+
+model Gara {
+  id            String             @id @default(uuid())
+  slug          String             @unique
+  name          Json
+  nekyi         String[]
+  taipId        String
+  taip          Taip               @relation(fields: [taipId], references: [id], onDelete: Cascade)
+  userHeritage  UserHeritage[]
+  status        VerificationStatus @default(APPROVED)
+  submittedById String?
+
+  @@index([taipId])
+  @@index([status])
+  @@map("gara")
+}
+
+model UserHeritage {
+  id             String              @id @default(uuid())
+  userId         String              @unique
+  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Nation
+  nationId       String?
+  nation         Nation?             @relation(fields: [nationId], references: [id], onDelete: SetNull)
+
+  // Chechen path
+  tukhumId       String?
+  tukhum         Tukhum?             @relation(fields: [tukhumId], references: [id], onDelete: SetNull)
+  hasTukhum      Boolean?
+  taipId         String?
+  taip           Taip?               @relation(fields: [taipId], references: [id], onDelete: SetNull)
+  taipCustom     String?
+  taipStatus     VerificationStatus?
+  garaId         String?
+  gara           Gara?               @relation(fields: [garaId], references: [id], onDelete: SetNull)
+  garaCustom     String?
+  garaStatus     VerificationStatus?
+  nekyi          String?
+
+  // Other nation
+  otherNationName String?
+
+  // Location
+  regionId       String?
+  districtId     String?
+  settlementId   String?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([nationId])
+  @@index([tukhumId])
+  @@index([taipId])
+  @@index([garaId])
+  @@map("user_heritage")
+}
+
+model UserPrivacySettings {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  showPhone    Boolean  @default(false)
+  showAge      Boolean  @default(false)
+  showHeritage Boolean  @default(true)
+  showLocation Boolean  @default(true)
+  showActivity Boolean  @default(true)
+  showJoinDate Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("user_privacy_settings")
 }

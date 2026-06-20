@@ -136,6 +136,147 @@
         ]
       }
     },
+    "/api/users/me/heritage": {
+      "get": {
+        "operationId": "UserController_getMyHeritage",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Returns the authenticated user's full heritage record"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get own heritage data (always full)",
+        "tags": [
+          "users"
+        ]
+      },
+      "patch": {
+        "operationId": "UserController_upsertHeritage",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateHeritageDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Heritage upserted successfully"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create or update own heritage data (upsert)",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/users/{id}/heritage": {
+      "get": {
+        "operationId": "UserController_getPublicHeritage",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Target user ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns publicly visible heritage fields; omits private ones entirely"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get public heritage of a user (respects privacy settings)",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/users/me/privacy": {
+      "get": {
+        "operationId": "UserController_getMyPrivacy",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Returns the user's privacy settings (defaults if not yet set)"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get own privacy settings",
+        "tags": [
+          "users"
+        ]
+      },
+      "patch": {
+        "operationId": "UserController_upsertPrivacy",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePrivacyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Privacy settings upserted successfully"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create or update privacy settings (upsert)",
+        "tags": [
+          "users"
+        ]
+      }
+    },
     "/api/users/me/avatar": {
       "post": {
         "description": "Uploads a new avatar image for the authenticated user. Automatically deletes the previous avatar file if it was locally stored. Returns the full updated user profile.",
@@ -17217,6 +17358,646 @@
         ]
       }
     },
+    "/api/admin/heritage/stats": {
+      "get": {
+        "operationId": "AdminHeritageController_getStats",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Heritage moderation stats: pending / approved / rejected counts",
+        "tags": [
+          "admin/heritage"
+        ]
+      }
+    },
+    "/api/admin/heritage/pending": {
+      "get": {
+        "operationId": "AdminHeritageController_getPendingSubmissions",
+        "parameters": [
+          {
+            "name": "type",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "TAIP",
+                "GARA"
+              ]
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": 20,
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List pending heritage submissions (custom taip / gara)",
+        "tags": [
+          "admin/heritage"
+        ]
+      }
+    },
+    "/api/admin/heritage/{heritageId}/taip": {
+      "patch": {
+        "operationId": "AdminHeritageController_reviewTaip",
+        "parameters": [
+          {
+            "name": "heritageId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewHeritageTaipDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Review custom taip: verify or reject. Optionally add to official directory.",
+        "tags": [
+          "admin/heritage"
+        ]
+      }
+    },
+    "/api/admin/heritage/{heritageId}/gara": {
+      "patch": {
+        "operationId": "AdminHeritageController_reviewGara",
+        "parameters": [
+          {
+            "name": "heritageId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewHeritageGaraDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Review custom gara: verify or reject. Optionally add to official directory.",
+        "tags": [
+          "admin/heritage"
+        ]
+      }
+    },
+    "/api/admin/heritage/nations": {
+      "get": {
+        "operationId": "AdminHeritageController_getNations",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List all nations",
+        "tags": [
+          "admin/heritage"
+        ]
+      },
+      "post": {
+        "operationId": "AdminHeritageController_createNation",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateNationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a nation",
+        "tags": [
+          "admin/heritage"
+        ]
+      }
+    },
+    "/api/admin/heritage/nations/{id}": {
+      "patch": {
+        "operationId": "AdminHeritageController_updateNation",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateNationDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update a nation",
+        "tags": [
+          "admin/heritage"
+        ]
+      },
+      "delete": {
+        "operationId": "AdminHeritageController_deleteNation",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a nation",
+        "tags": [
+          "admin/heritage"
+        ]
+      }
+    },
+    "/api/admin/heritage/tukhumy": {
+      "get": {
+        "operationId": "AdminHeritageController_getTukhumy",
+        "parameters": [
+          {
+            "name": "nationId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List tukhumy (optionally filter by nationId)",
+        "tags": [
+          "admin/heritage"
+        ]
+      },
+      "post": {
+        "operationId": "AdminHeritageController_createTukhum",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTukhumDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a tukhum",
+        "tags": [
+          "admin/heritage"
+        ]
+      }
+    },
+    "/api/admin/heritage/tukhumy/{id}": {
+      "patch": {
+        "operationId": "AdminHeritageController_updateTukhum",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTukhumDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update a tukhum",
+        "tags": [
+          "admin/heritage"
+        ]
+      },
+      "delete": {
+        "operationId": "AdminHeritageController_deleteTukhum",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a tukhum",
+        "tags": [
+          "admin/heritage"
+        ]
+      }
+    },
+    "/api/admin/heritage/taips": {
+      "get": {
+        "operationId": "AdminHeritageController_getTaips",
+        "parameters": [
+          {
+            "name": "nationId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "tukhumId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List taips (filter by nationId and/or tukhumId)",
+        "tags": [
+          "admin/heritage"
+        ]
+      },
+      "post": {
+        "operationId": "AdminHeritageController_createTaip",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTaipDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a taip",
+        "tags": [
+          "admin/heritage"
+        ]
+      }
+    },
+    "/api/admin/heritage/taips/{id}": {
+      "patch": {
+        "operationId": "AdminHeritageController_updateTaip",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateTaipDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update a taip",
+        "tags": [
+          "admin/heritage"
+        ]
+      },
+      "delete": {
+        "operationId": "AdminHeritageController_deleteTaip",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a taip",
+        "tags": [
+          "admin/heritage"
+        ]
+      }
+    },
+    "/api/admin/heritage/garas": {
+      "get": {
+        "operationId": "AdminHeritageController_getGaras",
+        "parameters": [
+          {
+            "name": "taipId",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List garas (optionally filter by taipId)",
+        "tags": [
+          "admin/heritage"
+        ]
+      },
+      "post": {
+        "operationId": "AdminHeritageController_createGara",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateGaraDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Create a gara",
+        "tags": [
+          "admin/heritage"
+        ]
+      }
+    },
+    "/api/admin/heritage/garas/{id}": {
+      "patch": {
+        "operationId": "AdminHeritageController_updateGara",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateGaraDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update a gara",
+        "tags": [
+          "admin/heritage"
+        ]
+      },
+      "delete": {
+        "operationId": "AdminHeritageController_deleteGara",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Delete a gara",
+        "tags": [
+          "admin/heritage"
+        ]
+      }
+    },
     "/api/plans": {
       "get": {
         "operationId": "SubscriptionController_getPlans",
@@ -20806,6 +21587,198 @@
           "admin/announcements"
         ]
       }
+    },
+    "/api/heritage/nations": {
+      "get": {
+        "operationId": "HeritageController_nations",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Список всех наций",
+        "tags": [
+          "heritage"
+        ]
+      }
+    },
+    "/api/heritage/nations/{id}/tukhumy": {
+      "get": {
+        "operationId": "HeritageController_tukhumyByNation",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Тукхумы нации",
+        "tags": [
+          "heritage"
+        ]
+      }
+    },
+    "/api/heritage/nations/{id}/taips": {
+      "get": {
+        "operationId": "HeritageController_taipsByNation",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Все тайпы нации (включая тайпы без тукхума)",
+        "tags": [
+          "heritage"
+        ]
+      }
+    },
+    "/api/heritage/tukhumy/{id}/taips": {
+      "get": {
+        "operationId": "HeritageController_taipsByTukhum",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Тайпы конкретного тукхума",
+        "tags": [
+          "heritage"
+        ]
+      }
+    },
+    "/api/heritage/taips/{id}/garas": {
+      "get": {
+        "operationId": "HeritageController_garasByTaip",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Гары тайпа",
+        "tags": [
+          "heritage"
+        ]
+      }
     }
   },
   "info": {
@@ -20909,7 +21882,8 @@
                 "CAN_MANAGE_FEATURE_FLAGS",
                 "CAN_MANAGE_FEEDBACK",
                 "CAN_MANAGE_LEGAL",
-                "CAN_MANAGE_SUGGESTIONS"
+                "CAN_MANAGE_SUGGESTIONS",
+                "CAN_MANAGE_HERITAGE"
               ]
             }
           }
@@ -20970,6 +21944,92 @@
           "surname",
           "phone"
         ]
+      },
+      "UpdateHeritageDto": {
+        "type": "object",
+        "properties": {
+          "nationId": {
+            "type": "string",
+            "description": "Nation ID from the directory"
+          },
+          "tukhumId": {
+            "type": "string",
+            "description": "Tukhum ID from the directory"
+          },
+          "hasTukhum": {
+            "type": "boolean",
+            "description": "Explicit 'no tukhum' flag (false = chosen 'no tukhum')"
+          },
+          "taipId": {
+            "type": "string",
+            "description": "Taip ID from the directory"
+          },
+          "taipCustom": {
+            "type": "string",
+            "description": "Custom taip name (pending moderation)",
+            "maxLength": 100
+          },
+          "garaId": {
+            "type": "string",
+            "description": "Gara ID from the directory"
+          },
+          "garaCustom": {
+            "type": "string",
+            "description": "Custom gara name (pending moderation)",
+            "maxLength": 100
+          },
+          "nekyi": {
+            "type": "string",
+            "description": "Nekyi (free text, no moderation)",
+            "maxLength": 200
+          },
+          "otherNationName": {
+            "type": "string",
+            "description": "Other nation name (when not Nakhchiy)",
+            "maxLength": 100
+          },
+          "regionId": {
+            "type": "string",
+            "description": "Region ID from the geo directory"
+          },
+          "districtId": {
+            "type": "string",
+            "description": "District ID from the geo directory"
+          },
+          "settlementId": {
+            "type": "string",
+            "description": "Settlement ID from the geo directory"
+          }
+        }
+      },
+      "UpdatePrivacyDto": {
+        "type": "object",
+        "properties": {
+          "showPhone": {
+            "type": "boolean",
+            "description": "Show phone number in public profile"
+          },
+          "showAge": {
+            "type": "boolean",
+            "description": "Show age in public profile"
+          },
+          "showHeritage": {
+            "type": "boolean",
+            "description": "Show heritage (taip, tukhum, etc.) in public profile"
+          },
+          "showLocation": {
+            "type": "boolean",
+            "description": "Show location (region/settlement) in public profile"
+          },
+          "showActivity": {
+            "type": "boolean",
+            "description": "Show activity stats in public profile"
+          },
+          "showJoinDate": {
+            "type": "boolean",
+            "description": "Show join date in public profile"
+          }
+        }
       },
       "DeleteAccountDto": {
         "type": "object",
@@ -24903,6 +25963,223 @@
             "type": "string",
             "description": "Optional explanation for editors",
             "example": "Ударение на второй слог"
+          }
+        }
+      },
+      "ReviewHeritageTaipDto": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "verify",
+              "reject"
+            ]
+          },
+          "addToDirectory": {
+            "type": "boolean",
+            "description": "Add custom taip to the official directory (only with action=verify)"
+          },
+          "tukhumId": {
+            "type": "string",
+            "description": "tukhumId to assign if addToDirectory=true"
+          },
+          "nationId": {
+            "type": "string",
+            "description": "nationId to assign if addToDirectory=true"
+          },
+          "rejectReason": {
+            "type": "string",
+            "description": "Reason for rejection",
+            "maxLength": 300
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "ReviewHeritageGaraDto": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "verify",
+              "reject"
+            ]
+          },
+          "addToDirectory": {
+            "type": "boolean",
+            "description": "Add custom gara to the official directory (only with action=verify)"
+          },
+          "taipId": {
+            "type": "string",
+            "description": "taipId to assign if addToDirectory=true"
+          },
+          "rejectReason": {
+            "type": "string",
+            "description": "Reason for rejection",
+            "maxLength": 300
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "MultilingualNameDto": {
+        "type": "object",
+        "properties": {
+          "che": {
+            "type": "string",
+            "description": "Chechen name"
+          },
+          "ru": {
+            "type": "string",
+            "description": "Russian name"
+          },
+          "en": {
+            "type": "string",
+            "description": "English name"
+          }
+        },
+        "required": [
+          "che",
+          "ru",
+          "en"
+        ]
+      },
+      "CreateNationDto": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string"
+          },
+          "name": {
+            "$ref": "#/components/schemas/MultilingualNameDto"
+          }
+        },
+        "required": [
+          "slug",
+          "name"
+        ]
+      },
+      "UpdateNationDto": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string"
+          },
+          "name": {
+            "$ref": "#/components/schemas/MultilingualNameDto"
+          }
+        }
+      },
+      "CreateTukhumDto": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string"
+          },
+          "name": {
+            "$ref": "#/components/schemas/MultilingualNameDto"
+          },
+          "nationId": {
+            "type": "string",
+            "description": "nationId"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "nationId"
+        ]
+      },
+      "UpdateTukhumDto": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string"
+          },
+          "name": {
+            "$ref": "#/components/schemas/MultilingualNameDto"
+          },
+          "nationId": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateTaipDto": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string"
+          },
+          "name": {
+            "$ref": "#/components/schemas/MultilingualNameDto"
+          },
+          "nationId": {
+            "type": "string",
+            "description": "nationId"
+          },
+          "tukhumId": {
+            "type": "string",
+            "description": "tukhumId (optional)"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "nationId"
+        ]
+      },
+      "UpdateTaipDto": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string"
+          },
+          "name": {
+            "$ref": "#/components/schemas/MultilingualNameDto"
+          },
+          "nationId": {
+            "type": "string"
+          },
+          "tukhumId": {
+            "type": "object"
+          }
+        }
+      },
+      "CreateGaraDto": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string"
+          },
+          "name": {
+            "$ref": "#/components/schemas/MultilingualNameDto"
+          },
+          "taipId": {
+            "type": "string",
+            "description": "taipId"
+          }
+        },
+        "required": [
+          "slug",
+          "name",
+          "taipId"
+        ]
+      },
+      "UpdateGaraDto": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string"
+          },
+          "name": {
+            "$ref": "#/components/schemas/MultilingualNameDto"
+          },
+          "taipId": {
+            "type": "string"
           }
         }
       },

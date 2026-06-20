@@ -59,6 +59,8 @@ import { AdminSpellingDictionaryController } from "./spelling-dictionary/admin-s
 import { SpellingDictionaryController } from "./spelling-dictionary/spelling-dictionary.controller";
 import { AdminSpellingDictionaryService } from "./spelling-dictionary/admin-spelling-dictionary.service";
 import { ImageProcessingModule } from "src/common/image-processing/image-processing.module";
+import { AdminHeritageController } from "./heritage/admin-heritage.controller";
+import { AdminHeritageService } from "./heritage/admin-heritage.service";
 
 @Module({
   imports: [
@@ -98,6 +100,7 @@ import { ImageProcessingModule } from "src/common/image-processing/image-process
     AdminAiCacheController,
     AdminSpellingDictionaryController,
     SpellingDictionaryController,
+    AdminHeritageController,
   ],
   providers: [
     AdminService,
@@ -125,6 +128,7 @@ import { ImageProcessingModule } from "src/common/image-processing/image-process
     DictionaryExportService,
     PagePhrasesCacheService,
     AdminSpellingDictionaryService,
+    AdminHeritageService,
     PrismaService,
   ],
 })

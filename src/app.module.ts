@@ -49,6 +49,7 @@ import { NotificationsEmailModule } from "./notifications-email/notifications-em
 import { TransliterationModule } from "./transliteration/transliteration.module";
 import { TextScriptModule } from "./text-script/text-script.module";
 import { AnnouncementModule } from "./announcement/announcement.module";
+import { HeritageModule } from "./heritage/heritage.module";
 import { envValidationSchema } from "./config/env.validation";
 
 @Module({
@@ -115,6 +116,7 @@ import { envValidationSchema } from "./config/env.validation";
     TransliterationModule,
     TextScriptModule,
     AnnouncementModule,
+    HeritageModule,
   ],
   controllers: [],
   providers: [

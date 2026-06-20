@@ -9,6 +9,7 @@ import { seedFeedback } from "./helpers/feedbackHelper";
 import { seedLegalDocuments } from "./helpers/legalHelper";
 import { seedPhrasebook } from "./helpers/phrasebookHelper";
 import { seedMorphologyRules } from "./helpers/morphologyHelper";
+import { seedHeritage } from "./helpers/heritageHelper";
 import { seedRolesAndPermissions } from "./helpers/rbacHelper";
 import { seedSubscriptions } from "./helpers/subscriptionHelper";
 import { createText } from "./helpers/textHelper";
@@ -30,6 +31,7 @@ async function up() {
   await seedRolesAndPermissions();
   await seedPlans();
   await seedMorphologyRules();
+  await seedHeritage();
 
   // 2. Пользователи
   await createTallarUser();

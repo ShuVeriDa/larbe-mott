@@ -30,7 +30,8 @@
     "seed": "ts-node -r tsconfig-paths/register prisma/seed.ts",
     "seed2": "ts-node -r tsconfig-paths/register prisma/seed2.ts",
     "seed:clear-texts": "ts-node -r tsconfig-paths/register prisma/seed-clear-texts.ts",
-    "seed:fake-users": "ts-node -r tsconfig-paths/register prisma/seed-fake-users.ts"
+    "seed:fake-users": "ts-node -r tsconfig-paths/register prisma/seed-fake-users.ts",
+    "seed:heritage": "ts-node -r tsconfig-paths/register prisma/seed-heritage.ts"
   },
   "dependencies": {
     "@nest-lab/throttler-storage-redis": "^1.2.0",

@@ -6,12 +6,14 @@ import { ImageProcessingModule } from "src/common/image-processing/image-process
 import { AccountCleanupService } from "./account-cleanup.service";
 import { UserController } from "./user.controller";
 import { UserService } from "./user.service";
+import { UserHeritageService } from "./user-heritage.service";
 
 @Module({
   imports: [ImageProcessingModule],
   controllers: [UserController],
   providers: [
     UserService,
+    UserHeritageService,
     PrismaService,
     JwtService,
     PermissionsService,

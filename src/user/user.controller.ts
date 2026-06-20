@@ -13,6 +13,9 @@ import {
   UploadedFile,
   UseInterceptors,
 } from "@nestjs/common";
+import { UserHeritageService } from "./user-heritage.service";
+import { UpdateHeritageDto } from "./dto/update-heritage.dto";
+import { UpdatePrivacyDto } from "./dto/update-privacy.dto";
 import { FileInterceptor } from "@nestjs/platform-express";
 import {
   ApiBearerAuth,
@@ -50,6 +53,7 @@ export class UserController {
   constructor(
     private readonly userService: UserService,
     private readonly permissionsService: PermissionsService,
+    private readonly userHeritageService: UserHeritageService,
   ) {}
 
   @Get("me")
@@ -94,6 +98,66 @@ export class UserController {
   async updateUser(@Body() dto: UpdateUserDto, @User("id") userId: string) {
     return this.userService.updateUser(dto, userId);
   }
+
+  // ─── Heritage ──────────────────────────────────────────────────────────────
+
+  @Get("me/heritage")
+  @Auth()
+  @ApiOperation({ summary: "Get own heritage data (always full)" })
+  @ApiOkResponse({ description: "Returns the authenticated user's full heritage record" })
+  async getMyHeritage(@User("id") userId: string) {
+    return this.userHeritageService.getMyHeritage(userId);
+  }
+
+  @Patch("me/heritage")
+  @Auth()
+  @HttpCode(200)
+  @ApiOperation({ summary: "Create or update own heritage data (upsert)" })
+  @ApiOkResponse({ description: "Heritage upserted successfully" })
+  async upsertHeritage(@Body() dto: UpdateHeritageDto, @User("id") userId: string) {
+    return this.userHeritageService.upsertHeritage(userId, dto);
+  }
+
+  @Get(":id/heritage")
+  @Auth()
+  @ApiOperation({ summary: "Get public heritage of a user (respects privacy settings)" })
+  @ApiParam({ name: "id", description: "Target user ID" })
+  @ApiOkResponse({ description: "Returns publicly visible heritage fields; omits private ones entirely" })
+  async getPublicHeritage(
+    @Param("id", ParseUUIDPipe) targetUserId: string,
+    @User("id") currentUserId: string,
+  ) {
+    const isAdmin = await this.permissionsService.hasPermission(
+      currentUserId,
+      PermissionCode.CAN_MANAGE_USERS,
+    );
+    // Admins always see full data; other users see privacy-filtered view
+    if (isAdmin || targetUserId === currentUserId) {
+      return this.userHeritageService.getMyHeritage(targetUserId);
+    }
+    return this.userHeritageService.getPublicHeritage(targetUserId);
+  }
+
+  // ─── Privacy ───────────────────────────────────────────────────────────────
+
+  @Get("me/privacy")
+  @Auth()
+  @ApiOperation({ summary: "Get own privacy settings" })
+  @ApiOkResponse({ description: "Returns the user's privacy settings (defaults if not yet set)" })
+  async getMyPrivacy(@User("id") userId: string) {
+    return this.userHeritageService.getMyPrivacy(userId);
+  }
+
+  @Patch("me/privacy")
+  @Auth()
+  @HttpCode(200)
+  @ApiOperation({ summary: "Create or update privacy settings (upsert)" })
+  @ApiOkResponse({ description: "Privacy settings upserted successfully" })
+  async upsertPrivacy(@Body() dto: UpdatePrivacyDto, @User("id") userId: string) {
+    return this.userHeritageService.upsertPrivacy(userId, dto);
+  }
+
+  // ─── Avatar ────────────────────────────────────────────────────────────────
 
   @Post("me/avatar")
   @Auth()
