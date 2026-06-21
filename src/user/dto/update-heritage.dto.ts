@@ -102,6 +102,15 @@ export class UpdateHeritageDto {
   @IsUUID()
   settlementId?: string;
 
+  @ApiPropertyOptional({ description: "Custom settlement name when not in directory", maxLength: 100 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === "string" ? value.trim().replace(/<[^>]*>/g, "") : value,
+  )
+  settlementCustom?: string;
+
   @ApiPropertyOptional({ description: "Ancestral village (free text)", maxLength: 100 })
   @IsOptional()
   @IsString()

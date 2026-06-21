@@ -22695,6 +22695,11 @@
             "type": "string",
             "description": "Settlement ID from the geo directory"
           },
+          "settlementCustom": {
+            "type": "string",
+            "description": "Custom settlement name when not in directory",
+            "maxLength": 100
+          },
           "ancestralVillage": {
             "type": "string",
             "description": "Ancestral village (free text)",

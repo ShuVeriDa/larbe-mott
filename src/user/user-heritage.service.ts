@@ -74,7 +74,8 @@ export class UserHeritageService {
       countryId: dto.countryId,
       regionId: dto.regionId,
       districtId: dto.districtId,
-      settlementId: dto.settlementId,
+      settlementId: dto.settlementId !== undefined ? dto.settlementId : undefined,
+      settlementCustom: dto.settlementId ? null : dto.settlementCustom,
       ancestralVillage: dto.ancestralVillage,
     };
 
@@ -141,6 +142,7 @@ export class UserHeritageService {
       result.regionId = heritage.regionId;
       result.districtId = heritage.districtId;
       result.settlementId = heritage.settlementId;
+      result.settlementCustom = heritage.settlementCustom;
       result.ancestralVillage = heritage.ancestralVillage;
     }
 

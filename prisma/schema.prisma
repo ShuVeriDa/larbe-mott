@@ -2159,6 +2159,7 @@ model UserHeritage {
   district         GeoDistrict?   @relation(fields: [districtId], references: [id], onDelete: SetNull)
   settlementId     String?
   settlement       GeoSettlement? @relation(fields: [settlementId], references: [id], onDelete: SetNull)
+  settlementCustom String?
   ancestralVillage String?
 
   createdAt      DateTime @default(now())
