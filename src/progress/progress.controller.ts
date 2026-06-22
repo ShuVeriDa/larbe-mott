@@ -102,7 +102,7 @@ export class ProgressController {
       this.prisma.userWordProgress.count({
         where: {
           userId,
-          status: { not: "KNOWN" },
+          status: "LEARNING",
           OR: [{ nextReview: null }, { nextReview: { lte: now } }],
         },
       }),

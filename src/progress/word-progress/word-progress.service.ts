@@ -296,7 +296,7 @@ export class WordProgressService {
     const rows = await this.prisma.userWordProgress.findMany({
       where: {
         userId,
-        status: { not: "KNOWN" },
+        status: "LEARNING",
         OR: [{ nextReview: null }, { nextReview: { lte: now } }],
       },
       orderBy: [{ nextReview: "asc" }, { seenCount: "desc" }],

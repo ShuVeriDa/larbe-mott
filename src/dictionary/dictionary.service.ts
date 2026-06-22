@@ -534,7 +534,7 @@ export class DictionaryService {
       this.prismaService.userWordProgress.count({
         where: {
           userId,
-          status: { not: "KNOWN" },
+          status: "LEARNING",
           OR: [{ nextReview: null }, { nextReview: { lte: now } }],
           lemma: { userDictionaryEntries: { some: { userId } } },
         },
@@ -773,7 +773,7 @@ export class DictionaryService {
     const progresses = await this.prismaService.userWordProgress.findMany({
       where: {
         userId,
-        status: { not: "KNOWN" },
+        status: "LEARNING",
         OR: [{ nextReview: null }, { nextReview: { lte: now } }],
         lemma: { userDictionaryEntries: { some: { userId } } },
       },
