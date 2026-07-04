@@ -287,8 +287,11 @@ export class TextController {
   @ApiParam({ name: "id", description: "Text ID (UUID)" })
   @ApiOkResponse({ description: "Array of { pageNumber, title }." })
   @ApiNotFoundResponse({ description: "Text with the given ID was not found." })
-  async getTableOfContents(@Param("id", ParseUUIDPipe) textId: string) {
-    return this.textService.getTableOfContents(textId);
+  async getTableOfContents(
+    @Param("id", ParseUUIDPipe) textId: string,
+    @User("id") userId: string | undefined,
+  ) {
+    return this.textService.getTableOfContents(textId, userId);
   }
 
   @Get(":id/pages/:pageNumber/phrases")
@@ -308,8 +311,9 @@ export class TextController {
   async getPagePhrases(
     @Param("id", ParseUUIDPipe) textId: string,
     @Param("pageNumber", ParseIntPipe) pageNumber: number,
+    @User("id") userId: string | undefined,
   ) {
-    return this.textService.getPagePhrases(textId, pageNumber);
+    return this.textService.getPagePhrases(textId, pageNumber, userId);
   }
 
   @Get(":id/related")

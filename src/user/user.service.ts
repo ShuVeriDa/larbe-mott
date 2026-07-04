@@ -17,6 +17,7 @@ const ARGON2_OPTIONS = {
 } as const;
 
 import { PermissionsService } from "src/auth/permissions/permissions.service";
+import { RefreshTokenLockService } from "src/auth/refresh-token-lock.service";
 import { PrismaService } from "../prisma.service";
 import { RedisService } from "src/redis/redis.service";
 import { CreateUserDto } from "./dto/create-user.dto";
@@ -34,6 +35,7 @@ export class UserService {
     private readonly permissionsService: PermissionsService,
     private readonly redis: RedisService,
     private readonly imageProcessing: ImageProcessingService,
+    private readonly refreshLock: RefreshTokenLockService,
   ) {}
 
   private userCacheKey = (id: string) => `user:profile:${id}`;
@@ -116,14 +118,18 @@ export class UserService {
     // Soft-delete: ставим статус DELETED + deletedAt. Hard-delete выполняется фоновым cron-job
     // через 30 дней (см. settings-spec.md / TODO в auth.service). Также сбрасываем refresh-token,
     // чтобы текущая сессия не могла продолжить работу.
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: {
-        status: UserStatus.DELETED,
-        deletedAt: new Date(),
-        hashedRefreshToken: null,
-      },
-    });
+    // Guarded by refreshLock: without it, an in-flight token rotation could
+    // finish right after this update and re-set a valid hash, un-revoking access.
+    await this.refreshLock.withLock(user.id, () =>
+      this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          status: UserStatus.DELETED,
+          deletedAt: new Date(),
+          hashedRefreshToken: null,
+        },
+      }),
+    );
 
     await this.prisma.userSession.updateMany({
       where: { userId: user.id, revokedAt: null },

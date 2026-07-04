@@ -501,6 +501,15 @@ model Lemma {
   @@map("lemma")
 }
 
+/// Suffix-stripping rule engine (see MorphologyRuleEngine). Designed for CHE
+/// agglutination and only ever populated with real rules for CHE — AR/RU/EN
+/// rows exist in the enum but resolve to empty rule sets by design.
+/// AR (Arabic as a studied language) uses root-and-pattern morphology, which
+/// does not fit this suffix model; AR words are looked up via AI-translation
+/// on the surface form instead (no lemmatization through this engine).
+/// Not wired into the automatic text-processing pipeline (TokenizerProcessor)
+/// at all — only reachable via admin analysis/CRUD and the on-demand
+/// word-lookup path (both of which must pass language explicitly).
 model MorphologyRule {
   id          String        @id @default(uuid())
   suffix      String
@@ -1318,6 +1327,7 @@ model AiTranslationCache {
   lemma           String
   contextSentence String?
   cacheType       AiCacheType   @default(WORD_ONLY)
+  sourceLanguage  String        @default("che")
   targetLanguage  String        @default("ru")
   translation     String
   russianGloss    String?
@@ -1335,11 +1345,12 @@ model AiTranslationCache {
   updatedAt       DateTime      @updatedAt
   exportedAt      DateTime?
 
-  @@unique([lemma, cacheType, targetLanguage])
+  @@unique([lemma, cacheType, sourceLanguage, targetLanguage])
   @@index([status])
   @@index([requestCount])
   @@index([lemma])
   @@index([targetLanguage])
+  @@index([sourceLanguage])
   @@index([exportedAt])
   @@index([status, exportedAt])
   @@index([lemma, targetLanguage])
@@ -2057,6 +2068,7 @@ model SpellingEntry {
   correctForm  String
   correctForms String[]           @default([])
   matchType    SpellingMatchType  @default(substring)
+  language     Language           @default(CHE)
   comment      String?
   createdById  String?
   createdBy    User?              @relation("SpellingEntryCreator", fields: [createdById], references: [id], onDelete: SetNull)
@@ -2064,6 +2076,7 @@ model SpellingEntry {
   updatedAt    DateTime           @updatedAt
 
   @@index([wrongForm])
+  @@index([language])
   @@map("spelling_entries")
 }
 

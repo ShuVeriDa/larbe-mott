@@ -12,6 +12,7 @@ import { PermissionGuard } from "./permissions/permission.guard";
 import { PermissionsService } from "./permissions/permissions.service";
 import { PasswordResetCleanupTask } from "./password-reset-cleanup.task";
 import { EmailChangeCleanupTask } from "./email-change-cleanup.task";
+import { RefreshTokenLockService } from "./refresh-token-lock.service";
 
 @Module({
   controllers: [AuthController],
@@ -26,8 +27,9 @@ import { EmailChangeCleanupTask } from "./email-change-cleanup.task";
     ConfigService,
     PasswordResetCleanupTask,
     EmailChangeCleanupTask,
+    RefreshTokenLockService,
   ],
-  exports: [PermissionsService],
+  exports: [PermissionsService, RefreshTokenLockService],
   imports: [
     ConfigModule,
     MailModule,

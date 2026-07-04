@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { Prisma, SpellingMatchType } from "@prisma/client";
+import { Language, Prisma, SpellingMatchType } from "@prisma/client";
 import { ErrorCode } from "src/common/errors/error-codes";
 import { PrismaService } from "src/prisma.service";
 import { CreateSpellingEntryDto } from "./dto/create-spelling-entry.dto";
@@ -55,10 +55,11 @@ export class AdminSpellingDictionaryService {
 
   // ─── Public: full list (no pagination, cached on FE for 1h) ─────────────────
 
-  async getAllEntries() {
+  async getAllEntries(language: Language = Language.CHE) {
     return this.prisma.spellingEntry.findMany({
+      where: { language },
       orderBy: { wrongForm: "asc" },
-      select: { id: true, wrongForm: true, correctForm: true, correctForms: true, matchType: true, comment: true },
+      select: { id: true, wrongForm: true, correctForm: true, correctForms: true, matchType: true, comment: true, language: true },
     });
   }
 
@@ -69,7 +70,9 @@ export class AdminSpellingDictionaryService {
     const limit = Math.min(200, Math.max(1, query.limit ?? 50));
     const skip = (page - 1) * limit;
 
-    const where: Prisma.SpellingEntryWhereInput = {};
+    const where: Prisma.SpellingEntryWhereInput = {
+      language: query.language ?? Language.CHE,
+    };
     if (query.search?.trim()) {
       const s = query.search.trim();
       where.OR = [

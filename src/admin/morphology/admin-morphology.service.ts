@@ -166,8 +166,9 @@ export class AdminMorphologyService {
   // ─── Analysis ──────────────────────────────────────────────────────────────
 
   async analyzeWord(dto: AnalyzeWordDto) {
-    const result = await this.morphology.analyze(dto.word);
-    return { word: dto.word, result };
+    const language = dto.language ?? Language.CHE;
+    const result = await this.morphology.analyze(dto.word, language);
+    return { word: dto.word, language, result };
   }
 
   // ─── Morphology Rules ──────────────────────────────────────────────────────

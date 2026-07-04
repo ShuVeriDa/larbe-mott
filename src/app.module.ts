@@ -51,6 +51,7 @@ import { TextScriptModule } from "./text-script/text-script.module";
 import { AnnouncementModule } from "./announcement/announcement.module";
 import { HeritageModule } from "./heritage/heritage.module";
 import { GeoModule } from "./geo/geo.module";
+import { FeatureFlagsModule } from "./feature-flags/feature-flags.module";
 import { envValidationSchema } from "./config/env.validation";
 
 @Module({
@@ -82,6 +83,7 @@ import { envValidationSchema } from "./config/env.validation";
     }),
     UserModule,
     AuthModule,
+    FeatureFlagsModule,
     TextModule,
     TokenizationEventsModule,
     TokenizerModule,

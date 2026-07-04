@@ -34,6 +34,7 @@ import { LoginDto } from "src/user/dto/login.dto";
 import { UserService } from "src/user/user.service";
 import { RedisService } from "src/redis/redis.service";
 import { ErrorCode } from "src/common/errors/error-codes";
+import { RefreshTokenLockService } from "./refresh-token-lock.service";
 
 @Injectable()
 export class AuthService {
@@ -44,6 +45,7 @@ export class AuthService {
     private readonly configService: ConfigService,
     private readonly redis: RedisService,
     private readonly mail: MailService,
+    private readonly refreshLock: RefreshTokenLockService,
   ) {}
 
   private static readonly LOGIN_FAIL_MAX = 10;
@@ -287,71 +289,18 @@ export class AuthService {
     // axios interceptor both reacting to the same expired access token) would
     // otherwise race on read-verify-rotate below: the loser sees an
     // already-rotated hash and gets treated as token replay. Serialize refreshes
-    // per-user via a short Redis lock so only one rotation happens at a time and
-    // concurrent callers wait for it instead of triggering a false reuse-detected.
-    return this.withRefreshLock(result.id, () =>
+    // per-user via a short Redis lock (RefreshTokenLockService) so only one
+    // rotation happens at a time and concurrent callers wait for it instead of
+    // triggering a false reuse-detected.
+    //
+    // logout/changePassword/confirmPasswordReset/confirmEmailChange (and admin
+    // force-logout / account soft-delete) also take this same lock before
+    // clearing hashedRefreshToken — otherwise an in-flight rotation could
+    // finish and overwrite the hash right after a revocation, silently
+    // "un-revoking" the session (lost update).
+    return this.refreshLock.withLock(result.id, () =>
       this.rotateRefreshToken(refreshToken, result),
     );
-  }
-
-  private async withRefreshLock<T>(
-    userId: string,
-    fn: () => Promise<T>,
-  ): Promise<T> {
-    const lockKey = `auth:refresh-lock:${userId}`;
-    const lockValue = randomBytes(16).toString("hex");
-    const lockTtlMs = 5000;
-    const pollIntervalMs = 50;
-    const maxWaitMs = 3000;
-
-    const acquired = await this.acquireLockWithWait(
-      lockKey,
-      lockValue,
-      lockTtlMs,
-      pollIntervalMs,
-      maxWaitMs,
-    );
-
-    if (!acquired) {
-      // Could not acquire the lock in time — proceed without it rather than
-      // failing the request outright; worst case we're back to pre-lock behavior.
-      return fn();
-    }
-
-    try {
-      return await fn();
-    } finally {
-      await this.releaseLock(lockKey, lockValue);
-    }
-  }
-
-  private async acquireLockWithWait(
-    key: string,
-    value: string,
-    ttlMs: number,
-    pollIntervalMs: number,
-    maxWaitMs: number,
-  ): Promise<boolean> {
-    const deadline = Date.now() + maxWaitMs;
-    for (;;) {
-      const set = await this.redis.set(key, value, "PX", ttlMs, "NX");
-      if (set === "OK") return true;
-      if (Date.now() >= deadline) return false;
-      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
-    }
-  }
-
-  private async releaseLock(key: string, value: string): Promise<void> {
-    // Only release if we still own the lock (value matches) — avoids releasing
-    // a lock acquired by another request after ours expired.
-    const script = `
-      if redis.call("get", KEYS[1]) == ARGV[1] then
-        return redis.call("del", KEYS[1])
-      else
-        return 0
-      end
-    `;
-    await this.redis.eval(script, 1, key, value).catch(() => undefined);
   }
 
   private async rotateRefreshToken(
@@ -428,7 +377,7 @@ export class AuthService {
   }
 
   async logout(userId: string) {
-    await this.clearRefreshTokenHash(userId);
+    await this.refreshLock.withLock(userId, () => this.clearRefreshTokenHash(userId));
     // Blacklist all access tokens issued before now for this user.
     // JwtStrategy checks iat against this timestamp and rejects older tokens.
     const accessTtl = this.parseExpirySeconds(
@@ -793,42 +742,47 @@ export class AuthService {
     const passwordHash = await hash(newPassword, ARGON2_OPTIONS);
     const now = new Date();
 
-    await this.prisma.$transaction([
-      this.prisma.passwordResetToken.update({
-        where: { id: record.id },
-        data: {
-          usedAt: now,
-          consumedIp: meta?.ip ?? null,
-        },
-      }),
-      // Заодно инвалидируем все остальные неиспользованные токены — чтобы вторая параллельная ссылка не сработала.
-      this.prisma.passwordResetToken.updateMany({
-        where: {
-          userId: record.userId,
-          usedAt: null,
-          id: { not: record.id },
-        },
-        data: { usedAt: now },
-      }),
-      this.prisma.user.update({
-        where: { id: record.userId },
-        data: {
-          password: passwordHash,
-          hashedRefreshToken: null,
-        },
-      }),
-      this.prisma.userSession.updateMany({
-        where: { userId: record.userId, revokedAt: null },
-        data: { revokedAt: now },
-      }),
-      this.prisma.userEvent.create({
-        data: {
-          userId: record.userId,
-          type: UserEventType.PASSWORD_RESET_COMPLETED,
-          metadata: meta?.ip ? { ip: meta.ip } : undefined,
-        },
-      }),
-    ]);
+    // Clearing hashedRefreshToken must not race with an in-flight token
+    // rotation (getNewTokens) — otherwise the rotation could finish right
+    // after this transaction and re-set a valid hash, un-revoking the account.
+    await this.refreshLock.withLock(record.userId, () =>
+      this.prisma.$transaction([
+        this.prisma.passwordResetToken.update({
+          where: { id: record.id },
+          data: {
+            usedAt: now,
+            consumedIp: meta?.ip ?? null,
+          },
+        }),
+        // Заодно инвалидируем все остальные неиспользованные токены — чтобы вторая параллельная ссылка не сработала.
+        this.prisma.passwordResetToken.updateMany({
+          where: {
+            userId: record.userId,
+            usedAt: null,
+            id: { not: record.id },
+          },
+          data: { usedAt: now },
+        }),
+        this.prisma.user.update({
+          where: { id: record.userId },
+          data: {
+            password: passwordHash,
+            hashedRefreshToken: null,
+          },
+        }),
+        this.prisma.userSession.updateMany({
+          where: { userId: record.userId, revokedAt: null },
+          data: { revokedAt: now },
+        }),
+        this.prisma.userEvent.create({
+          data: {
+            userId: record.userId,
+            type: UserEventType.PASSWORD_RESET_COMPLETED,
+            metadata: meta?.ip ? { ip: meta.ip } : undefined,
+          },
+        }),
+      ]),
+    );
 
     // Глобальный access-token blacklist (за пределами транзакции — Redis).
     const accessTtl = this.parseExpirySeconds(
@@ -935,23 +889,25 @@ export class AuthService {
     const passwordHash = await hash(newPassword, ARGON2_OPTIONS);
     const now = new Date();
 
-    await this.prisma.$transaction([
-      this.prisma.user.update({
-        where: { id: user.id },
-        data: { password: passwordHash, hashedRefreshToken: null },
-      }),
-      this.prisma.userSession.updateMany({
-        where: { userId: user.id, revokedAt: null },
-        data: { revokedAt: now },
-      }),
-      this.prisma.userEvent.create({
-        data: {
-          userId: user.id,
-          type: UserEventType.PASSWORD_CHANGED,
-          metadata: meta?.ip ? { ip: meta.ip } : undefined,
-        },
-      }),
-    ]);
+    await this.refreshLock.withLock(user.id, () =>
+      this.prisma.$transaction([
+        this.prisma.user.update({
+          where: { id: user.id },
+          data: { password: passwordHash, hashedRefreshToken: null },
+        }),
+        this.prisma.userSession.updateMany({
+          where: { userId: user.id, revokedAt: null },
+          data: { revokedAt: now },
+        }),
+        this.prisma.userEvent.create({
+          data: {
+            userId: user.id,
+            type: UserEventType.PASSWORD_CHANGED,
+            metadata: meta?.ip ? { ip: meta.ip } : undefined,
+          },
+        }),
+      ]),
+    );
 
     const accessTtl = this.parseExpirySeconds(
       this.configService.get("ACCESS_TOKEN_EXPIRES_IN") ?? "1h",
@@ -1093,38 +1049,40 @@ export class AuthService {
     const now = new Date();
 
     try {
-      await this.prisma.$transaction([
-        this.prisma.emailChangeToken.update({
-          where: { id: record.id },
-          data: { usedAt: now, consumedIp: meta?.ip ?? null },
-        }),
-        this.prisma.emailChangeToken.updateMany({
-          where: {
-            userId: record.userId,
-            usedAt: null,
-            id: { not: record.id },
-          },
-          data: { usedAt: now },
-        }),
-        this.prisma.user.update({
-          where: { id: record.userId },
-          data: {
-            email: record.newEmail,
-            hashedRefreshToken: null,
-          },
-        }),
-        this.prisma.userSession.updateMany({
-          where: { userId: record.userId, revokedAt: null },
-          data: { revokedAt: now },
-        }),
-        this.prisma.userEvent.create({
-          data: {
-            userId: record.userId,
-            type: UserEventType.EMAIL_CHANGE_COMPLETED,
-            metadata: { oldEmail, newEmail: record.newEmail, ip: meta?.ip ?? null },
-          },
-        }),
-      ]);
+      await this.refreshLock.withLock(record.userId, () =>
+        this.prisma.$transaction([
+          this.prisma.emailChangeToken.update({
+            where: { id: record.id },
+            data: { usedAt: now, consumedIp: meta?.ip ?? null },
+          }),
+          this.prisma.emailChangeToken.updateMany({
+            where: {
+              userId: record.userId,
+              usedAt: null,
+              id: { not: record.id },
+            },
+            data: { usedAt: now },
+          }),
+          this.prisma.user.update({
+            where: { id: record.userId },
+            data: {
+              email: record.newEmail,
+              hashedRefreshToken: null,
+            },
+          }),
+          this.prisma.userSession.updateMany({
+            where: { userId: record.userId, revokedAt: null },
+            data: { revokedAt: now },
+          }),
+          this.prisma.userEvent.create({
+            data: {
+              userId: record.userId,
+              type: UserEventType.EMAIL_CHANGE_COMPLETED,
+              metadata: { oldEmail, newEmail: record.newEmail, ip: meta?.ip ?? null },
+            },
+          }),
+        ]),
+      );
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
         // Кто-то занял email между request и confirm.

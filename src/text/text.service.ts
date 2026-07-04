@@ -8,12 +8,20 @@ import {
   Level,
   UserEventType,
 } from "@prisma/client";
+import { FeatureFlagsService } from "src/feature-flags/feature-flags.service";
 import { TokenizerProcessor } from "src/markup-engine/tokenizer/tokenizer.processor";
 import { PrismaService } from "src/prisma.service";
 import { TextProgressService } from "src/progress/text-progress/text-progress.service";
 import { WordProgressService } from "src/progress/word-progress/word-progress.service";
 import { RedisService } from "src/redis/redis.service";
 import { ReportTextDto, TextReportReason } from "./dto/report-text.dto";
+
+// Temporary gate for AR (Arabic as a studied language) while it's limited to
+// admins + explicit per-user overrides via /admin/feature-flags. Remove this
+// flag key and its overrides once access moves to subscription plan limits.
+// Key uses dot notation ("category.feature_name") to satisfy CreateFeatureFlagDto's
+// key format validation (@Matches on AdminFeatureFlagsController).
+const ARABIC_LANGUAGE_FLAG_KEY = "functional.arabic_language";
 
 export type TextProgressStatus = "NEW" | "IN_PROGRESS" | "COMPLETED";
 export type TextSortOrder = "newest" | "oldest" | "alpha" | "progress" | "length" | "level" | "popular";
@@ -63,13 +71,28 @@ export class TextService {
     private readonly wordProgress: WordProgressService,
     private readonly textProgress: TextProgressService,
     private readonly redis: RedisService,
+    private readonly featureFlags: FeatureFlagsService,
   ) {}
+
+  private async canAccessArabic(userId: string | undefined): Promise<boolean> {
+    if (!userId) return false;
+    return this.featureFlags.isFeatureEnabled(userId, ARABIC_LANGUAGE_FLAG_KEY);
+  }
 
   async getAllTags() {
     return this.prisma.tag.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } });
   }
 
-  async getTableOfContents(textId: string) {
+  async getTableOfContents(textId: string, userId: string | undefined) {
+    const text = await this.prisma.text.findUnique({
+      where: { id: textId },
+      select: { language: true },
+    });
+    if (!text) throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
+    if (text.language === Language.AR && !(await this.canAccessArabic(userId))) {
+      throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
+    }
+
     return this.prisma.textPage.findMany({
       where: { textId },
       select: { pageNumber: true, title: true },
@@ -96,9 +119,24 @@ export class TextService {
     const safeLimit = Math.min(50, Math.max(1, limit));
     const safePage = Math.max(1, page);
     const skip = (safePage - 1) * safeLimit;
+
+    // AR (Arabic as a studied language) is gated behind the "arabic_language"
+    // feature flag — enforce server-side regardless of what the client asked
+    // for, so it can't be exposed just by requesting language=AR directly.
+    // Expressed purely as a `language` constraint (not `id`) so it composes
+    // safely with the "popular" sort path below, which also narrows by `id`.
+    const canAccessArabic = await this.canAccessArabic(userId);
+    const languageConstraint = canAccessArabic
+      ? languages?.length
+        ? { language: { in: languages } }
+        : {}
+      : languages?.length
+        ? { language: { in: languages.filter((l) => l !== Language.AR) } }
+        : { language: { not: Language.AR } };
+
     const where = {
       publishedAt: { not: null as null | Date },
-      ...(languages?.length ? { language: { in: languages } } : {}),
+      ...languageConstraint,
       ...(levels?.length ? { level: { in: levels } } : {}),
       ...(tagIds?.length
         ? { tags: { some: { tagId: { in: tagIds } } } }
@@ -394,6 +432,10 @@ export class TextService {
     });
     if (!text) throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
 
+    if (text.language === Language.AR && !(await this.canAccessArabic(userId))) {
+      throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
+    }
+
     const cachedTotalPages = await this.redis.get(totalPagesCacheKey(textId));
     const [page, latestVersion, freshTotalPages] = await Promise.all([
       this.prisma.textPage.findFirst({ where: { textId, pageNumber } }),
@@ -603,6 +645,12 @@ export class TextService {
     });
 
     if (!text) throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
+
+    // AR text without the "arabic_language" flag → 404, not 403, so a direct
+    // request by known id doesn't leak that the text exists.
+    if (text.language === Language.AR && !(await this.canAccessArabic(userId))) {
+      throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
+    }
 
     // Версия + wordCount
     const latestVersion = await this.prisma.textProcessingVersion.findFirst({
@@ -828,6 +876,9 @@ export class TextService {
       },
     });
     if (!text) throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
+    if (text.language === Language.AR && !(await this.canAccessArabic(userId))) {
+      throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
+    }
 
     const tagIds = text.tags.map((t) => t.tagId);
 
@@ -977,7 +1028,16 @@ export class TextService {
     return thread;
   }
 
-  async getPagePhrases(textId: string, pageNumber: number) {
+  async getPagePhrases(textId: string, pageNumber: number, userId: string | undefined) {
+    const text = await this.prisma.text.findUnique({
+      where: { id: textId },
+      select: { language: true },
+    });
+    if (!text) throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
+    if (text.language === Language.AR && !(await this.canAccessArabic(userId))) {
+      throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
+    }
+
     const page = await this.prisma.textPage.findFirst({
       where: { textId, pageNumber },
       select: { id: true },

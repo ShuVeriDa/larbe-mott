@@ -696,6 +696,46 @@
         ]
       }
     },
+    "/api/feature-flags/me": {
+      "get": {
+        "description": "Returns whether each requested flag key is enabled for the authenticated user (per-user override takes priority, then global rollout/environment rules).",
+        "operationId": "FeatureFlagsController_getMyFlags",
+        "parameters": [
+          {
+            "name": "keys",
+            "required": true,
+            "in": "query",
+            "description": "One or more feature flag keys to check for the current user",
+            "schema": {
+              "example": [
+                "functional.arabic_language"
+              ],
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Map of { [key]: boolean } for the requested keys."
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Check feature flags for the current user",
+        "tags": [
+          "feature-flags"
+        ]
+      }
+    },
     "/api/texts/tags": {
       "get": {
         "description": "Returns all available tags. Use tag IDs for filtering GET /texts.",
@@ -17203,6 +17243,22 @@
               "example": "вахне",
               "type": "string"
             }
+          },
+          {
+            "name": "language",
+            "required": false,
+            "in": "query",
+            "description": "Filter by language",
+            "schema": {
+              "default": "CHE",
+              "type": "string",
+              "enum": [
+                "CHE",
+                "RU",
+                "AR",
+                "EN"
+              ]
+            }
           }
         ],
         "responses": {
@@ -17632,12 +17688,29 @@
     },
     "/api/spelling-dictionary/all": {
       "get": {
-        "description": "Returns all entries (wrongForm → correctForm). Public endpoint, no auth required. Intended to be cached client-side for ~1 hour.",
+        "description": "Returns all entries (wrongForm → correctForm) for a given language (defaults to Chechen). Public endpoint, no auth required. Intended to be cached client-side for ~1 hour.",
         "operationId": "SpellingDictionaryController_getAllEntries",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "language",
+            "required": false,
+            "in": "query",
+            "description": "Filter by language",
+            "schema": {
+              "default": "CHE",
+              "type": "string",
+              "enum": [
+                "CHE",
+                "RU",
+                "AR",
+                "EN"
+              ]
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Array of { id, wrongForm, correctForm, comment }"
+            "description": "Array of { id, wrongForm, correctForm, comment, language }"
           }
         },
         "summary": "Get full spelling dictionary",
@@ -21040,7 +21113,7 @@
             "bearer": []
           }
         ],
-        "summary": "Translate a Chechen word via Gemini (with cache)",
+        "summary": "Translate a word via Gemini (with cache)",
         "tags": [
           "ai-translation"
         ]
@@ -21073,7 +21146,7 @@
             "bearer": []
           }
         ],
-        "summary": "Translate a Chechen phrase via Gemini (not cached)",
+        "summary": "Translate a phrase via Gemini (not cached)",
         "tags": [
           "ai-translation"
         ]
@@ -21106,7 +21179,7 @@
             "bearer": []
           }
         ],
-        "summary": "Batch-translate multiple Chechen words via Gemini (one request)",
+        "summary": "Batch-translate multiple words via Gemini (one request)",
         "tags": [
           "ai-translation"
         ]
@@ -26334,6 +26407,17 @@
           "word": {
             "type": "string",
             "description": "Word to analyze"
+          },
+          "language": {
+            "type": "string",
+            "description": "Language the word belongs to. Determines which suffix rules / lemma pool are used for analysis.",
+            "enum": [
+              "CHE",
+              "RU",
+              "AR",
+              "EN"
+            ],
+            "default": "CHE"
           }
         },
         "required": [
@@ -28056,6 +28140,15 @@
               "tr"
             ],
             "default": "ru"
+          },
+          "sourceLanguage": {
+            "type": "string",
+            "description": "Source language of the word being translated",
+            "enum": [
+              "che",
+              "ar"
+            ],
+            "default": "che"
           }
         },
         "required": [
@@ -28085,6 +28178,15 @@
               "tr"
             ],
             "default": "ru"
+          },
+          "sourceLanguage": {
+            "type": "string",
+            "description": "Source language of the phrase being translated",
+            "enum": [
+              "che",
+              "ar"
+            ],
+            "default": "che"
           }
         },
         "required": [
@@ -28095,11 +28197,20 @@
         "type": "object",
         "properties": {
           "words": {
-            "description": "Unique Chechen words to translate",
+            "description": "Unique words to translate",
             "type": "array",
             "items": {
               "type": "string"
             }
+          },
+          "sourceLanguage": {
+            "type": "string",
+            "description": "Source language of the words being translated",
+            "enum": [
+              "che",
+              "ar"
+            ],
+            "default": "che"
           }
         },
         "required": [
@@ -28133,6 +28244,15 @@
               "tr"
             ],
             "default": "ru"
+          },
+          "sourceLanguage": {
+            "type": "string",
+            "description": "Source language of the phrase being refined",
+            "enum": [
+              "che",
+              "ar"
+            ],
+            "default": "che"
           }
         },
         "required": [

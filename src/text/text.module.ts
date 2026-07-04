@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { AuthModule } from "src/auth/auth.module";
+import { FeatureFlagsModule } from "src/feature-flags/feature-flags.module";
 import { TokenizerModule } from "src/markup-engine/tokenizer/tokenizer.module";
 import { PrismaService } from "src/prisma.service";
 import { TextProgressService } from "src/progress/text-progress/text-progress.service";
@@ -12,7 +13,16 @@ import { TextController } from "./text.controller";
 import { TextService } from "./text.service";
 
 @Module({
-  imports: [AuthModule, TokenizerModule, WordProgressModule, RedisModule, TrackingModule, TextScriptModule, TransliterationModule],
+  imports: [
+    AuthModule,
+    FeatureFlagsModule,
+    TokenizerModule,
+    WordProgressModule,
+    RedisModule,
+    TrackingModule,
+    TextScriptModule,
+    TransliterationModule,
+  ],
   controllers: [TextController],
   providers: [TextService, PrismaService, TextProgressService],
   exports: [TextService],

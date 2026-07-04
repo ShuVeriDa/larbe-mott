@@ -33,6 +33,7 @@ import {
   lookupSessionLocation,
   parseDeviceLabel,
 } from "src/auth/utils/session-meta.util";
+import { RefreshTokenLockService } from "src/auth/refresh-token-lock.service";
 
 // Paid plan types for stats/filter
 const PAID_PLAN_TYPES: PlanType[] = [
@@ -51,6 +52,7 @@ export class AdminUsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly userAnalytics: UserAnalyticsService,
+    private readonly refreshLock: RefreshTokenLockService,
   ) {}
 
   // ─── Stats ───────────────────────────────────────────────────────────────────
@@ -475,16 +477,20 @@ export class AdminUsersService {
     if (!existing) throw new NotFoundException({ code: ErrorCode.USER_NOT_FOUND, message: "User not found" });
 
     const now = new Date();
-    await this.prisma.$transaction([
-      this.prisma.user.update({
-        where: { id },
-        data: { hashedRefreshToken: null },
-      }),
-      this.prisma.userSession.updateMany({
-        where: { userId: id, revokedAt: null },
-        data: { revokedAt: now },
-      }),
-    ]);
+    // Serialize against AuthService.getNewTokens so an in-flight refresh can't
+    // re-set hashedRefreshToken right after this admin-initiated revocation.
+    await this.refreshLock.withLock(id, () =>
+      this.prisma.$transaction([
+        this.prisma.user.update({
+          where: { id },
+          data: { hashedRefreshToken: null },
+        }),
+        this.prisma.userSession.updateMany({
+          where: { userId: id, revokedAt: null },
+          data: { revokedAt: now },
+        }),
+      ]),
+    );
   }
 
   // ─── Roles ────────────────────────────────────────────────────────────────────

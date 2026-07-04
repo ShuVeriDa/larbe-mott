@@ -129,6 +129,8 @@ export class TokenizerProcessor {
       await this._updateProgress(textId, version.id, 40);
 
       // ── Morphological analysis ─────────────────────────────────────────────
+      // Note: MorphologyRuleEngine (suffix stripping, CHE-only) is intentionally
+      // not part of this pipeline — it is not invoked for any text.language here.
       if (useMorphAnalysis) {
         log("INFO", "Запуск морфологического анализа");
 

@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from "@nestjs/swagger";
+import { Language } from "@prisma/client";
 import { Type } from "class-transformer";
-import { IsInt, IsOptional, IsString, Max, Min } from "class-validator";
+import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from "class-validator";
 
 export class FetchSpellingEntriesDto {
   @ApiPropertyOptional({ description: "Page number (1-based)", example: 1, default: 1 })
@@ -22,4 +23,13 @@ export class FetchSpellingEntriesDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @ApiPropertyOptional({
+    description: "Filter by language",
+    enum: Language,
+    default: Language.CHE,
+  })
+  @IsOptional()
+  @IsEnum(Language)
+  language?: Language;
 }

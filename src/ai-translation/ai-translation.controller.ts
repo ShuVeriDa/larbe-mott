@@ -90,7 +90,7 @@ export class AiTranslationController {
   @Post("translate/word")
   @Auth()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Translate a Chechen word via Gemini (with cache)" })
+  @ApiOperation({ summary: "Translate a word via Gemini (with cache)" })
   translateWord(@User("id") userId: string, @Body() dto: TranslateWordDto) {
     return this.aiTranslationService.translateWord(userId, dto);
   }
@@ -99,7 +99,7 @@ export class AiTranslationController {
   @Post("translate/phrase")
   @Auth()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Translate a Chechen phrase via Gemini (not cached)" })
+  @ApiOperation({ summary: "Translate a phrase via Gemini (not cached)" })
   translatePhrase(@User("id") userId: string, @Body() dto: TranslatePhraseDto) {
     return this.aiTranslationService.translatePhrase(userId, dto);
   }
@@ -108,7 +108,7 @@ export class AiTranslationController {
   @Post("translate/batch")
   @Auth()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Batch-translate multiple Chechen words via Gemini (one request)" })
+  @ApiOperation({ summary: "Batch-translate multiple words via Gemini (one request)" })
   batchTranslate(@User("id") userId: string, @Body() dto: BatchTranslateDto) {
     return this.aiTranslationService.batchTranslate(userId, dto);
   }

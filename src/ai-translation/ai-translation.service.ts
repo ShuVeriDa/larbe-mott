@@ -11,7 +11,7 @@ import { RefinePhraseDto } from "./dto/refine-phrase.dto";
 import { SaveRefinementDto } from "./dto/save-refinement.dto";
 import { TranslatePhraseDto } from "./dto/translate-phrase.dto";
 import { TranslateWordDto } from "./dto/translate-word.dto";
-import { TranslationLanguage } from "./dto/translation-language";
+import { SOURCE_LANGUAGE_NAMES, SourceLanguage, TranslationLanguage } from "./dto/translation-language";
 import { VoteType } from "./dto/vote-cache.dto";
 import { decryptApiKey, encryptApiKey } from "./encryption.util";
 import { parseGeminiError, type FallbackReason } from "./gemini-error";
@@ -110,15 +110,17 @@ export class AiTranslationService {
   async translateWord(userId: string, dto: TranslateWordDto) {
     const normalized = dto.word.trim().toLowerCase();
     const targetLanguage: TranslationLanguage = dto.targetLanguage ?? "ru";
+    const sourceLanguage: SourceLanguage = dto.sourceLanguage ?? "che";
     const cacheType = dto.contextSentence
       ? AiCacheType.WORD_IN_CONTEXT
       : AiCacheType.WORD_ONLY;
 
-    // 1a. Check exact cache (lemma + cacheType + targetLanguage)
+    // 1a. Check exact cache (lemma + cacheType + sourceLanguage + targetLanguage)
     const cached = await this.prisma.aiTranslationCache.findFirst({
       where: {
         lemma: normalized,
         cacheType,
+        sourceLanguage,
         targetLanguage,
         status: { in: [AiCacheStatus.PENDING, AiCacheStatus.APPROVED] },
       },
@@ -138,6 +140,7 @@ export class AiTranslationService {
         where: {
           lemma: normalized,
           cacheType: AiCacheType.WORD_ONLY,
+          sourceLanguage,
           targetLanguage,
           status: { in: [AiCacheStatus.PENDING, AiCacheStatus.APPROVED] },
         },
@@ -157,7 +160,7 @@ export class AiTranslationService {
       throw new BadRequestException({ code: ErrorCode.GEMINI_KEY_NOT_CONFIGURED, message: "Gemini API key not configured" });
     }
 
-    const prompt = this.buildWordPrompt(dto.word, targetLanguage, dto.contextSentence);
+    const prompt = this.buildWordPrompt(dto.word, targetLanguage, sourceLanguage, dto.contextSentence);
     const { text: raw, fallbackUsed, fallbackReason, retryAfterSeconds } = await this.callGeminiSafe(
       userId,
       keyAndModel.apiKey,
@@ -173,12 +176,13 @@ export class AiTranslationService {
       throw new BadRequestException({ code: ErrorCode.NOT_CHECHEN, message: "not_chechen" });
     }
 
-    // 3. Save to cache (upsert on lemma + cacheType + targetLanguage)
+    // 3. Save to cache (upsert on lemma + cacheType + sourceLanguage + targetLanguage)
     const entry = await this.prisma.aiTranslationCache.upsert({
       where: {
-        lemma_cacheType_targetLanguage: {
+        lemma_cacheType_sourceLanguage_targetLanguage: {
           lemma: normalized,
           cacheType,
+          sourceLanguage,
           targetLanguage,
         },
       },
@@ -186,6 +190,7 @@ export class AiTranslationService {
         lemma: normalized,
         contextSentence: dto.contextSentence ?? null,
         cacheType,
+        sourceLanguage,
         targetLanguage,
         translation: parsed.translation,
         russianGloss: targetLanguage !== "ru" ? (parsed.russianGloss ?? null) : null,
@@ -214,7 +219,8 @@ export class AiTranslationService {
     }
 
     const targetLanguage: TranslationLanguage = dto.targetLanguage ?? "ru";
-    const prompt = this.buildPhrasePrompt(dto.phrase, targetLanguage, dto.contextSentence);
+    const sourceLanguage: SourceLanguage = dto.sourceLanguage ?? "che";
+    const prompt = this.buildPhrasePrompt(dto.phrase, targetLanguage, sourceLanguage, dto.contextSentence);
     const { text: raw, fallbackUsed, fallbackReason, retryAfterSeconds } = await this.callGeminiSafe(
       userId,
       keyAndModel.apiKey,
@@ -236,11 +242,13 @@ export class AiTranslationService {
     }
 
     const targetLanguage: TranslationLanguage = dto.targetLanguage ?? "ru";
+    const sourceLanguage: SourceLanguage = dto.sourceLanguage ?? "che";
     const prompt = this.buildRefinePrompt(
       dto.phrase,
       dto.previousTranslation,
       dto.hint,
       targetLanguage,
+      sourceLanguage,
     );
     const { text: raw, fallbackUsed, fallbackReason, retryAfterSeconds } = await this.callGeminiSafe(
       userId,
@@ -267,6 +275,8 @@ export class AiTranslationService {
       throw new BadRequestException({ code: ErrorCode.GEMINI_KEY_NOT_CONFIGURED, message: "Gemini API key not configured" });
     }
 
+    const sourceLanguage: SourceLanguage = dto.sourceLanguage ?? "che";
+
     const deduped = [
       ...new Set(dto.words.map((w) => w.trim().toLowerCase())),
     ].slice(0, 50);
@@ -276,6 +286,7 @@ export class AiTranslationService {
       where: {
         lemma: { in: deduped },
         cacheType: AiCacheType.WORD_ONLY,
+        sourceLanguage,
         targetLanguage: "ru",
         status: { in: [AiCacheStatus.PENDING, AiCacheStatus.APPROVED] },
       },
@@ -289,7 +300,7 @@ export class AiTranslationService {
     const freshMap: Record<string, string> = {};
 
     if (uncached.length > 0) {
-      const prompt = this.buildBatchPrompt(uncached);
+      const prompt = this.buildBatchPrompt(uncached, sourceLanguage);
       const { text: raw } = await this.callGeminiSafe(
         userId,
         keyAndModel.apiKey,
@@ -305,15 +316,17 @@ export class AiTranslationService {
           Object.entries(freshMap).map(([lemma, translation]) =>
             this.prisma.aiTranslationCache.upsert({
               where: {
-                lemma_cacheType_targetLanguage: {
+                lemma_cacheType_sourceLanguage_targetLanguage: {
                   lemma,
                   cacheType: AiCacheType.WORD_ONLY,
+                  sourceLanguage,
                   targetLanguage: "ru",
                 },
               },
               create: {
                 lemma,
                 cacheType: AiCacheType.WORD_ONLY,
+                sourceLanguage,
                 targetLanguage: "ru",
                 translation,
                 requestCount: 1,
@@ -341,12 +354,14 @@ export class AiTranslationService {
       ? AiCacheType.WORD_IN_CONTEXT
       : AiCacheType.WORD_ONLY;
     const targetLanguage: TranslationLanguage = dto.targetLanguage ?? "ru";
+    const sourceLanguage: SourceLanguage = dto.sourceLanguage ?? "che";
 
     const existing = await this.prisma.aiTranslationCache.findUnique({
       where: {
-        lemma_cacheType_targetLanguage: {
+        lemma_cacheType_sourceLanguage_targetLanguage: {
           lemma: normalized,
           cacheType,
+          sourceLanguage,
           targetLanguage,
         },
       },
@@ -357,9 +372,10 @@ export class AiTranslationService {
 
     await this.prisma.aiTranslationCache.upsert({
       where: {
-        lemma_cacheType_targetLanguage: {
+        lemma_cacheType_sourceLanguage_targetLanguage: {
           lemma: normalized,
           cacheType,
+          sourceLanguage,
           targetLanguage,
         },
       },
@@ -367,6 +383,7 @@ export class AiTranslationService {
         lemma: normalized,
         contextSentence: dto.contextSentence ?? null,
         cacheType,
+        sourceLanguage,
         targetLanguage,
         translation: dto.translation,
         requestCount: 1,
@@ -464,6 +481,7 @@ export class AiTranslationService {
   private buildWordPrompt(
     word: string,
     targetLanguage: TranslationLanguage,
+    sourceLanguage: SourceLanguage,
     context?: string,
   ): string {
     const safeWord = this.sanitize(word);
@@ -471,18 +489,19 @@ export class AiTranslationService {
       ? `\nContext sentence: "${this.sanitize(context)}"`
       : "";
     const langName = LANGUAGE_NAMES[targetLanguage];
+    const sourceLangName = SOURCE_LANGUAGE_NAMES[sourceLanguage];
     const isRussian = targetLanguage === "ru";
 
     const russianGlossField = isRussian
       ? ""
       : `\n- "russianGloss": string (brief Russian meaning of the word for cross-check, 1-4 words)`;
 
-    return `You are a Chechen language assistant. Given the Chechen word below${context ? " and its context sentence" : ""}, return a JSON object with these fields:
-- "notChechen": boolean (true if the word is NOT Chechen)
+    return `You are a ${sourceLangName} language assistant. Given the ${sourceLangName} word below${context ? " and its context sentence" : ""}, return a JSON object with these fields:
+- "notChechen": boolean (true if the word is NOT ${sourceLangName})
 - "translation": string (${langName} translation, considering context if provided)${russianGlossField}
-- "transliteration": string (Latin transliteration of the Chechen word)
+- "transliteration": string (Latin transliteration of the ${sourceLangName} word)
 - "partOfSpeech": string (part of speech in Russian, e.g. "существительное", "глагол")
-- "example": string (a short usage example in Chechen with ${langName} translation, format: "Chechen — ${langName}")
+- "example": string (a short usage example in ${sourceLangName} with ${langName} translation, format: "${sourceLangName} — ${langName}")
 
 Word: "${safeWord}"${contextLine}
 
@@ -492,9 +511,11 @@ Return only valid JSON, no markdown.`;
   private buildPhrasePrompt(
     phrase: string,
     targetLanguage: TranslationLanguage,
+    sourceLanguage: SourceLanguage,
     contextSentence?: string,
   ): string {
     const langName = LANGUAGE_NAMES[targetLanguage];
+    const sourceLangName = SOURCE_LANGUAGE_NAMES[sourceLanguage];
     const isRussian = targetLanguage === "ru";
     const contextLine = contextSentence
       ? `\nContext (surrounding sentence): "${this.sanitize(contextSentence)}"`
@@ -504,7 +525,7 @@ Return only valid JSON, no markdown.`;
       ? ""
       : `\n- "russianGloss": string (brief Russian meaning of the phrase for cross-check, empty string if not needed)`;
 
-    return `You are a Chechen language assistant. Translate the following Chechen phrase into ${langName}${contextSentence ? ", using the surrounding sentence for context" : ""}. Return a JSON object:
+    return `You are a ${sourceLangName} language assistant. Translate the following ${sourceLangName} phrase into ${langName}${contextSentence ? ", using the surrounding sentence for context" : ""}. Return a JSON object:
 - "translation": string (${langName} translation of the phrase)${russianGlossField}
 - "notes": string (optional notes or comments, empty string if none)
 
@@ -518,15 +539,17 @@ Return only valid JSON, no markdown.`;
     previousTranslation: string,
     hint: string,
     targetLanguage: TranslationLanguage,
+    sourceLanguage: SourceLanguage,
   ): string {
     const langName = LANGUAGE_NAMES[targetLanguage];
+    const sourceLangName = SOURCE_LANGUAGE_NAMES[sourceLanguage];
     const isRussian = targetLanguage === "ru";
 
     const russianGlossField = isRussian
       ? ""
       : `\n- "russianGloss": string (brief Russian meaning for cross-check, empty string if not needed)`;
 
-    return `You are a Chechen language assistant. You previously translated a Chechen phrase into ${langName}, but the user says the translation is inaccurate and provides a clarifying hint.
+    return `You are a ${sourceLangName} language assistant. You previously translated a ${sourceLangName} phrase into ${langName}, but the user says the translation is inaccurate and provides a clarifying hint.
 
 Phrase: "${this.sanitize(phrase)}"
 Previous translation: "${this.sanitize(previousTranslation)}"
@@ -539,11 +562,12 @@ Based on the hint, provide a more accurate ${langName} translation. Return a JSO
 Return only valid JSON, no markdown.`;
   }
 
-  private buildBatchPrompt(words: string[]): string {
+  private buildBatchPrompt(words: string[], sourceLanguage: SourceLanguage): string {
+    const sourceLangName = SOURCE_LANGUAGE_NAMES[sourceLanguage];
     const list = words
       .map((w, i) => `${i + 1}. "${this.sanitize(w)}"`)
       .join("\n");
-    return `You are a Chechen-Russian language assistant. Translate each Chechen word into Russian. Return a JSON object where each key is the exact Chechen word and the value is its Russian translation (1-3 words). If a word is not Chechen, omit it from the result.
+    return `You are a ${sourceLangName}-Russian language assistant. Translate each ${sourceLangName} word into Russian. Return a JSON object where each key is the exact ${sourceLangName} word and the value is its Russian translation (1-3 words). If a word is not ${sourceLangName}, omit it from the result.
 
 Words:
 ${list}

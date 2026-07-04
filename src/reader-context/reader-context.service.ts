@@ -14,7 +14,7 @@ export class ReaderContextService {
   async getContext(userId: string, textId: string, pageNumber: number) {
     const [page, phrases, highlights, notes] = await Promise.all([
       this.textService.getPage(textId, pageNumber, userId),
-      this.textService.getPagePhrases(textId, pageNumber),
+      this.textService.getPagePhrases(textId, pageNumber, userId),
       this.highlightService.getForPage(userId, textId, pageNumber),
       this.noteService.getForPage(userId, textId, pageNumber),
     ]);
