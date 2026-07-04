@@ -283,6 +283,81 @@ export class AuthService {
     if (result.type !== "refresh")
       throw new UnauthorizedException({ code: ErrorCode.INVALID_TOKEN_TYPE, message: "Invalid token type" });
 
+    // Multiple near-simultaneous refresh calls (e.g. Next.js proxy + client-side
+    // axios interceptor both reacting to the same expired access token) would
+    // otherwise race on read-verify-rotate below: the loser sees an
+    // already-rotated hash and gets treated as token replay. Serialize refreshes
+    // per-user via a short Redis lock so only one rotation happens at a time and
+    // concurrent callers wait for it instead of triggering a false reuse-detected.
+    return this.withRefreshLock(result.id, () =>
+      this.rotateRefreshToken(refreshToken, result),
+    );
+  }
+
+  private async withRefreshLock<T>(
+    userId: string,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    const lockKey = `auth:refresh-lock:${userId}`;
+    const lockValue = randomBytes(16).toString("hex");
+    const lockTtlMs = 5000;
+    const pollIntervalMs = 50;
+    const maxWaitMs = 3000;
+
+    const acquired = await this.acquireLockWithWait(
+      lockKey,
+      lockValue,
+      lockTtlMs,
+      pollIntervalMs,
+      maxWaitMs,
+    );
+
+    if (!acquired) {
+      // Could not acquire the lock in time — proceed without it rather than
+      // failing the request outright; worst case we're back to pre-lock behavior.
+      return fn();
+    }
+
+    try {
+      return await fn();
+    } finally {
+      await this.releaseLock(lockKey, lockValue);
+    }
+  }
+
+  private async acquireLockWithWait(
+    key: string,
+    value: string,
+    ttlMs: number,
+    pollIntervalMs: number,
+    maxWaitMs: number,
+  ): Promise<boolean> {
+    const deadline = Date.now() + maxWaitMs;
+    for (;;) {
+      const set = await this.redis.set(key, value, "PX", ttlMs, "NX");
+      if (set === "OK") return true;
+      if (Date.now() >= deadline) return false;
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+    }
+  }
+
+  private async releaseLock(key: string, value: string): Promise<void> {
+    // Only release if we still own the lock (value matches) — avoids releasing
+    // a lock acquired by another request after ours expired.
+    const script = `
+      if redis.call("get", KEYS[1]) == ARGV[1] then
+        return redis.call("del", KEYS[1])
+      else
+        return 0
+      end
+    `;
+    await this.redis.eval(script, 1, key, value).catch(() => undefined);
+  }
+
+  private async rotateRefreshToken(
+    refreshToken: string,
+    result: { id: string; type: string; sid?: string; rem?: boolean },
+  ) {
     const user = await this.prisma.user.findUnique({
       where: { id: result.id },
     });

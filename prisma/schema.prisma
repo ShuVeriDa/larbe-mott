@@ -2042,15 +2042,26 @@ model Announcement {
   @@map("announcement")
 }
 
+enum SpellingMatchType {
+  substring
+  whole_word
+  prefix
+  suffix
+
+  @@map("spelling_match_type")
+}
+
 model SpellingEntry {
-  id          String   @id @default(uuid())
-  wrongForm   String   @unique
-  correctForm String
-  comment     String?
-  createdById String?
-  createdBy   User?    @relation("SpellingEntryCreator", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String             @id @default(uuid())
+  wrongForm    String             @unique
+  correctForm  String
+  correctForms String[]           @default([])
+  matchType    SpellingMatchType  @default(substring)
+  comment      String?
+  createdById  String?
+  createdBy    User?              @relation("SpellingEntryCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
 
   @@index([wrongForm])
   @@map("spelling_entries")

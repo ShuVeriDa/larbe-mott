@@ -17342,6 +17342,294 @@
         ]
       }
     },
+    "/api/admin/spelling-dictionary/find-replace/occurrences": {
+      "get": {
+        "operationId": "AdminSpellingDictionaryController_findReplaceOccurrences",
+        "parameters": [
+          {
+            "name": "wrongForm",
+            "required": true,
+            "in": "query",
+            "description": "The form to search for",
+            "schema": {
+              "example": "вахнера",
+              "type": "string"
+            }
+          },
+          {
+            "name": "matchType",
+            "required": true,
+            "in": "query",
+            "description": "How wrongForm is matched in text",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "substring",
+                "whole_word",
+                "prefix",
+                "suffix"
+              ]
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Page number (1-based)",
+            "schema": {
+              "default": 1,
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Items per page",
+            "schema": {
+              "default": 20,
+              "example": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "textIds",
+            "required": false,
+            "in": "query",
+            "description": "Restrict occurrences to these text ids (comma-separated or repeated query param)",
+            "schema": {
+              "example": [
+                "uuid-1",
+                "uuid-2"
+              ],
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ items, total, page, limit, canBulkFix: true }"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Forbidden. CAN_EDIT_TEXTS permission required."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ad-hoc find & replace: list occurrences of an arbitrary wrongForm (no SpellingEntry required)",
+        "tags": [
+          "admin/spelling-dictionary"
+        ]
+      }
+    },
+    "/api/admin/spelling-dictionary/find-replace/texts": {
+      "get": {
+        "operationId": "AdminSpellingDictionaryController_findReplaceTexts",
+        "parameters": [
+          {
+            "name": "wrongForm",
+            "required": true,
+            "in": "query",
+            "description": "The form to search for",
+            "schema": {
+              "example": "вахнера",
+              "type": "string"
+            }
+          },
+          {
+            "name": "matchType",
+            "required": true,
+            "in": "query",
+            "description": "How wrongForm is matched in text",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "substring",
+                "whole_word",
+                "prefix",
+                "suffix"
+              ]
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "description": "Filter texts by title (case-insensitive)",
+            "schema": {
+              "example": "Кицаш",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Forbidden. CAN_EDIT_TEXTS permission required."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Ad-hoc find & replace: list texts (published + drafts) containing an arbitrary wrongForm",
+        "tags": [
+          "admin/spelling-dictionary"
+        ]
+      }
+    },
+    "/api/admin/spelling-dictionary/{id}/occurrences": {
+      "get": {
+        "operationId": "AdminSpellingDictionaryController_getOccurrences",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Page number (1-based)",
+            "schema": {
+              "default": 1,
+              "example": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Items per page",
+            "schema": {
+              "default": 20,
+              "example": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "textIds",
+            "required": false,
+            "in": "query",
+            "description": "Restrict occurrences to these text ids (comma-separated or repeated query param)",
+            "schema": {
+              "example": [
+                "uuid-1",
+                "uuid-2"
+              ],
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "matchType",
+            "required": false,
+            "in": "query",
+            "description": "Override the entry's matchType for this search only (does not modify the stored entry)",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "substring",
+                "whole_word",
+                "prefix",
+                "suffix"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ items, total, page, limit, canBulkFix }"
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Forbidden. CAN_EDIT_TEXTS permission required."
+          },
+          "404": {
+            "description": "Spelling entry not found"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List occurrences of an entry's wrongForm across the library (published + drafts)",
+        "tags": [
+          "admin/spelling-dictionary"
+        ]
+      }
+    },
+    "/api/admin/spelling-dictionary/{id}/occurrence-texts": {
+      "get": {
+        "operationId": "AdminSpellingDictionaryController_getOccurrenceTexts",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "description": "Filter texts by title (case-insensitive)",
+            "schema": {
+              "example": "Кицаш",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Missing or invalid bearer token"
+          },
+          "403": {
+            "description": "Forbidden. CAN_EDIT_TEXTS permission required."
+          },
+          "404": {
+            "description": "Spelling entry not found"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List texts (published + drafts) that contain an entry's wrongForm (for the occurrences filter)",
+        "tags": [
+          "admin/spelling-dictionary"
+        ]
+      }
+    },
     "/api/spelling-dictionary/all": {
       "get": {
         "description": "Returns all entries (wrongForm → correctForm). Public endpoint, no auth required. Intended to be cached client-side for ~1 hour.",
@@ -19732,7 +20020,7 @@
     },
     "/api/phrasebook/phrases": {
       "get": {
-        "description": "Returns phrases with optional filters by category, language, saved status, and search term.",
+        "description": "Returns paginated phrases with optional filters by category, language, saved status, and search term.",
         "operationId": "PhrasebookController_getPhrases",
         "parameters": [
           {
@@ -19772,11 +20060,29 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "description": "Page number (default 1)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Items per page (default 30, max 50)",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "List of phrases with words and examples"
+            "description": "Paginated phrases with words and examples"
           },
           "401": {
             "description": "Missing or invalid bearer token"
@@ -26637,8 +26943,29 @@
           },
           "correctForm": {
             "type": "string",
-            "description": "The correct form with proper spelling and/or stress marks",
+            "description": "The primary correct form with proper spelling and/or stress marks",
             "example": "вахне́ра"
+          },
+          "correctForms": {
+            "description": "Additional correct forms (alternative spellings)",
+            "example": [
+              "вахнера"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "matchType": {
+            "type": "string",
+            "description": "How the wrongForm is matched in text",
+            "enum": [
+              "substring",
+              "whole_word",
+              "prefix",
+              "suffix"
+            ],
+            "default": "substring"
           },
           "comment": {
             "type": "string",
@@ -26661,8 +26988,29 @@
           },
           "correctForm": {
             "type": "string",
-            "description": "The correct form with proper spelling and/or stress marks",
+            "description": "The primary correct form with proper spelling and/or stress marks",
             "example": "вахне́ра"
+          },
+          "correctForms": {
+            "description": "Additional correct forms (alternative spellings)",
+            "example": [
+              "вахнера"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "matchType": {
+            "type": "string",
+            "description": "How the wrongForm is matched in text",
+            "enum": [
+              "substring",
+              "whole_word",
+              "prefix",
+              "suffix"
+            ],
+            "default": "substring"
           },
           "comment": {
             "type": "string",

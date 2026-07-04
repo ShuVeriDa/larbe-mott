@@ -4,7 +4,6 @@ import * as dotenv from "dotenv";
 import { seedPlans } from "./helpers/billingHelper";
 import { seedCoupons } from "./helpers/couponHelper";
 import { seedDeck } from "./helpers/deckHelper";
-import { seedFeatureFlags } from "./helpers/featureFlagsHelper";
 import { seedFeedback } from "./helpers/feedbackHelper";
 import { seedLegalDocuments } from "./helpers/legalHelper";
 import { seedPhrasebook } from "./helpers/phrasebookHelper";
@@ -40,10 +39,9 @@ async function up() {
   // 3. Контент (создаёт леммы — нужно до всего, что на них ссылается)
   await createText();
 
-  // 4. Биллинг и флаги
+  // 4. Биллинг
   await seedCoupons();
   await seedSubscriptions();
-  await seedFeatureFlags();
 
   // 5. Пользовательские данные (зависят от лемм и текстов)
   await seedUserDictionary();

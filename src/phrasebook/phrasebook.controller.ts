@@ -65,25 +65,33 @@ export class PhrasebookController {
   @ApiOperation({
     summary: "Get phrasebook phrases",
     description:
-      "Returns phrases with optional filters by category, language, saved status, and search term.",
+      "Returns paginated phrases with optional filters by category, language, saved status, and search term.",
   })
-  @ApiOkResponse({ description: "List of phrases with words and examples" })
+  @ApiOkResponse({ description: "Paginated phrases with words and examples" })
   @ApiQuery({ name: "categoryId", required: false })
   @ApiQuery({ name: "lang", required: false, enum: Language })
   @ApiQuery({ name: "saved", required: false, type: Boolean })
   @ApiQuery({ name: "search", required: false })
+  @ApiQuery({ name: "page", required: false, description: "Page number (default 1)" })
+  @ApiQuery({ name: "limit", required: false, description: "Items per page (default 30, max 50)" })
   async getPhrases(
     @User("id") userId: string,
     @Query("categoryId") categoryId?: string,
     @Query("lang") lang?: Language,
     @Query("saved") saved?: string,
     @Query("search") search?: string,
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
   ) {
+    const parsedPage = Number.parseInt(page ?? "", 10);
+    const parsedLimit = Number.parseInt(limit ?? "", 10);
     return this.phrasebookService.getPhrases(userId, {
       categoryId,
       lang,
       savedOnly: saved === "true",
       search,
+      page: Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1,
+      limit: Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : 30,
     });
   }
 

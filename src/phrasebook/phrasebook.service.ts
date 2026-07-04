@@ -42,45 +42,46 @@ export class PhrasebookService {
       lang?: Language;
       savedOnly?: boolean;
       search?: string;
+      page?: number;
+      limit?: number;
     },
   ) {
-    const { categoryId, lang, savedOnly, search } = params;
+    const { categoryId, lang, savedOnly, search, page = 1, limit = 30 } = params;
+    const safeLimit = Math.min(50, Math.max(1, limit));
+    const safePage = Math.max(1, page);
+    const skip = (safePage - 1) * safeLimit;
 
-    const savedIds = savedOnly
-      ? (
-          await this.prisma.userPhrasebookSave.findMany({
-            where: { userId },
-            select: { phraseId: true },
-          })
-        ).map((s) => s.phraseId)
-      : undefined;
+    const where = {
+      ...(categoryId ? { categoryId } : {}),
+      ...(lang ? { lang } : {}),
+      ...(savedOnly ? { saves: { some: { userId } } } : {}),
+      ...(search
+        ? {
+            OR: [
+              { original: { contains: search, mode: "insensitive" as const } },
+              { translation: { contains: search, mode: "insensitive" as const } },
+              { transliteration: { contains: search, mode: "insensitive" as const } },
+            ],
+          }
+        : {}),
+    };
 
-    const phrases = await this.prisma.phrasebookPhrase.findMany({
-      where: {
-        ...(categoryId ? { categoryId } : {}),
-        ...(lang ? { lang } : {}),
-        ...(savedIds ? { id: { in: savedIds } } : {}),
-        ...(search
-          ? {
-              OR: [
-                { original: { contains: search, mode: "insensitive" } },
-                { translation: { contains: search, mode: "insensitive" } },
-                {
-                  transliteration: { contains: search, mode: "insensitive" },
-                },
-              ],
-            }
-          : {}),
-      },
-      orderBy: { sortOrder: "asc" },
-      include: {
-        words: { orderBy: { position: "asc" } },
-        examples: true,
-        saves: { where: { userId }, select: { id: true } },
-      },
-    });
+    const [phrases, total] = await Promise.all([
+      this.prisma.phrasebookPhrase.findMany({
+        where,
+        orderBy: [{ sortOrder: "asc" }, { id: "asc" }],
+        skip,
+        take: safeLimit,
+        include: {
+          words: { orderBy: { position: "asc" } },
+          examples: true,
+          saves: { where: { userId }, select: { id: true } },
+        },
+      }),
+      this.prisma.phrasebookPhrase.count({ where }),
+    ]);
 
-    return phrases.map((p) => ({
+    const items = phrases.map((p) => ({
       id: p.id,
       categoryId: p.categoryId,
       original: p.original,
@@ -107,6 +108,8 @@ export class PhrasebookService {
         context: e.context,
       })),
     }));
+
+    return { items, page: safePage, limit: safeLimit, total };
   }
 
   async suggestPhrase(userId: string, dto: SuggestPhraseDto) {
