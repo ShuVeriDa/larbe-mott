@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { Language, Level, UserStatus } from "@prisma/client";
-import { IsDate, IsEmail, IsEnum, IsOptional, IsString } from "class-validator";
+import { AuthProvider, Language, Level, UserStatus } from "@prisma/client";
+import { IsArray, IsBoolean, IsDate, IsEmail, IsEnum, IsOptional, IsString } from "class-validator";
 import { UserRoleItemDto } from "./user-role-item.dto";
 import { UserSubscriptionCurrentDto } from "./user-subscription-response.dto";
 import { UserLearningStatsDto } from "./user-learning-stats.dto";
@@ -89,4 +89,17 @@ export class AdminUserDetailsDto {
     type: UserLearningStatsDto,
   })
   learningStats: UserLearningStatsDto;
+
+  @ApiProperty({ description: "Whether the user has a password set (false for OAuth-only accounts)" })
+  @IsBoolean()
+  hasPassword: boolean;
+
+  @ApiProperty({
+    description: "OAuth providers linked to this account (e.g. GOOGLE)",
+    enum: AuthProvider,
+    isArray: true,
+  })
+  @IsArray()
+  @IsEnum(AuthProvider, { each: true })
+  linkedProviders: AuthProvider[];
 }

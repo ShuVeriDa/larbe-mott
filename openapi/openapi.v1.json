@@ -386,6 +386,140 @@
         ]
       }
     },
+    "/api/auth/google": {
+      "get": {
+        "operationId": "AuthController_googleAuth",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Redirect to Google OAuth consent screen with CSRF state",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/google/callback": {
+      "get": {
+        "operationId": "AuthController_googleCallback",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Google OAuth callback — verifies state, issues session cookies, redirects to frontend",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/linked-accounts": {
+      "get": {
+        "operationId": "AuthController_getLinkedAccounts",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List OAuth accounts linked to the current user, and whether a password is set",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/linked-accounts/{id}": {
+      "delete": {
+        "operationId": "AuthController_unlinkAccount",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Unlink an OAuth account (rejected if it's the only sign-in method)",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/telegram": {
+      "post": {
+        "operationId": "AuthController_telegramLogin",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TelegramLoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Log in or register via Telegram Login Widget data",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/api/auth/telegram/link": {
+      "post": {
+        "operationId": "AuthController_linkTelegram",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TelegramLoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Link a Telegram account to the current authenticated session",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/api/auth/login/access-token": {
       "post": {
         "operationId": "AuthController_getNewTokens",
@@ -23175,6 +23309,10 @@
           "phone"
         ]
       },
+      "TelegramLoginDto": {
+        "type": "object",
+        "properties": {}
+      },
       "ForgotPasswordDto": {
         "type": "object",
         "properties": {
@@ -25179,6 +25317,21 @@
                 "$ref": "#/components/schemas/UserLearningStatsDto"
               }
             ]
+          },
+          "hasPassword": {
+            "type": "boolean",
+            "description": "Whether the user has a password set (false for OAuth-only accounts)"
+          },
+          "linkedProviders": {
+            "type": "array",
+            "description": "OAuth providers linked to this account (e.g. GOOGLE)",
+            "items": {
+              "type": "string",
+              "enum": [
+                "GOOGLE",
+                "TELEGRAM"
+              ]
+            }
           }
         },
         "required": [
@@ -25193,7 +25346,9 @@
           "signupAt",
           "lastActiveAt",
           "roles",
-          "learningStats"
+          "learningStats",
+          "hasPassword",
+          "linkedProviders"
         ]
       },
       "AssignRoleDto": {

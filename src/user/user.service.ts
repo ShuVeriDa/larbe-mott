@@ -158,6 +158,18 @@ export class UserService {
   async updateUser(dto: UpdateUserDto, userId: string) {
     const user = await this.getUserById(userId);
 
+    // Пустая строка == сброс аватара — очищаем все три размера и удаляем
+    // файлы с диска (то же самое, что uploadAvatar делает при замене),
+    // иначе avatarMedium/avatarThumb остаются висеть на старом файле и
+    // профиль продолжает показывать "удалённый" аватар.
+    if (dto.avatar === "") {
+      for (const field of [user.avatar, user.avatarThumb, user.avatarMedium]) {
+        if (field?.startsWith("/uploads/avatars/")) {
+          fs.unlink(join(process.cwd(), field), () => {});
+        }
+      }
+    }
+
     try {
       await this.prisma.user.update({
         where: { id: user.id },
@@ -170,6 +182,8 @@ export class UserService {
           level: dto.level,
           // Пустая строка == сброс аватара. undefined — поле не передано, не трогаем.
           avatar: dto.avatar === "" ? null : dto.avatar,
+          avatarThumb: dto.avatar === "" ? null : undefined,
+          avatarMedium: dto.avatar === "" ? null : undefined,
         },
       });
     } catch (e) {

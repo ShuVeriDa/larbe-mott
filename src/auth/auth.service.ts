@@ -10,7 +10,7 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
-import { Prisma, UserEventType, UserStatus } from "@prisma/client";
+import { AuthProvider, Prisma, UserEventType, UserStatus } from "@prisma/client";
 import { hash, verify, argon2id } from "argon2";
 
 const ARGON2_OPTIONS = {
@@ -20,6 +20,8 @@ const ARGON2_OPTIONS = {
   parallelism: 1,
 } as const;
 import { randomBytes } from "crypto";
+import * as fs from "fs";
+import { join } from "path";
 import { Response } from "express";
 import {
   lookupSessionLocation,
@@ -35,6 +37,13 @@ import { UserService } from "src/user/user.service";
 import { RedisService } from "src/redis/redis.service";
 import { ErrorCode } from "src/common/errors/error-codes";
 import { RefreshTokenLockService } from "./refresh-token-lock.service";
+import { ImageProcessingService } from "src/common/image-processing/image-processing.service";
+import type { AvatarVariants } from "src/common/image-processing/image-processing.service";
+import type { OAuthProfile } from "./utils/oauth-profile.type";
+import { slugifyName } from "./utils/slugify-name.util";
+import type { GoogleProfile } from "./strategies/google.strategy";
+import { verifyTelegramLogin } from "./utils/telegram-verify.util";
+import type { TelegramLoginDto } from "./dto/telegram-login.dto";
 
 @Injectable()
 export class AuthService {
@@ -46,6 +55,7 @@ export class AuthService {
     private readonly redis: RedisService,
     private readonly mail: MailService,
     private readonly refreshLock: RefreshTokenLockService,
+    private readonly imageProcessing: ImageProcessingService,
   ) {}
 
   private static readonly LOGIN_FAIL_MAX = 10;
@@ -513,6 +523,17 @@ export class AuthService {
       throw new UnauthorizedException({ code: ErrorCode.INVALID_CREDENTIALS, message: "Invalid credentials" });
     }
 
+    if (!user.password) {
+      // Account created via OAuth — no password set. Run the same dummy-verify
+      // used for the "user not found" branch to avoid a timing signal that
+      // distinguishes "no password" from "wrong password".
+      await verify(AuthService.DUMMY_HASH, dto.password).catch(() => undefined);
+      throw new UnauthorizedException({
+        code: ErrorCode.PASSWORD_NOT_SET,
+        message: "This account has no password set. Sign in with Google or reset your password.",
+      });
+    }
+
     const isValid = await verify(user.password, dto.password);
 
     if (!isValid) {
@@ -537,7 +558,7 @@ export class AuthService {
     return safeUser;
   }
 
-  private shouldUseSecureCookies(): boolean {
+  shouldUseSecureCookies(): boolean {
     if (this.configService.get("NODE_ENV") === "production") {
       return true;
     }
@@ -879,6 +900,13 @@ export class AuthService {
       throw new ForbiddenException({ code: ErrorCode.ACCOUNT_UNAVAILABLE, message: "Account unavailable" });
     }
 
+    if (!user.password) {
+      throw new BadRequestException({
+        code: ErrorCode.PASSWORD_NOT_SET,
+        message: "This account has no password set. Use the password reset flow to set one.",
+      });
+    }
+
     const ok = await verify(user.password, currentPassword);
     if (!ok) throw new UnauthorizedException({ code: ErrorCode.INVALID_CURRENT_PASSWORD, message: "Invalid current password" });
 
@@ -950,6 +978,13 @@ export class AuthService {
 
     if (user.status === UserStatus.DELETED || user.status === UserStatus.BLOCKED) {
       throw new ForbiddenException({ code: ErrorCode.ACCOUNT_UNAVAILABLE, message: "Account unavailable" });
+    }
+
+    if (!user.password) {
+      throw new BadRequestException({
+        code: ErrorCode.PASSWORD_NOT_SET,
+        message: "This account has no password set. Set a password first via password reset.",
+      });
     }
 
     const ok = await verify(user.password, currentPassword);
@@ -1145,5 +1180,275 @@ export class AuthService {
       }
     }
     return null;
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     OAUTH (Google, and later Telegram) — find-or-create login
+     ────────────────────────────────────────────────────────────── */
+
+  async loginWithOAuthProfile(
+    provider: AuthProvider,
+    profile: OAuthProfile,
+    meta?: { ip?: string; userAgent?: string },
+  ) {
+    const user = await this.findOrCreateOAuthUser(provider, profile);
+
+    if (user.status === UserStatus.DELETED) {
+      throw new ForbiddenException({ code: ErrorCode.ACCOUNT_SCHEDULED_FOR_DELETION, message: "Account scheduled for deletion" });
+    }
+    if (user.status === UserStatus.BLOCKED) {
+      throw new ForbiddenException({ code: ErrorCode.ACCOUNT_BLOCKED, message: "Account is blocked" });
+    }
+
+    // rememberMe = true для OAuth: пользователь не видит чекбокс "запомнить меня" —
+    // сессия через Google всегда долгоживущая, иначе пользователя тихо разлогинит
+    // через 7 дней без объяснимой для него причины.
+    const rememberMe = true;
+    const session = await this.recordSession(user.id, meta?.ip, meta?.userAgent);
+    const tokens = await this.issueTokens(user.id, session.id, rememberMe);
+    await this.updateRefreshTokenHash(user.id, tokens.refreshToken);
+
+    await this.prisma.userEvent.create({
+      data: { userId: user.id, type: UserEventType.START_SESSION },
+    });
+
+    const { password, hashedRefreshToken, ...safeUser } = user;
+    return { user: safeUser, ...tokens, rememberMe };
+  }
+
+  private async findOrCreateOAuthUser(
+    provider: AuthProvider,
+    profile: OAuthProfile,
+    attempt = 0,
+  ) {
+    const existingAccount = await this.prisma.account.findUnique({
+      where: { provider_providerAccountId: { provider, providerAccountId: profile.providerAccountId } },
+      include: { user: true },
+    });
+    if (existingAccount) return existingAccount.user;
+
+    // Автолинк ТОЛЬКО если провайдер подтвердил email — иначе account-takeover:
+    // злоумышленник с чужим OAuth-аккаунтом на тот же (неподтверждённый) email
+    // мог бы захватить чужой профиль на платформе.
+    const existingByEmail = profile.emailVerified && profile.email
+      ? await this.prisma.user.findFirst({
+          where: { email: { equals: profile.email, mode: "insensitive" } },
+        })
+      : null;
+
+    try {
+      if (existingByEmail) {
+        if (existingByEmail.status === UserStatus.DELETED || existingByEmail.status === UserStatus.BLOCKED) {
+          throw new ForbiddenException({ code: ErrorCode.ACCOUNT_UNAVAILABLE, message: "Account unavailable" });
+        }
+        await this.prisma.account.create({
+          data: {
+            userId: existingByEmail.id,
+            provider,
+            providerAccountId: profile.providerAccountId,
+            email: profile.email!,
+          },
+        });
+        return existingByEmail;
+      }
+
+      const username = await this.generateUniqueUsername(
+        profile.email,
+        profile.preferredUsername ?? profile.firstName,
+      );
+      const avatarVariants = await this.downloadAndProcessGoogleAvatar(profile.avatarUrl);
+      // Telegram не даёт email — placeholder на несуществующем .internal TLD,
+      // т.к. User.email обязателен и @unique. Пользователь сможет заменить его
+      // позже через существующий email-change flow.
+      const email = profile.email ?? `telegram-${profile.providerAccountId}@users.mottlarbe.internal`;
+      return await this.prisma.user.create({
+        data: {
+          email,
+          username,
+          name: profile.firstName,
+          surname: profile.lastName || profile.firstName,
+          password: null,
+          avatar: avatarVariants?.original,
+          avatarThumb: avatarVariants?.thumb,
+          avatarMedium: avatarVariants?.medium,
+          accounts: {
+            create: { provider, providerAccountId: profile.providerAccountId, email },
+          },
+        },
+      });
+    } catch (e) {
+      // Гонка: конкурентный запрос успел создать Account ИЛИ User с этим email
+      // между нашей проверкой выше и этим create. Повторяем весь find-or-create
+      // с нуля (не только точечный lookup) — второй проход найдёт то, что создал
+      // конкурент, независимо от того, на каком constraint была коллизия.
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && attempt < 2) {
+        return this.findOrCreateOAuthUser(provider, profile, attempt + 1);
+      }
+      throw e;
+    }
+  }
+
+  private async generateUniqueUsername(email: string | null, firstName: string): Promise<string> {
+    const base = slugifyName(firstName, email?.split("@")[0]);
+
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const candidate = attempt === 0 ? base : `${base}${Math.floor(1000 + Math.random() * 9000)}`;
+      const taken = await this.prisma.user.findFirst({ where: { username: candidate }, select: { id: true } });
+      if (!taken) return candidate;
+    }
+    // DB unique constraint (Step 1) — финальный backstop, даже если 5 попыток коллизировали.
+    return `${base}${randomBytes(4).toString("hex")}`;
+  }
+
+  private async downloadAndProcessGoogleAvatar(
+    avatarUrl: string | undefined,
+  ): Promise<AvatarVariants | null> {
+    if (!avatarUrl) return null;
+    try {
+      const { hostname } = new URL(avatarUrl);
+      if (!hostname.endsWith("googleusercontent.com")) return null;
+
+      const response = await fetch(avatarUrl);
+      if (!response.ok) return null;
+      const buffer = Buffer.from(await response.arrayBuffer());
+
+      const tmpDir = join(process.cwd(), "uploads", "tmp");
+      fs.mkdirSync(tmpDir, { recursive: true });
+      const tmpPath = join(tmpDir, `google-avatar-${randomBytes(6).toString("hex")}.jpg`);
+      fs.writeFileSync(tmpPath, buffer);
+
+      const outputDir = join(process.cwd(), "uploads", "avatars");
+      const baseName = `avatar-google-${randomBytes(6).toString("hex")}`;
+      const variants = await this.imageProcessing.processAvatar(tmpPath, baseName, outputDir);
+
+      fs.unlink(tmpPath, () => undefined);
+      return variants;
+    } catch {
+      // Недоступность Google-аватара (сеть, 404, битый формат) не должна
+      // блокировать регистрацию — пользователь просто останется без аватара
+      // и сможет загрузить свой через существующий uploadAvatar.
+      return null;
+    }
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     OAUTH ACCOUNT MANAGEMENT — link/unlink from an active session
+     ────────────────────────────────────────────────────────────── */
+
+  async getLinkedAccounts(userId: string) {
+    const [user, accounts] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: userId }, select: { password: true } }),
+      this.prisma.account.findMany({
+        where: { userId },
+        select: { id: true, provider: true, email: true, createdAt: true },
+      }),
+    ]);
+    if (!user) throw new NotFoundException({ code: ErrorCode.USER_NOT_FOUND, message: "The user not found" });
+    return { hasPassword: user.password !== null, accounts };
+  }
+
+  async unlinkAccount(userId: string, accountId: string) {
+    const [user, accountsCount] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: userId }, select: { password: true } }),
+      this.prisma.account.count({ where: { userId } }),
+    ]);
+    if (!user) throw new NotFoundException({ code: ErrorCode.USER_NOT_FOUND, message: "The user not found" });
+
+    // Нельзя отвязать единственный способ входа: если пароля нет и это
+    // единственный Account — пользователь потеряет доступ к своему аккаунту.
+    if (!user.password && accountsCount <= 1) {
+      throw new BadRequestException({ code: ErrorCode.LAST_LOGIN_METHOD, message: "Cannot unlink the only sign-in method. Set a password first." });
+    }
+
+    const account = await this.prisma.account.findFirst({ where: { id: accountId, userId } });
+    if (!account) throw new NotFoundException({ code: ErrorCode.ACCOUNT_NOT_FOUND, message: "Linked account not found" });
+
+    await this.prisma.account.delete({ where: { id: accountId } });
+    return { ok: true };
+  }
+
+  async linkGoogleAccount(userId: string, profile: GoogleProfile) {
+    const existing = await this.prisma.account.findUnique({
+      where: { provider_providerAccountId: { provider: AuthProvider.GOOGLE, providerAccountId: profile.providerAccountId } },
+    });
+    if (existing) {
+      // Тот же Google-аккаунт уже привязан к ДРУГОМУ пользователю — не перепривязывать молча.
+      if (existing.userId !== userId) {
+        throw new ConflictException({ code: ErrorCode.ACCOUNT_ALREADY_LINKED, message: "This Google account is already linked to another profile" });
+      }
+      return { ok: true }; // уже привязан к этому же юзеру — идемпотентно
+    }
+
+    try {
+      await this.prisma.account.create({
+        data: { userId, provider: AuthProvider.GOOGLE, providerAccountId: profile.providerAccountId, email: profile.email },
+      });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+        throw new ConflictException({ code: ErrorCode.ACCOUNT_ALREADY_LINKED, message: "This Google account is already linked to another profile" });
+      }
+      throw e;
+    }
+    return { ok: true };
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     TELEGRAM LOGIN WIDGET — hash-based verification, not OAuth2
+     ────────────────────────────────────────────────────────────── */
+
+  async loginWithTelegram(dto: TelegramLoginDto, meta?: { ip?: string; userAgent?: string }) {
+    const botToken = this.configService.getOrThrow<string>("TELEGRAM_BOT_TOKEN");
+    const isValid = verifyTelegramLogin({ ...dto }, botToken);
+    if (!isValid) {
+      throw new UnauthorizedException({ code: ErrorCode.TELEGRAM_SIGNATURE_INVALID, message: "Invalid Telegram login signature" });
+    }
+
+    const profile: OAuthProfile = {
+      providerAccountId: String(dto.id),
+      email: null,
+      emailVerified: false,
+      firstName: dto.first_name,
+      lastName: dto.last_name ?? "",
+      avatarUrl: dto.photo_url,
+      preferredUsername: dto.username,
+    };
+
+    return this.loginWithOAuthProfile(AuthProvider.TELEGRAM, profile, meta);
+  }
+
+  async linkTelegramAccount(userId: string, dto: TelegramLoginDto) {
+    const botToken = this.configService.getOrThrow<string>("TELEGRAM_BOT_TOKEN");
+    if (!verifyTelegramLogin({ ...dto }, botToken)) {
+      throw new UnauthorizedException({ code: ErrorCode.TELEGRAM_SIGNATURE_INVALID, message: "Invalid Telegram login signature" });
+    }
+
+    const providerAccountId = String(dto.id);
+    const existing = await this.prisma.account.findUnique({
+      where: { provider_providerAccountId: { provider: AuthProvider.TELEGRAM, providerAccountId } },
+    });
+    if (existing) {
+      // Тот же Telegram-аккаунт уже привязан к ДРУГОМУ пользователю — не перепривязывать молча.
+      if (existing.userId !== userId) {
+        throw new ConflictException({ code: ErrorCode.ACCOUNT_ALREADY_LINKED, message: "This Telegram account is already linked to another profile" });
+      }
+      return { ok: true }; // уже привязан к этому же юзеру — идемпотентно
+    }
+
+    try {
+      await this.prisma.account.create({
+        data: {
+          userId,
+          provider: AuthProvider.TELEGRAM,
+          providerAccountId,
+          email: `telegram-${providerAccountId}@users.mottlarbe.internal`,
+        },
+      });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+        throw new ConflictException({ code: ErrorCode.ACCOUNT_ALREADY_LINKED, message: "This Telegram account is already linked to another profile" });
+      }
+      throw e;
+    }
+    return { ok: true };
   }
 }

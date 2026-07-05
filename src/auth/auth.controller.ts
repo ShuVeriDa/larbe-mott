@@ -11,10 +11,14 @@ import {
   Req,
   Res,
   UnauthorizedException,
+  UseGuards,
 } from "@nestjs/common";
 import { ErrorCode } from "src/common/errors/error-codes";
 import { Throttle } from "@nestjs/throttler";
 import { ConfigService } from "@nestjs/config";
+import { JwtService } from "@nestjs/jwt";
+import { AuthGuard } from "@nestjs/passport";
+import { AuthProvider } from "@prisma/client";
 import {
   ApiBearerAuth,
   ApiConflictResponse,
@@ -40,7 +44,19 @@ import { ConfirmEmailChangeDto } from "./dto/confirm-email-change.dto";
 import { ConfirmPasswordResetDto } from "./dto/confirm-password-reset.dto";
 import { ForgotPasswordDto } from "./dto/forgot-password.dto";
 import { RequestEmailChangeDto } from "./dto/request-email-change.dto";
+import { TelegramLoginDto } from "./dto/telegram-login.dto";
 import { ValidatePasswordResetDto } from "./dto/validate-password-reset.dto";
+import { GoogleProfile } from "./strategies/google.strategy";
+import { createOAuthState, verifyOAuthState } from "./utils/oauth-state.util";
+
+const OAUTH_STATE_COOKIE = "oauth_state";
+const VALID_LANGS = ["ru", "che", "en", "ar"] as const;
+type ValidLang = (typeof VALID_LANGS)[number];
+
+const isValidLang = (lang: unknown): lang is ValidLang =>
+  typeof lang === "string" && (VALID_LANGS as readonly string[]).includes(lang);
+
+const ACCESS_TOKEN_COOKIE = "access_token";
 
 @ApiTags("auth")
 @Controller("auth")
@@ -48,6 +64,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
+    private readonly jwtService: JwtService,
   ) {}
 
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
@@ -97,6 +114,182 @@ export class AuthController {
     this.authService.addAccessTokenResponse(res, response.accessToken);
 
     return response;
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     GOOGLE OAUTH — redirect flow with stateless CSRF protection
+     ────────────────────────────────────────────────────────────── */
+
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Get("google")
+  @ApiOperation({ summary: "Redirect to Google OAuth consent screen with CSRF state" })
+  googleAuth(
+    @Query("lang") lang: string | undefined,
+    @Query("intent") intent: string | undefined,
+    @Res() res: express.Response,
+  ) {
+    const safeLang = isValidLang(lang) ? lang : "ru";
+    const safeIntent = intent === "link" ? "link" : "login";
+    const stateSecret = this.configService.getOrThrow<string>("OAUTH_STATE_SECRET");
+    const state = createOAuthState(safeLang, stateSecret, safeIntent);
+
+    // Короткоживущая cookie (5 минут) — переживает только сам OAuth round-trip.
+    res.cookie(OAUTH_STATE_COOKIE, state, {
+      httpOnly: true,
+      maxAge: 5 * 60 * 1000,
+      secure: this.authService.shouldUseSecureCookies(),
+      sameSite: "lax", // lax — cookie должна пережить top-level redirect от Google обратно
+      path: "/api/auth/google",
+    });
+
+    const clientId = this.configService.getOrThrow<string>("GOOGLE_CLIENT_ID");
+    const callbackUrl = this.configService.getOrThrow<string>("GOOGLE_CALLBACK_URL");
+    const googleAuthUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+    googleAuthUrl.searchParams.set("client_id", clientId);
+    googleAuthUrl.searchParams.set("redirect_uri", callbackUrl);
+    googleAuthUrl.searchParams.set("response_type", "code");
+    googleAuthUrl.searchParams.set("scope", "email profile");
+    googleAuthUrl.searchParams.set("state", state);
+
+    return res.redirect(googleAuthUrl.toString());
+  }
+
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Get("google/callback")
+  @UseGuards(AuthGuard("google"))
+  @ApiOperation({ summary: "Google OAuth callback — verifies state, issues session cookies, redirects to frontend" })
+  async googleCallback(
+    @Req() req: express.Request & { user: GoogleProfile },
+    @Query("state") state: string | undefined,
+    @Res() res: express.Response,
+  ) {
+    const frontendUrl = (this.configService.get<string>("FRONTEND_URL") ?? "http://localhost:3000").replace(/\/+$/, "");
+    const stateCookie = req.cookies[OAUTH_STATE_COOKIE] as string | undefined;
+    res.clearCookie(OAUTH_STATE_COOKIE, { path: "/api/auth/google" });
+
+    // CSRF-проверка: state из query ДОЛЖЕН совпадать со state, который мы сами
+    // положили в cookie перед редиректом на Google. Иначе — отказ, это может
+    // быть попытка login-CSRF (навязанный код авторизации от чужого сеанса).
+    const stateSecret = this.configService.getOrThrow<string>("OAUTH_STATE_SECRET");
+    const verified = state && stateCookie === state ? verifyOAuthState(state, stateSecret) : null;
+
+    if (!verified) {
+      return res.redirect(`${frontendUrl}/ru/auth?error=oauth_state_mismatch`);
+    }
+
+    const lang = isValidLang(verified.lang) ? verified.lang : "ru";
+
+    if (verified.intent === "link") {
+      return this.handleGoogleLinkCallback(req, res, frontendUrl, lang);
+    }
+
+    try {
+      const { refreshToken, rememberMe, ...response } = await this.authService.loginWithOAuthProfile(
+        AuthProvider.GOOGLE,
+        req.user,
+        { ip: req.ip, userAgent: req.headers["user-agent"] },
+      );
+
+      this.authService.addRefreshTokenResponse(res, refreshToken, rememberMe);
+      this.authService.addAccessTokenResponse(res, response.accessToken, rememberMe);
+
+      return res.redirect(`${frontendUrl}/${lang}/dashboard`);
+    } catch {
+      // Не палим причину отказа в URL — фронт покажет generic-сообщение.
+      return res.redirect(`${frontendUrl}/${lang}/auth?error=oauth_failed`);
+    }
+  }
+
+  /**
+   * Linking из уже активной сессии — не создаёт новую сессию/токены (в отличие
+   * от login-веток), только добавляет Account к req.user.id из проверенного
+   * access_token cookie. Опциональная ручная JWT-проверка (не второй Guard):
+   * невалидный/отсутствующий cookie здесь — отказ (в отличие от login-режима,
+   * где это нормальный случай), поскольку без активной сессии линковать не к кому.
+   */
+  private async handleGoogleLinkCallback(
+    req: express.Request & { user: GoogleProfile },
+    res: express.Response,
+    frontendUrl: string,
+    lang: ValidLang,
+  ) {
+    const accessToken = req.cookies[ACCESS_TOKEN_COOKIE] as string | undefined;
+    if (!accessToken) {
+      return res.redirect(`${frontendUrl}/${lang}/auth?error=oauth_failed`);
+    }
+
+    try {
+      const payload = await this.jwtService.verifyAsync<{ id: string }>(accessToken, {
+        secret: this.configService.getOrThrow<string>("JWT_ACCESS_SECRET"),
+      });
+      await this.authService.linkGoogleAccount(payload.id, req.user);
+      return res.redirect(`${frontendUrl}/${lang}/profile?linked=google`);
+    } catch {
+      // Истёкший/невалидный access_token ИЛИ Google-аккаунт уже привязан
+      // к другому пользователю — оба случая получают общий generic-редирект,
+      // не раскрывая причину отказа через URL.
+      return res.redirect(`${frontendUrl}/${lang}/auth?error=oauth_failed`);
+    }
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     LINKED ACCOUNTS — manage OAuth providers from an active session
+     ────────────────────────────────────────────────────────────── */
+
+  @Auth()
+  @Get("linked-accounts")
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "List OAuth accounts linked to the current user, and whether a password is set" })
+  async getLinkedAccounts(@User("id") userId: string) {
+    return this.authService.getLinkedAccounts(userId);
+  }
+
+  @Auth()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @HttpCode(200)
+  @Delete("linked-accounts/:id")
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Unlink an OAuth account (rejected if it's the only sign-in method)" })
+  async unlinkAccount(
+    @User("id") userId: string,
+    @Param("id", ParseUUIDPipe) accountId: string,
+  ) {
+    return this.authService.unlinkAccount(userId, accountId);
+  }
+
+  /* ──────────────────────────────────────────────────────────────
+     TELEGRAM LOGIN WIDGET — hash-based verification, not OAuth2 redirect
+     ────────────────────────────────────────────────────────────── */
+
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @HttpCode(200)
+  @Post("telegram")
+  @ApiOperation({ summary: "Log in or register via Telegram Login Widget data" })
+  async telegramLogin(
+    @Body() dto: TelegramLoginDto,
+    @Req() req: express.Request,
+    @Res({ passthrough: true }) res: express.Response,
+  ) {
+    const { refreshToken, rememberMe, ...response } = await this.authService.loginWithTelegram(dto, {
+      ip: req.ip,
+      userAgent: req.headers["user-agent"],
+    });
+    this.authService.addRefreshTokenResponse(res, refreshToken, rememberMe);
+    this.authService.addAccessTokenResponse(res, response.accessToken, rememberMe);
+    return response;
+  }
+
+  @Auth()
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @HttpCode(200)
+  @Post("telegram/link")
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Link a Telegram account to the current authenticated session" })
+  async linkTelegram(
+    @User("id") userId: string,
+    @Body() dto: TelegramLoginDto,
+  ) {
+    return this.authService.linkTelegramAccount(userId, dto);
   }
 
   @HttpCode(200)

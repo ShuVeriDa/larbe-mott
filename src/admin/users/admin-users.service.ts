@@ -279,6 +279,8 @@ export class AdminUsersService {
         level: true,
         signupAt: true,
         lastActiveAt: true,
+        password: true,
+        accounts: { select: { provider: true } },
         roles: {
           select: {
             assignedAt: true,
@@ -313,7 +315,7 @@ export class AdminUsersService {
 
     if (!user) throw new NotFoundException({ code: ErrorCode.USER_NOT_FOUND, message: "User not found" });
 
-    const { roles, subscriptions, ...rest } = user;
+    const { roles, subscriptions, password, accounts, ...rest } = user;
 
     const mappedRoles = roles.map((r) => ({
       id: r.role.id,
@@ -346,6 +348,8 @@ export class AdminUsersService {
       roles: mappedRoles,
       subscription,
       learningStats,
+      hasPassword: password !== null,
+      linkedProviders: accounts.map((a) => a.provider),
     };
   }
 

@@ -9,8 +9,8 @@ datasource db {
 model User {
   id                       String                       @id @default(uuid())
   email                    String                       @unique
-  password                 String
-  username                 String
+  password                 String?
+  username                 String                       @unique
   name                     String
   surname                  String
   hashedRefreshToken       String?
@@ -77,8 +77,8 @@ model User {
   appNotifications         Notification[]               @relation("UserAppNotifications")
   spellingEntries          SpellingEntry[]              @relation("SpellingEntryCreator")
   announcements            Announcement[]               @relation("AnnouncementCreator")
+  accounts                 Account[]                    @relation("UserAccounts")
 
-  @@index([username])
   @@index([status])
   @@index([language])
   @@index([level])
@@ -86,6 +86,25 @@ model User {
 
   heritage            UserHeritage?
   privacySettings     UserPrivacySettings?
+}
+
+enum AuthProvider {
+  GOOGLE
+  TELEGRAM
+}
+
+model Account {
+  id                String       @id @default(uuid())
+  userId            String
+  provider          AuthProvider
+  providerAccountId String
+  email             String
+  createdAt         DateTime     @default(now())
+  user              User         @relation("UserAccounts", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("accounts")
 }
 
 model FeatureFlag {

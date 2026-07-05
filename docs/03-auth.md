@@ -54,6 +54,8 @@ JWT-payload содержит:
 |--------|----------------------------------|----------------------------------------------|
 | POST   | `/api/auth/register`             | Регистрация                                  |
 | POST   | `/api/auth/login`                | Вход (по `username` или `email`)             |
+| GET    | `/api/auth/google`               | Редирект на Google OAuth consent screen      |
+| GET    | `/api/auth/google/callback`      | Google OAuth callback (устанавливает cookie) |
 | POST   | `/api/auth/login/access-token`   | Обновить access по refresh-cookie            |
 | POST   | `/api/auth/logout`               | Выход (отзыв refresh + redis blacklist)      |
 
@@ -85,6 +87,34 @@ JWT-payload содержит:
 |-------|----------------------------------|--------------------------------------------------------------------------|
 | POST  | `/api/auth/email-change/request` | Запросить смену email — письмо со ссылкой на НОВЫЙ адрес                |
 | POST  | `/api/auth/email-change/confirm` | Подтвердить новый email по токену. Уведомление шлётся на СТАРЫЙ адрес    |
+
+---
+
+## Google OAuth (Sign in with Google)
+
+Flow — редирект, не popup: `GET /api/auth/google` → Google consent screen → `GET /api/auth/google/callback` → сервер ставит те же `access_token`/refresh cookie, что и обычный логин → редирект на `{FRONTEND_URL}/{lang}/dashboard`.
+
+Проект не использует `express-session`, поэтому CSRF-защита — **stateless**: подписанный (HMAC-SHA256, секрет `OAUTH_STATE_SECRET`) state-токен кладётся в короткоживущую httpOnly cookie (`oauth_state`, 5 минут, `path=/api/auth/google`) перед редиректом на Google и сверяется байт-в-байт в callback. `lang` пользователя кодируется внутри того же state-токена, чтобы callback знал, на какой языковой роут вернуть пользователя.
+
+Find-or-create логика (`AuthService.loginWithOAuthProfile`): если Google-аккаунт уже привязан (`Account.provider_providerAccountId`) — вход в существующего пользователя; если email подтверждён Google (`email_verified: true`) и совпадает с существующим пользователем — автолинк (создаётся `Account`, не дублируется `User`); иначе — создаётся новый пользователь с `password: null`.
+
+### Настройка Google Cloud Console
+
+1. Перейти в [Google Cloud Console](https://console.cloud.google.com/) → **APIs & Services → Credentials**.
+2. Создать **OAuth 2.0 Client ID** (тип — Web application).
+3. **Authorized redirect URI должен быть ПОЛНЫМ URL с `/api`**: `{API_ORIGIN}/api/auth/google/callback` (например `https://api.mottlarbe.com/api/auth/google/callback`, **не** `https://api.mottlarbe.com/auth/google/callback` — самая частая причина ошибки `redirect_uri_mismatch`, так как backend работает под глобальным префиксом `/api`, см. `main.ts`).
+4. Скопировать `Client ID` и `Client secret` → `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`.
+
+### Переменные окружения
+
+| Переменная              | Описание                                                                 |
+|--------------------------|---------------------------------------------------------------------------|
+| `GOOGLE_CLIENT_ID`       | Client ID из Google Cloud Console                                        |
+| `GOOGLE_CLIENT_SECRET`   | Client secret из Google Cloud Console — никогда не коммитить             |
+| `GOOGLE_CALLBACK_URL`    | Полный callback URL **с `/api`**, например `http://localhost:9555/api/auth/google/callback` |
+| `OAUTH_STATE_SECRET`     | Независимый секрет (мин. 32 символа) для подписи CSRF state-токена. Сгенерировать: `openssl rand -base64 32`. Не переиспользовать `JWT_ACCESS_SECRET`/`JWT_REFRESH_SECRET` — компрометация одного не должна давать возможность подделать другой |
+
+Приложение не запустится, если любая из четырёх переменных не задана (`env.validation.ts`, fail-fast при старте).
 
 ---
 

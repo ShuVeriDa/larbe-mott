@@ -45,4 +45,16 @@ export const envValidationSchema = Joi.object({
   GEMINI_KEY_ENCRYPTION_SECRET: Joi.string().min(32).optional().allow("", null),
 
   GEOIP_MMDB_PATH: Joi.string().optional().allow("", null),
+
+  // Google OAuth (Sign in with Google)
+  GOOGLE_CLIENT_ID: Joi.string().required(),
+  GOOGLE_CLIENT_SECRET: Joi.string().required(),
+  GOOGLE_CALLBACK_URL: Joi.string().uri().required(),
+  // Independent secret used to sign the stateless CSRF state-cookie for the
+  // OAuth redirect flow — never reuse JWT_ACCESS_SECRET/JWT_REFRESH_SECRET here.
+  OAUTH_STATE_SECRET: Joi.string().min(32).required(),
+
+  // Telegram Login Widget — bot token used as the HMAC secret (via SHA256) to
+  // verify widget-signed login data. Obtained from @BotFather.
+  TELEGRAM_BOT_TOKEN: Joi.string().required(),
 });
