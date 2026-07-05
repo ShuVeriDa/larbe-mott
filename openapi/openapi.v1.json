@@ -28146,7 +28146,8 @@
             "description": "Source language of the word being translated",
             "enum": [
               "che",
-              "ar"
+              "ar",
+              "en"
             ],
             "default": "che"
           }
@@ -28184,7 +28185,8 @@
             "description": "Source language of the phrase being translated",
             "enum": [
               "che",
-              "ar"
+              "ar",
+              "en"
             ],
             "default": "che"
           }
@@ -28208,7 +28210,8 @@
             "description": "Source language of the words being translated",
             "enum": [
               "che",
-              "ar"
+              "ar",
+              "en"
             ],
             "default": "che"
           }
@@ -28250,7 +28253,8 @@
             "description": "Source language of the phrase being refined",
             "enum": [
               "che",
-              "ar"
+              "ar",
+              "en"
             ],
             "default": "che"
           }

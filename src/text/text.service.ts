@@ -16,12 +16,17 @@ import { WordProgressService } from "src/progress/word-progress/word-progress.se
 import { RedisService } from "src/redis/redis.service";
 import { ReportTextDto, TextReportReason } from "./dto/report-text.dto";
 
-// Temporary gate for AR (Arabic as a studied language) while it's limited to
-// admins + explicit per-user overrides via /admin/feature-flags. Remove this
-// flag key and its overrides once access moves to subscription plan limits.
-// Key uses dot notation ("category.feature_name") to satisfy CreateFeatureFlagDto's
-// key format validation (@Matches on AdminFeatureFlagsController).
-const ARABIC_LANGUAGE_FLAG_KEY = "functional.arabic_language";
+// Temporary gate for studied languages that are limited to admins + explicit
+// per-user overrides via /admin/feature-flags, keyed by language. Remove a
+// language's entry (and its overrides) once access for it moves to
+// subscription plan limits. A language absent from this map is ungated
+// (freely accessible, e.g. CHE, RU). Keys use dot notation
+// ("category.feature_name") to satisfy CreateFeatureFlagDto's key format
+// validation (@Matches on AdminFeatureFlagsController).
+const GATED_LANGUAGE_FLAGS: Partial<Record<Language, string>> = {
+  [Language.AR]: "functional.arabic_language",
+  [Language.EN]: "functional.english_language",
+};
 
 export type TextProgressStatus = "NEW" | "IN_PROGRESS" | "COMPLETED";
 export type TextSortOrder = "newest" | "oldest" | "alpha" | "progress" | "length" | "level" | "popular";
@@ -74,9 +79,11 @@ export class TextService {
     private readonly featureFlags: FeatureFlagsService,
   ) {}
 
-  private async canAccessArabic(userId: string | undefined): Promise<boolean> {
+  private async canAccessLanguage(userId: string | undefined, language: Language): Promise<boolean> {
+    const flagKey = GATED_LANGUAGE_FLAGS[language];
+    if (!flagKey) return true;
     if (!userId) return false;
-    return this.featureFlags.isFeatureEnabled(userId, ARABIC_LANGUAGE_FLAG_KEY);
+    return this.featureFlags.isFeatureEnabled(userId, flagKey);
   }
 
   async getAllTags() {
@@ -89,7 +96,7 @@ export class TextService {
       select: { language: true },
     });
     if (!text) throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
-    if (text.language === Language.AR && !(await this.canAccessArabic(userId))) {
+    if (!(await this.canAccessLanguage(userId, text.language))) {
       throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
     }
 
@@ -120,19 +127,27 @@ export class TextService {
     const safePage = Math.max(1, page);
     const skip = (safePage - 1) * safeLimit;
 
-    // AR (Arabic as a studied language) is gated behind the "arabic_language"
-    // feature flag — enforce server-side regardless of what the client asked
-    // for, so it can't be exposed just by requesting language=AR directly.
-    // Expressed purely as a `language` constraint (not `id`) so it composes
-    // safely with the "popular" sort path below, which also narrows by `id`.
-    const canAccessArabic = await this.canAccessArabic(userId);
-    const languageConstraint = canAccessArabic
-      ? languages?.length
-        ? { language: { in: languages } }
-        : {}
-      : languages?.length
-        ? { language: { in: languages.filter((l) => l !== Language.AR) } }
-        : { language: { not: Language.AR } };
+    // Gated languages (see GATED_LANGUAGE_FLAGS) are excluded server-side
+    // regardless of what the client asked for, so they can't be exposed just
+    // by requesting e.g. language=AR directly. Expressed purely as a
+    // `language` constraint (not `id`) so it composes safely with the
+    // "popular" sort path below, which also narrows by `id`.
+    const gatedLanguages = Object.keys(GATED_LANGUAGE_FLAGS) as Language[];
+    const inaccessibleLanguages = (
+      await Promise.all(
+        gatedLanguages.map(async (language) => ({
+          language,
+          accessible: await this.canAccessLanguage(userId, language),
+        })),
+      )
+    )
+      .filter((l) => !l.accessible)
+      .map((l) => l.language);
+    const languageConstraint = languages?.length
+      ? { language: { in: languages.filter((l) => !inaccessibleLanguages.includes(l)) } }
+      : inaccessibleLanguages.length
+        ? { language: { notIn: inaccessibleLanguages } }
+        : {};
 
     const where = {
       publishedAt: { not: null as null | Date },
@@ -432,7 +447,7 @@ export class TextService {
     });
     if (!text) throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
 
-    if (text.language === Language.AR && !(await this.canAccessArabic(userId))) {
+    if (!(await this.canAccessLanguage(userId, text.language))) {
       throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
     }
 
@@ -648,7 +663,7 @@ export class TextService {
 
     // AR text without the "arabic_language" flag → 404, not 403, so a direct
     // request by known id doesn't leak that the text exists.
-    if (text.language === Language.AR && !(await this.canAccessArabic(userId))) {
+    if (!(await this.canAccessLanguage(userId, text.language))) {
       throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
     }
 
@@ -876,7 +891,7 @@ export class TextService {
       },
     });
     if (!text) throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
-    if (text.language === Language.AR && !(await this.canAccessArabic(userId))) {
+    if (!(await this.canAccessLanguage(userId, text.language))) {
       throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
     }
 
@@ -1034,7 +1049,7 @@ export class TextService {
       select: { language: true },
     });
     if (!text) throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
-    if (text.language === Language.AR && !(await this.canAccessArabic(userId))) {
+    if (!(await this.canAccessLanguage(userId, text.language))) {
       throw new NotFoundException({ code: ErrorCode.TEXT_NOT_FOUND, message: "Text not found" });
     }
 
