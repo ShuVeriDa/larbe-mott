@@ -44,7 +44,13 @@ describe("AuthService", () => {
       return "mock-secret";
     }),
   };
-  const redis = { set: jest.fn(), del: jest.fn() };
+  const redis = {
+    set: jest.fn(),
+    del: jest.fn(),
+    get: jest.fn().mockResolvedValue(null),
+    incr: jest.fn().mockResolvedValue(1),
+    expire: jest.fn(),
+  };
   const mail = { sendPasswordChangedEmail: jest.fn().mockResolvedValue(undefined) };
   const refreshLock = { withLock: jest.fn().mockImplementation((_userId: string, fn: () => unknown) => fn()) };
   const imageProcessing = { processAvatar: jest.fn() };
@@ -449,6 +455,143 @@ describe("AuthService", () => {
 
       expect(prisma.account.create).not.toHaveBeenCalled();
       expect(result).toEqual({ ok: true });
+    });
+  });
+
+  describe("login (surfacing restore eligibility for DELETED accounts)", () => {
+    it("includes deletedAt and restoreEligible=true when within the grace period", async () => {
+      const recentlyDeleted = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000); // 5 days ago
+      prisma.user.findFirst.mockResolvedValue({
+        id: "u1",
+        username: "olduser",
+        password: await hash("correct-password"),
+        status: "DELETED",
+        deletedAt: recentlyDeleted,
+      });
+
+      await expect(
+        service.login({ username: "olduser", password: "correct-password" }),
+      ).rejects.toMatchObject({
+        response: {
+          code: ErrorCode.ACCOUNT_SCHEDULED_FOR_DELETION,
+          restoreEligible: true,
+          deletedAt: recentlyDeleted,
+        },
+      });
+    });
+
+    it("sets restoreEligible=false once the 30-day grace period has passed", async () => {
+      const longDeleted = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000); // 31 days ago
+      prisma.user.findFirst.mockResolvedValue({
+        id: "u1",
+        username: "olduser",
+        password: await hash("correct-password"),
+        status: "DELETED",
+        deletedAt: longDeleted,
+      });
+
+      await expect(
+        service.login({ username: "olduser", password: "correct-password" }),
+      ).rejects.toMatchObject({
+        response: { code: ErrorCode.ACCOUNT_SCHEDULED_FOR_DELETION, restoreEligible: false },
+      });
+    });
+  });
+
+  describe("restoreAccountAndLogin", () => {
+    it("restores a DELETED account within the grace period and issues tokens", async () => {
+      const recentlyDeleted = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
+      const passwordHash = await hash("correct-password");
+      prisma.user.findFirst.mockResolvedValue({
+        id: "u1",
+        username: "olduser",
+        password: passwordHash,
+        status: "DELETED",
+        deletedAt: recentlyDeleted,
+      });
+      prisma.user.update.mockResolvedValue({
+        id: "u1",
+        username: "olduser",
+        password: passwordHash,
+        status: "ACTIVE",
+        deletedAt: null,
+        hashedRefreshToken: null,
+      });
+      prisma.userSession.create.mockResolvedValue({ id: "session-1", createdAt: new Date() });
+
+      const result = await service.restoreAccountAndLogin({ username: "olduser", password: "correct-password" });
+
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: "u1" },
+        data: { status: "ACTIVE", deletedAt: null },
+      });
+      expect(result.user).toMatchObject({ id: "u1", status: "ACTIVE" });
+      expect(result.accessToken).toBeDefined();
+    });
+
+    it("rejects with wrong password using the same generic error as normal login", async () => {
+      prisma.user.findFirst.mockResolvedValue({
+        id: "u1",
+        username: "olduser",
+        password: await hash("correct-password"),
+        status: "DELETED",
+        deletedAt: new Date(),
+      });
+
+      await expect(
+        service.restoreAccountAndLogin({ username: "olduser", password: "wrong-password" }),
+      ).rejects.toMatchObject({
+        constructor: UnauthorizedException,
+        response: { code: ErrorCode.INVALID_CREDENTIALS },
+      });
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it("rejects restoring an account that is not scheduled for deletion", async () => {
+      prisma.user.findFirst.mockResolvedValue({
+        id: "u1",
+        username: "activeuser",
+        password: await hash("correct-password"),
+        status: "ACTIVE",
+        deletedAt: null,
+      });
+
+      await expect(
+        service.restoreAccountAndLogin({ username: "activeuser", password: "correct-password" }),
+      ).rejects.toMatchObject({
+        constructor: BadRequestException,
+        response: { code: ErrorCode.NOT_SCHEDULED_FOR_DELETION },
+      });
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it("rejects restoring once the 30-day grace period has expired", async () => {
+      const longDeleted = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000);
+      prisma.user.findFirst.mockResolvedValue({
+        id: "u1",
+        username: "olduser",
+        password: await hash("correct-password"),
+        status: "DELETED",
+        deletedAt: longDeleted,
+      });
+
+      await expect(
+        service.restoreAccountAndLogin({ username: "olduser", password: "correct-password" }),
+      ).rejects.toMatchObject({
+        response: { code: ErrorCode.RESTORE_GRACE_PERIOD_EXPIRED },
+      });
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it("does not leak whether the username exists via a different error for missing users", async () => {
+      prisma.user.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.restoreAccountAndLogin({ username: "ghost", password: "anything123" }),
+      ).rejects.toMatchObject({
+        constructor: UnauthorizedException,
+        response: { code: ErrorCode.INVALID_CREDENTIALS },
+      });
     });
   });
 });

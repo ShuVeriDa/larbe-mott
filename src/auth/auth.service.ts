@@ -41,6 +41,7 @@ import { ImageProcessingService } from "src/common/image-processing/image-proces
 import type { AvatarVariants } from "src/common/image-processing/image-processing.service";
 import type { OAuthProfile } from "./utils/oauth-profile.type";
 import { slugifyName } from "./utils/slugify-name.util";
+import { ACCOUNT_DELETION_GRACE_PERIOD_DAYS } from "src/user/account-cleanup.constants";
 import type { GoogleProfile } from "./strategies/google.strategy";
 import { verifyTelegramLogin } from "./utils/telegram-verify.util";
 import type { TelegramLoginDto } from "./dto/telegram-login.dto";
@@ -130,6 +131,72 @@ export class AuthService {
       ...tokens,
       rememberMe,
     };
+  }
+
+  /**
+   * Восстанавливает soft-deleted аккаунт и сразу логинит — вызывается только
+   * когда пользователь явно подтвердил намерение восстановиться (второй шаг
+   * после login() бросил ACCOUNT_SCHEDULED_FOR_DELETION с restoreEligible: true).
+   * Самодостаточен: заново проверяет username/password, не полагается на
+   * состояние предыдущего запроса — так безопаснее и проще для клиента
+   * (нет промежуточного токена, который надо было бы где-то хранить).
+   */
+  async restoreAccountAndLogin(dto: LoginDto, meta?: { ip?: string; userAgent?: string }) {
+    const user = await this.prisma.user.findFirst({
+      where: {
+        OR: [
+          { username: dto.username },
+          { email: { equals: dto.username, mode: "insensitive" } },
+        ],
+      },
+    });
+
+    if (!user || !user.password) {
+      // Тот же анти-enumeration приём, что и в validateUser — не различать
+      // "юзера нет" от "пароль неверен" по времени ответа.
+      await verify(AuthService.DUMMY_HASH, dto.password).catch(() => undefined);
+      throw new UnauthorizedException({ code: ErrorCode.INVALID_CREDENTIALS, message: "Invalid credentials" });
+    }
+
+    const isValid = await verify(user.password, dto.password);
+    if (!isValid) {
+      throw new UnauthorizedException({ code: ErrorCode.INVALID_CREDENTIALS, message: "Invalid credentials" });
+    }
+
+    if (user.status !== UserStatus.DELETED) {
+      // Ничего восстанавливать — аккаунт не помечен на удаление (например,
+      // повторный клик после того, как восстановление уже прошло).
+      throw new BadRequestException({ code: ErrorCode.NOT_SCHEDULED_FOR_DELETION, message: "Account is not scheduled for deletion" });
+    }
+
+    if (!this.isWithinRestoreGracePeriod(user.deletedAt)) {
+      throw new ForbiddenException({
+        code: ErrorCode.RESTORE_GRACE_PERIOD_EXPIRED,
+        message: `The ${ACCOUNT_DELETION_GRACE_PERIOD_DAYS}-day restore window has passed. This account can no longer be restored.`,
+      });
+    }
+
+    const restored = await this.prisma.user.update({
+      where: { id: user.id },
+      data: { status: UserStatus.ACTIVE, deletedAt: null },
+    });
+
+    const rememberMe = dto.rememberMe ?? false;
+    const session = await this.recordSession(restored.id, meta?.ip, meta?.userAgent);
+    const tokens = await this.issueTokens(restored.id, session.id, rememberMe);
+    await this.updateRefreshTokenHash(restored.id, tokens.refreshToken);
+
+    await this.prisma.userEvent.create({
+      data: { userId: restored.id, type: UserEventType.START_SESSION },
+    });
+
+    const {
+      password,
+      hashedRefreshToken: __,
+      ...safeUser
+    } = restored as typeof restored & { hashedRefreshToken?: string | null };
+
+    return { user: safeUser, ...tokens, rememberMe };
   }
 
   async register(
@@ -541,7 +608,16 @@ export class AuthService {
     }
 
     if (user.status === UserStatus.DELETED) {
-      throw new ForbiddenException({ code: ErrorCode.ACCOUNT_SCHEDULED_FOR_DELETION, message: "Account scheduled for deletion. Contact support to restore." });
+      // deletedAt/restoreEligible let the frontend offer a "restore account?"
+      // prompt right here instead of a dead-end error — the password is
+      // already verified at this point, so we know this is really the owner.
+      const restoreEligible = this.isWithinRestoreGracePeriod(user.deletedAt);
+      throw new ForbiddenException({
+        code: ErrorCode.ACCOUNT_SCHEDULED_FOR_DELETION,
+        message: "Account scheduled for deletion. Contact support to restore.",
+        deletedAt: user.deletedAt,
+        restoreEligible,
+      });
     }
     if (user.status === UserStatus.BLOCKED) {
       throw new ForbiddenException({ code: ErrorCode.ACCOUNT_BLOCKED, message: "Account is blocked" });
@@ -556,6 +632,13 @@ export class AuthService {
     };
 
     return safeUser;
+  }
+
+  private isWithinRestoreGracePeriod(deletedAt: Date | null): boolean {
+    if (!deletedAt) return false;
+    const cutoff = new Date(deletedAt);
+    cutoff.setDate(cutoff.getDate() + ACCOUNT_DELETION_GRACE_PERIOD_DAYS);
+    return Date.now() < cutoff.getTime();
   }
 
   shouldUseSecureCookies(): boolean {

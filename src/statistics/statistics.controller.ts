@@ -62,11 +62,12 @@ export class StatisticsController {
   }
 
   @Post("reading-time")
-  @RequiresPremium()
+  @Auth()
   @ApiOperation({
     summary: "Log a reading session",
     description:
-      "Records time spent reading a text (in seconds). Call this when the user leaves a page or finishes a reading session. Requires Premium.",
+      "Records time spent reading a text (in seconds). Call this when the user leaves a page or finishes a reading session. " +
+      "Sessions meeting the minimum dwell-time threshold also count the user as a reader of the text (see TextProgressService.setPosition).",
   })
   @ApiOkResponse({ description: "{ ok: true }" })
   async logReadingTime(

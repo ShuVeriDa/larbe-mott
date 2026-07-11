@@ -23,6 +23,7 @@ import {
   ApiBearerAuth,
   ApiConflictResponse,
   ApiCreatedResponse,
+  ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -80,6 +81,33 @@ export class AuthController {
     @Res({ passthrough: true }) res: express.Response,
   ) {
     const { refreshToken, rememberMe, ...response } = await this.authService.login(dto, {
+      ip: req.ip,
+      userAgent: req.headers["user-agent"],
+    });
+
+    this.authService.addRefreshTokenResponse(res, refreshToken, rememberMe);
+    this.authService.addAccessTokenResponse(res, response.accessToken, rememberMe);
+
+    return response;
+  }
+
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @HttpCode(200)
+  @Post("restore")
+  @ApiOperation({
+    summary:
+      "Restore a soft-deleted account and log in, if still within the deletion grace period. Requires re-entering username + password — not gated behind an existing session, since a deleted account has none.",
+  })
+  @ApiUnauthorizedResponse({ description: "Invalid credentials" })
+  @ApiBadRequestResponse({ description: "not_scheduled_for_deletion" })
+  @ApiForbiddenResponse({ description: "restore_grace_period_expired" })
+  @ApiOkResponse({ description: "Account restored, access and refresh tokens have been issued" })
+  async restore(
+    @Body() dto: LoginDto,
+    @Req() req: express.Request,
+    @Res({ passthrough: true }) res: express.Response,
+  ) {
+    const { refreshToken, rememberMe, ...response } = await this.authService.restoreAccountAndLogin(dto, {
       ip: req.ip,
       userAgent: req.headers["user-agent"],
     });

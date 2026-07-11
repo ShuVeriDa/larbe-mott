@@ -197,7 +197,7 @@ export class TextController {
     summary: "Get a text by ID (all pages)",
     description:
       "Returns a single text with full details: metadata, pages list (id, pageNumber, title), tags, " +
-      "wordCount, readingTime, totalPages, publishedAt, imageUrl. " +
+      "wordCount, readingTime, totalPages, publishedAt, imageUrl, readersCount (distinct users who confirmed reading it). " +
       "When authenticated: progressPercent, lastOpened, currentPage, wordStats (known/learning/new/total).",
   })
   @ApiParam({ name: "id", description: "Unique text identifier (UUID)" })

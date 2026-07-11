@@ -906,6 +906,7 @@ model UserTextProgress {
   lastOpened      DateTime?
   lastPageNumber  Int       @default(1)
   completedAt     DateTime?
+  readConfirmedAt DateTime?
   text            Text      @relation(fields: [textId], references: [id], onDelete: Cascade)
   user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -913,6 +914,7 @@ model UserTextProgress {
   @@index([userId])
   @@index([textId])
   @@index([userId, completedAt])
+  @@index([textId, readConfirmedAt])
   @@map("user_text_progress")
 }
 

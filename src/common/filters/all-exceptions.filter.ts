@@ -43,15 +43,25 @@ export class AllExceptionsFilter implements ExceptionFilter {
         ? exception.getResponse()
         : null;
 
+    const isPlainResponseBody = responseBody !== null && typeof responseBody === "object";
+    const responseBodyRecord = isPlainResponseBody ? (responseBody as Record<string, unknown>) : {};
+
     const code: string =
-      responseBody !== null &&
-      typeof responseBody === "object" &&
-      "code" in responseBody &&
-      typeof (responseBody as Record<string, unknown>).code === "string"
-        ? (responseBody as Record<string, unknown>).code as string
+      typeof responseBodyRecord.code === "string"
+        ? responseBodyRecord.code
         : status >= 500
           ? ErrorCode.INTERNAL_SERVER_ERROR
           : message;
+
+    // Some exceptions attach extra structured fields beyond code/message
+    // (e.g. AuthService's ACCOUNT_SCHEDULED_FOR_DELETION includes deletedAt +
+    // restoreEligible so the frontend can offer an inline "restore account?"
+    // prompt instead of a dead-end error). Forward anything beyond the
+    // reserved keys below so those fields reach the client.
+    const RESERVED_KEYS = new Set(["code", "message", "statusCode", "error"]);
+    const extraFields = Object.fromEntries(
+      Object.entries(responseBodyRecord).filter(([key]) => !RESERVED_KEYS.has(key)),
+    );
 
     if (status >= 500) {
       this.logger.error(
@@ -74,6 +84,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       timestamp: new Date().toISOString(),
       path: req.url,
       correlationId,
+      ...extraFields,
     });
   }
 }

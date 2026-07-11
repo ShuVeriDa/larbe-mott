@@ -27,6 +27,8 @@ export class WordsService {
     let translation: string | null;
     let grammar: string | null;
     let baseForm: string | null;
+    let wordModern: string | null = null;
+    let wordModernAccented: string | null = null;
     let tags: string[];
     let wordLevel: string | null = null;
     let grammarForms: import("./word-lookup-by-word.service").WordLookupGrammar | null = null;
@@ -56,6 +58,8 @@ export class WordsService {
       nounClass = byWord.nounClass ?? null;
       nounClassPlural = byWord.nounClassPlural ?? null;
       baseForm = byWord.baseForm ?? null;
+      wordModern = byWord.wordModern ?? null;
+      wordModernAccented = byWord.wordModernAccented ?? null;
       tags = byWord.tags.length > 0 ? byWord.tags : (grammar ? [grammar] : []);
       wordLevel = byWord.wordLevel ?? null;
       variants = byWord.variants ?? [];
@@ -166,6 +170,8 @@ export class WordsService {
       nounClass,
       nounClassPlural,
       baseForm,
+      wordModern,
+      wordModernAccented,
       forms,
       tags,
       wordLevel,

@@ -51,6 +51,7 @@ import { TextScriptModule } from "./text-script/text-script.module";
 import { AnnouncementModule } from "./announcement/announcement.module";
 import { HeritageModule } from "./heritage/heritage.module";
 import { GeoModule } from "./geo/geo.module";
+import { HijriCalendarModule } from "./hijri-calendar/hijri-calendar.module";
 import { FeatureFlagsModule } from "./feature-flags/feature-flags.module";
 import { envValidationSchema } from "./config/env.validation";
 
@@ -121,6 +122,7 @@ import { envValidationSchema } from "./config/env.validation";
     AnnouncementModule,
     HeritageModule,
     GeoModule,
+    HijriCalendarModule,
   ],
   controllers: [],
   providers: [

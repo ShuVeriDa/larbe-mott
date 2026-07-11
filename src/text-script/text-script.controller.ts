@@ -32,6 +32,18 @@ import { TextScriptService } from './text-script.service';
 export class TextScriptController {
   constructor(private readonly service: TextScriptService) {}
 
+  // ─── Library texts: reader access ──────────────────────────────────────────
+
+  @Get('texts/:id/script-versions')
+  @Auth()
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List script versions for a library text (any authenticated reader)' })
+  @ApiParam({ name: 'id', description: 'Text ID' })
+  @ApiOkResponse({ description: 'Array of script version statuses' })
+  getTextVersionsForReader(@Param('id', ParseUUIDPipe) textId: string) {
+    return this.service.getTextScriptVersions(textId);
+  }
+
   // ─── Admin: Library texts ─────────────────────────────────────────────────
 
   @Post('admin/texts/:id/script-versions')

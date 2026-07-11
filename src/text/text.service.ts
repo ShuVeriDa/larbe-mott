@@ -690,8 +690,8 @@ export class TextService {
       ...new Set(analyses.map((a) => a.lemmaId).filter((id): id is string => id !== null)),
     ];
 
-    // Прогресс пользователя + закладка
-    const [userProgress, bookmark] = await Promise.all([
+    // Прогресс пользователя + закладка + количество читателей
+    const [userProgress, bookmark, readersCount] = await Promise.all([
       userId
         ? this.prisma.userTextProgress.findUnique({
             where: { userId_textId: { userId, textId } },
@@ -708,6 +708,9 @@ export class TextService {
             select: { id: true },
           })
         : Promise.resolve(null),
+      this.prisma.userTextProgress.count({
+        where: { textId, readConfirmedAt: { not: null } },
+      }),
     ]);
 
     const progressPercent = userProgress?.progressPercent ?? 0;
@@ -786,6 +789,7 @@ export class TextService {
       currentPage,
       wordStats,
       isFavorite: bookmark !== null,
+      readersCount,
     };
   }
 

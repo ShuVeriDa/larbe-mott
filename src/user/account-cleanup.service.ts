@@ -2,8 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
 import { UserStatus } from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
-
-const GRACE_PERIOD_DAYS = 30;
+import { ACCOUNT_DELETION_GRACE_PERIOD_DAYS as GRACE_PERIOD_DAYS } from "./account-cleanup.constants";
 
 /**
  * Фоновый job, который безвозвратно удаляет аккаунты, помеченные status=DELETED

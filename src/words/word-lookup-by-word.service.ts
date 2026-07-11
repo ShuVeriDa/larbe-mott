@@ -40,6 +40,8 @@ export type WordLookupResult = {
   nounClass: string | null;
   nounClassPlural: string | null;
   baseForm: string | null;
+  wordModern: string | null;
+  wordModernAccented: string | null;
   tags: string[];
   wordLevel: string | null;
   variants: string[];
@@ -127,6 +129,8 @@ export class WordLookupByWordService {
       nounClass: null,
       nounClassPlural: null,
       baseForm: null,
+      wordModern: null,
+      wordModernAccented: null,
       tags: [],
       wordLevel: null,
       variants: [],
@@ -191,6 +195,8 @@ export class WordLookupByWordService {
       meanings: meanings.length > 0 ? meanings : (cached as WordLookupMeaning[] ?? []),
       grammar: lemma?.partOfSpeech ?? null,
       baseForm: lemma?.baseForm ?? null,
+      wordModern: null,
+      wordModernAccented: null,
       tags: lemma?.partOfSpeech ? [lemma.partOfSpeech] : [],
     };
   }
@@ -240,6 +246,8 @@ export class WordLookupByWordService {
       nounClass: result.nounClass ?? null,
       nounClassPlural: result.nounClassPlural ?? null,
       baseForm: result.baseForm ?? null,
+      wordModern: result.wordModern ?? null,
+      wordModernAccented: result.wordModernAccented ?? null,
       tags: result.tags ?? [],
       wordLevel: result.wordLevel ?? null,
       variants: result.variants ?? [],
@@ -301,6 +309,8 @@ export class WordLookupByWordService {
       nounClass: null,
       nounClassPlural: null,
       baseForm: null,
+      wordModern: null,
+      wordModernAccented: null,
       tags: [],
       wordLevel: null,
       variants: [],

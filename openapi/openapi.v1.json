@@ -358,6 +358,40 @@
         ]
       }
     },
+    "/api/auth/restore": {
+      "post": {
+        "operationId": "AuthController_restore",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Account restored, access and refresh tokens have been issued"
+          },
+          "400": {
+            "description": "not_scheduled_for_deletion"
+          },
+          "401": {
+            "description": "Invalid credentials"
+          },
+          "403": {
+            "description": "restore_grace_period_expired"
+          }
+        },
+        "summary": "Restore a soft-deleted account and log in, if still within the deletion grace period. Requires re-entering username + password — not gated behind an existing session, since a deleted account has none.",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/api/auth/register": {
       "post": {
         "operationId": "AuthController_register",
@@ -1157,7 +1191,7 @@
     },
     "/api/texts/{id}": {
       "get": {
-        "description": "Returns a single text with full details: metadata, pages list (id, pageNumber, title), tags, wordCount, readingTime, totalPages, publishedAt, imageUrl. When authenticated: progressPercent, lastOpened, currentPage, wordStats (known/learning/new/total).",
+        "description": "Returns a single text with full details: metadata, pages list (id, pageNumber, title), tags, wordCount, readingTime, totalPages, publishedAt, imageUrl, readersCount (distinct users who confirmed reading it). When authenticated: progressPercent, lastOpened, currentPage, wordStats (known/learning/new/total).",
         "operationId": "TextController_getTextById",
         "parameters": [
           {
@@ -2290,6 +2324,36 @@
         "summary": "Force re-aggregate daily stats (for day=YYYY-MM-DD or last 3 days)",
         "tags": [
           "admin/tracking"
+        ]
+      }
+    },
+    "/api/texts/{id}/script-versions": {
+      "get": {
+        "operationId": "TextScriptController_getTextVersionsForReader",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "description": "Text ID",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of script version statuses"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List script versions for a library text (any authenticated reader)",
+        "tags": [
+          "text-script"
         ]
       }
     },
@@ -20839,7 +20903,7 @@
     },
     "/api/statistics/reading-time": {
       "post": {
-        "description": "Records time spent reading a text (in seconds). Call this when the user leaves a page or finishes a reading session. Requires Premium.",
+        "description": "Records time spent reading a text (in seconds). Call this when the user leaves a page or finishes a reading session. Sessions meeting the minimum dwell-time threshold also count the user as a reader of the text (see TextProgressService.setPosition).",
         "operationId": "StatisticsController_logReadingTime",
         "parameters": [],
         "requestBody": {
@@ -20858,15 +20922,9 @@
           },
           "401": {
             "description": "Missing or invalid bearer token"
-          },
-          "403": {
-            "description": "SUBSCRIPTION_REQUIRED — no Premium subscription, or SUBSCRIPTION_EXPIRED — subscription lapsed"
           }
         },
         "security": [
-          {
-            "bearer": []
-          },
           {
             "bearer": []
           }
@@ -22981,6 +23039,32 @@
         "summary": "List settlements by district",
         "tags": [
           "geo"
+        ]
+      }
+    },
+    "/api/hijri-calendar": {
+      "get": {
+        "operationId": "HijriCalendarController_getHijriDate",
+        "parameters": [
+          {
+            "name": "date",
+            "required": true,
+            "in": "query",
+            "description": "Gregorian date in DD-MM-YYYY format",
+            "schema": {
+              "example": "11-07-2026",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Hijri date breakdown: day, month, year, weekday"
+          }
+        },
+        "summary": "Convert a Gregorian date to Hijri (AlAdhan, HJCoSA method)",
+        "tags": [
+          "hijri-calendar"
         ]
       }
     }

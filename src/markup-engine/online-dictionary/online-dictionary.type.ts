@@ -26,7 +26,9 @@ export interface DoshamGrammar {
 export interface DoshamEntry {
   id: number;
   word: string;
+  wordModern: string | null;
   wordAccented: string | null;
+  wordModernAccented: string | null;
   wordNormalized: string;
   partOfSpeech: string | null;
   partOfSpeechNah: string | null;
@@ -67,6 +69,8 @@ export type LookupResult = {
   normalized: string;
   translation: string | null;
   baseForm: string | null;
+  wordModern: string | null;
+  wordModernAccented: string | null;
   grammar: string | null;
   grammarForms: LookupGrammar | null;
   nounClass: string | null;

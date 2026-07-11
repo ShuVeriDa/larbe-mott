@@ -88,6 +88,8 @@ export class OnlineDictionaryService {
         normalized: word,
         translation: meanings[0].translation,
         baseForm,
+        wordModern: entry.wordModern ?? null,
+        wordModernAccented: entry.wordModernAccented ?? null,
         grammar,
         grammarForms: entry.grammar ?? null,
         nounClass: entry.nounClass ?? null,

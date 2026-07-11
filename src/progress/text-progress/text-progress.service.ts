@@ -136,6 +136,21 @@ export class TextProgressService {
     return { lastPageNumber: updated?.lastPageNumber ?? pageNumber, totalPages };
   }
 
+  /**
+   * Marks the user as having actually read the text (as opposed to merely
+   * opening the reader page): called whenever a reading session meets the
+   * minimum dwell-time threshold. Safe to call repeatedly — readers count
+   * only checks whether this field is non-null, not its value.
+   */
+  async confirmRead(userId: string, textId: string): Promise<void> {
+    const now = new Date();
+    await this.prisma.userTextProgress.upsert({
+      where: { userId_textId: { userId, textId } },
+      create: { userId, textId, readConfirmedAt: now, lastOpened: now },
+      update: { readConfirmedAt: now },
+    });
+  }
+
   async calculateProgress(userId: string, textId: string) {
     const cacheKey = progressCacheKey(userId, textId);
     const cached = await this.redis.get(cacheKey);

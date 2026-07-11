@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { Prisma, PhraseStatus, UserEventType } from "@prisma/client";
 import { AnalyticsService } from "src/analytics/analytics.service";
+import { TextProgressService } from "src/progress/text-progress/text-progress.service";
 import { PrismaService } from "src/prisma.service";
 import { StatPeriod } from "./dto/statistics-query.dto";
 
@@ -16,11 +17,16 @@ const STREAK_MILESTONES = [3, 7, 14, 30];
 const READ_SESSION = "READ_SESSION" as UserEventType;
 const REVIEW_SESSION = "REVIEW_SESSION" as UserEventType;
 
+// Must match the frontend dwell-time floor in use-reader-session-tracker.ts —
+// sessions below this are noise (accidental navigation), not a real read.
+const READ_CONFIRM_MIN_DURATION_S = 10;
+
 @Injectable()
 export class StatisticsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly analyticsService: AnalyticsService,
+    private readonly textProgress: TextProgressService,
   ) {}
 
   private utcDateKey(date: Date): string {
@@ -950,6 +956,10 @@ export class StatisticsService {
     await this.prisma.userEvent.create({
       data: { userId, type: READ_SESSION, metadata: { textId, durationSeconds, ...(wordsRead !== undefined && { wordsRead }) } },
     });
+
+    if (durationSeconds >= READ_CONFIRM_MIN_DURATION_S) {
+      await this.textProgress.confirmRead(userId, textId);
+    }
   }
 
   // ─── Write: review session event ──────────────────────────────────────────────
