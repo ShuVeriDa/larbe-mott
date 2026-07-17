@@ -22336,6 +22336,39 @@
         ]
       }
     },
+    "/api/user-texts/generate": {
+      "post": {
+        "operationId": "UserTextGenerationController_generate",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GenerateUserTextDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          },
+          "401": {
+            "description": "Missing or invalid bearer token"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Сгенерировать черновик текста на основе слов и настроек",
+        "tags": [
+          "user-texts"
+        ]
+      }
+    },
     "/api/user-text-reader-context": {
       "get": {
         "operationId": "UserTextReaderContextController_getContext",
@@ -28856,6 +28889,114 @@
             "description": "Содержимое текста (TipTap JSON, макс. 500 КБ)"
           }
         }
+      },
+      "GenerateUserTextDto": {
+        "type": "object",
+        "properties": {
+          "language": {
+            "type": "string",
+            "enum": [
+              "CHE",
+              "RU",
+              "AR",
+              "EN"
+            ],
+            "description": "Язык генерируемого текста"
+          },
+          "contentType": {
+            "type": "string",
+            "enum": [
+              "PROSE",
+              "DIALOGUE",
+              "STORY"
+            ]
+          },
+          "topic": {
+            "type": "string",
+            "enum": [
+              "FAMILY",
+              "FOOD",
+              "TRAVEL",
+              "NATURE",
+              "CITY",
+              "WORK",
+              "HOLIDAYS",
+              "FRIENDSHIP",
+              "CUSTOM"
+            ],
+            "description": "Тема текста; CUSTOM требует customTopic"
+          },
+          "customTopic": {
+            "type": "string",
+            "description": "Своя тема текста (обязательна, если topic === 'CUSTOM')"
+          },
+          "tone": {
+            "type": "string",
+            "enum": [
+              "NEUTRAL",
+              "CONVERSATIONAL",
+              "FORMAL"
+            ],
+            "description": "Тон текста, по умолчанию NEUTRAL"
+          },
+          "dialogueCharacterCount": {
+            "type": "number",
+            "description": "Число персонажей — только для contentType === DIALOGUE",
+            "minimum": 2,
+            "maximum": 4
+          },
+          "grammarFocus": {
+            "type": "string",
+            "enum": [
+              "PAST_TENSE",
+              "PRESENT_TENSE",
+              "FUTURE_TENSE",
+              "PLURAL_FORMATION",
+              "COMPARATIVES",
+              "QUESTIONS",
+              "NEGATION",
+              "CONDITIONALS",
+              "POSSESSIVES",
+              "CUSTOM",
+              "NONE"
+            ],
+            "description": "Грамматическая конструкция для акцента в тексте, по умолчанию NONE"
+          },
+          "customGrammarFocus": {
+            "type": "string",
+            "description": "Своя грамматическая тема (обязательна, если grammarFocus === 'CUSTOM'), напр. 'артикли' для английского или 'эргативный падеж' для чеченского"
+          },
+          "dictionaryEntryIds": {
+            "description": "ID записей UserDictionaryEntry пользователя, которые нужно включить (НЕ lemmaId)",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "customWords": {
+            "description": "Свои слова (не из словаря), макс. 30",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "targetLength": {
+            "type": "number",
+            "description": "Целевая длина в словах",
+            "minimum": 30,
+            "maximum": 600
+          },
+          "difficulty": {
+            "type": "string",
+            "description": "CEFR-подобный уровень сложности"
+          }
+        },
+        "required": [
+          "language",
+          "contentType",
+          "topic",
+          "targetLength"
+        ]
       },
       "CreateAnnouncementDto": {
         "type": "object",

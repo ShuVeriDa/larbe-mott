@@ -98,6 +98,7 @@ export class DictionaryService {
               id: true,
               baseForm: true,
               partOfSpeech: true,
+              language: true,
               morphForms: { select: { form: true, grammarTag: true } },
               headwords: {
                 select: {
@@ -224,6 +225,7 @@ export class DictionaryService {
             id: true,
             baseForm: true,
             partOfSpeech: true,
+            language: true,
             frequency: true,
             transliteration: true,
             audioUrl: true,

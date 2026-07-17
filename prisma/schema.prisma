@@ -1972,6 +1972,18 @@ enum UserTextType {
   EXTERNAL
 }
 
+enum GeneratedTextContentType {
+  PROSE
+  DIALOGUE
+  STORY
+}
+
+enum GenerationTone {
+  NEUTRAL
+  CONVERSATIONAL
+  FORMAL
+}
+
 enum ChScript {
   LATIN
   ARABIC

@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { AiCacheStatus, AiCacheType } from "@prisma/client";
+import { FeatureFlagsService } from "src/feature-flags/feature-flags.service";
 import { PrismaService } from "src/prisma.service";
 import { BatchTranslateDto } from "./dto/batch-translate.dto";
 import { RefinePhraseDto } from "./dto/refine-phrase.dto";
@@ -42,7 +43,19 @@ const LANGUAGE_NAMES: Record<TranslationLanguage, string> = {
 
 @Injectable()
 export class AiTranslationService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly featureFlags: FeatureFlagsService,
+  ) {}
+
+  private async assertSourceLanguageAccess(userId: string, sourceLanguage: SourceLanguage): Promise<void> {
+    if (!(await this.featureFlags.canAccessContentLanguage(userId, sourceLanguage))) {
+      throw new BadRequestException({
+        code: ErrorCode.SOURCE_LANGUAGE_NOT_ACCESSIBLE,
+        message: "source_language_not_accessible",
+      });
+    }
+  }
 
   // ─── Gemini Key Management ───────────────────────────────────────────────────
 
@@ -111,6 +124,7 @@ export class AiTranslationService {
     const normalized = dto.word.trim().toLowerCase();
     const targetLanguage: TranslationLanguage = dto.targetLanguage ?? "ru";
     const sourceLanguage: SourceLanguage = dto.sourceLanguage ?? "che";
+    await this.assertSourceLanguageAccess(userId, sourceLanguage);
     const cacheType = dto.contextSentence
       ? AiCacheType.WORD_IN_CONTEXT
       : AiCacheType.WORD_ONLY;
@@ -220,6 +234,7 @@ export class AiTranslationService {
 
     const targetLanguage: TranslationLanguage = dto.targetLanguage ?? "ru";
     const sourceLanguage: SourceLanguage = dto.sourceLanguage ?? "che";
+    await this.assertSourceLanguageAccess(userId, sourceLanguage);
     const prompt = this.buildPhrasePrompt(dto.phrase, targetLanguage, sourceLanguage, dto.contextSentence);
     const { text: raw, fallbackUsed, fallbackReason, retryAfterSeconds } = await this.callGeminiSafe(
       userId,
@@ -243,6 +258,7 @@ export class AiTranslationService {
 
     const targetLanguage: TranslationLanguage = dto.targetLanguage ?? "ru";
     const sourceLanguage: SourceLanguage = dto.sourceLanguage ?? "che";
+    await this.assertSourceLanguageAccess(userId, sourceLanguage);
     const prompt = this.buildRefinePrompt(
       dto.phrase,
       dto.previousTranslation,
@@ -276,6 +292,7 @@ export class AiTranslationService {
     }
 
     const sourceLanguage: SourceLanguage = dto.sourceLanguage ?? "che";
+    await this.assertSourceLanguageAccess(userId, sourceLanguage);
 
     const deduped = [
       ...new Set(dto.words.map((w) => w.trim().toLowerCase())),
@@ -348,13 +365,14 @@ export class AiTranslationService {
 
   // ─── Save Refinement ─────────────────────────────────────────────────────────
 
-  async saveRefinement(dto: SaveRefinementDto) {
+  async saveRefinement(userId: string, dto: SaveRefinementDto) {
     const normalized = dto.word.trim().toLowerCase();
     const cacheType = dto.contextSentence
       ? AiCacheType.WORD_IN_CONTEXT
       : AiCacheType.WORD_ONLY;
     const targetLanguage: TranslationLanguage = dto.targetLanguage ?? "ru";
     const sourceLanguage: SourceLanguage = dto.sourceLanguage ?? "che";
+    await this.assertSourceLanguageAccess(userId, sourceLanguage);
 
     const existing = await this.prisma.aiTranslationCache.findUnique({
       where: {
@@ -439,7 +457,7 @@ export class AiTranslationService {
     }
   }
 
-  private async getUserKeyAndModel(userId: string): Promise<{ apiKey: string; model: GeminiModel } | null> {
+  async getUserKeyAndModel(userId: string): Promise<{ apiKey: string; model: GeminiModel } | null> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { geminiApiKeyEncrypted: true, geminiModel: true },
@@ -474,8 +492,15 @@ export class AiTranslationService {
     }
   }
 
-  private sanitize(input: string): string {
+  sanitize(input: string): string {
     return input.replace(/\\/g, "\\\\").replace(/"/g, '\\"').slice(0, 2000);
+  }
+
+  stripJsonFence(raw: string): string {
+    return raw
+      .replace(/```json\n?/g, "")
+      .replace(/```\n?/g, "")
+      .trim();
   }
 
   private buildWordPrompt(
@@ -577,11 +602,7 @@ Return only valid JSON, no markdown. Example: {"дуьне": "мир", "стаг
 
   private parseBatchResponse(raw: string): Record<string, string> | null {
     try {
-      const clean = raw
-        .replace(/```json\n?/g, "")
-        .replace(/```\n?/g, "")
-        .trim();
-      const parsed = JSON.parse(clean);
+      const parsed = JSON.parse(this.stripJsonFence(raw));
       if (
         typeof parsed !== "object" ||
         parsed === null ||
@@ -605,7 +626,7 @@ Return only valid JSON, no markdown. Example: {"дуьне": "мир", "стаг
     }
   }
 
-  private async callGemini(
+  async callGemini(
     apiKey: string,
     body: Record<string, unknown>,
     model?: string,
@@ -640,7 +661,7 @@ Return only valid JSON, no markdown. Example: {"дуьне": "мир", "стаг
     throw new Error("Gemini API: exhausted retries");
   }
 
-  private async callGeminiWithFallback(
+  async callGeminiWithFallback(
     userId: string,
     apiKey: string,
     body: Record<string, unknown>,
@@ -680,7 +701,7 @@ Return only valid JSON, no markdown. Example: {"дуьне": "мир", "стаг
     }
   }
 
-  private async callGeminiSafe(
+  async callGeminiSafe(
     userId: string,
     apiKey: string,
     body: Record<string, unknown>,
@@ -708,11 +729,7 @@ Return only valid JSON, no markdown. Example: {"дуьне": "мир", "стаг
     example?: string;
   } | null {
     try {
-      const clean = raw
-        .replace(/```json\n?/g, "")
-        .replace(/```\n?/g, "")
-        .trim();
-      return JSON.parse(clean);
+      return JSON.parse(this.stripJsonFence(raw));
     } catch {
       return null;
     }
@@ -722,11 +739,7 @@ Return only valid JSON, no markdown. Example: {"дуьне": "мир", "стаг
     raw: string,
   ): { translation: string; russianGloss?: string; notes?: string } | null {
     try {
-      const clean = raw
-        .replace(/```json\n?/g, "")
-        .replace(/```\n?/g, "")
-        .trim();
-      return JSON.parse(clean);
+      return JSON.parse(this.stripJsonFence(raw));
     } catch {
       return null;
     }

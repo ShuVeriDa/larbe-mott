@@ -2,9 +2,31 @@ import { Injectable } from "@nestjs/common";
 import { FeatureFlagEnvironment } from "@prisma/client";
 import { PrismaService } from "src/prisma.service";
 
+// Studied-content languages gated behind admin-granted per-user flags.
+// Keyed by the lowercase codes used across content-language DTOs (e.g.
+// ai-translation's SourceLanguage). Kept in sync by hand with text.service.ts's
+// GATED_LANGUAGE_FLAGS, which uses Prisma's uppercase Language enum instead —
+// the two can't share one map because they key on different casings/types.
+const GATED_CONTENT_LANGUAGE_FLAGS: Partial<Record<string, string>> = {
+  ar: "functional.arabic_language",
+  en: "functional.english_language",
+};
+
 @Injectable()
 export class FeatureFlagsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Checks if a user may access a gated studied-content language (e.g. "ar",
+   * "en" in ai-translation's SourceLanguage). Languages absent from
+   * GATED_CONTENT_LANGUAGE_FLAGS (e.g. "che") are ungated and always allowed.
+   */
+  async canAccessContentLanguage(userId: string | undefined, language: string): Promise<boolean> {
+    const flagKey = GATED_CONTENT_LANGUAGE_FLAGS[language];
+    if (!flagKey) return true;
+    if (!userId) return false;
+    return this.isFeatureEnabled(userId, flagKey);
+  }
 
   /**
    * Checks if a feature flag is enabled for a given user.

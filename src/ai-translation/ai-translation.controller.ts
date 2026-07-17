@@ -127,8 +127,8 @@ export class AiTranslationController {
   @Auth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Save a refined word translation to AI cache (PENDING)" })
-  saveRefinement(@Body() dto: SaveRefinementDto) {
-    return this.aiTranslationService.saveRefinement(dto);
+  saveRefinement(@User("id") userId: string, @Body() dto: SaveRefinementDto) {
+    return this.aiTranslationService.saveRefinement(userId, dto);
   }
 
   // ─── Voting ──────────────────────────────────────────────────────────────────
